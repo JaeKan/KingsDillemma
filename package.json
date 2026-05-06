@@ -1,0 +1,24 @@
+{
+  "name": "kings-dilemma-secret-agenda",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "netlify dev --port 8888",
+    "dev:vite": "vite --host 127.0.0.1 --port 3291 --strictPort",
+    "build": "vite build",
+    "test": "tsx tests/agenda-state.test.ts",
+    "deploy": "netlify deploy --prod --build"
+  },
+  "dependencies": {
+    "@netlify/blobs": "latest",
+    "react": "latest",
+    "react-dom": "latest"
+  },
+  "devDependencies": {
+    "@netlify/functions": "latest",
+    "@vitejs/plugin-react-swc": "latest",
+    "tsx": "latest",
+    "vite": "latest"
+  }
+}
