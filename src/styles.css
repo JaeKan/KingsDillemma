@@ -8,6 +8,9 @@
   --accent: #7f1d1d;
   --accent-strong: #5f1414;
   --gold: #b47a24;
+  --court: #1f5f68;
+  --court-soft: rgba(31, 95, 104, 0.11);
+  --success: #2f6f4e;
   --shadow: 0 20px 50px rgba(47, 30, 10, 0.14);
   font-family:
     Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
@@ -136,9 +139,15 @@ h3 {
 
 .login-panel {
   display: grid;
-  grid-template-columns: 1fr minmax(220px, 360px);
-  gap: 24px;
+  grid-template-columns: minmax(260px, 0.9fr) minmax(320px, 1.1fr);
+  gap: 28px;
+  align-items: center;
   padding: 28px;
+}
+
+.login-copy {
+  display: grid;
+  gap: 12px;
 }
 
 .login-panel p,
@@ -150,9 +159,36 @@ h3 {
   line-height: 1.6;
 }
 
+.login-copy p {
+  margin-bottom: 0;
+}
+
+.login-state-strip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid rgba(31, 95, 104, 0.28);
+  border-radius: 8px;
+  background: var(--court-soft);
+  color: var(--court);
+  padding: 12px 14px;
+}
+
+.login-state-strip span {
+  font-size: 0.86rem;
+  font-weight: 800;
+}
+
+.login-state-strip strong {
+  color: var(--ink);
+  font-size: 0.9rem;
+  text-align: right;
+}
+
 .login-form {
   display: grid;
-  gap: 14px;
+  gap: 18px;
 }
 
 label {
@@ -180,6 +216,129 @@ input:focus,
 button:focus-visible {
   outline: 3px solid rgba(180, 122, 36, 0.34);
   outline-offset: 2px;
+}
+
+.seat-fieldset {
+  border: 0;
+  margin: 0;
+  padding: 0;
+}
+
+.seat-fieldset legend {
+  color: var(--muted);
+  font-size: 0.92rem;
+  font-weight: 800;
+  margin-bottom: 10px;
+}
+
+.seat-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.seat-option {
+  position: relative;
+  display: grid;
+  gap: 7px;
+  min-height: 82px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fffdf8;
+  cursor: pointer;
+  padding: 14px;
+  transition:
+    border-color 140ms ease,
+    background 140ms ease,
+    transform 140ms ease;
+}
+
+.seat-option:hover {
+  border-color: rgba(127, 29, 29, 0.46);
+  transform: translateY(-1px);
+}
+
+.seat-option.selected {
+  border-color: var(--accent);
+  background: rgba(127, 29, 29, 0.07);
+}
+
+.seat-option:has(input:focus-visible) {
+  outline: 3px solid rgba(180, 122, 36, 0.34);
+  outline-offset: 2px;
+}
+
+.seat-option input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.seat-main {
+  color: var(--ink);
+  font-size: 1.02rem;
+  font-weight: 900;
+}
+
+.seat-status {
+  width: fit-content;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 900;
+  padding: 4px 8px;
+}
+
+.seat-status.idle {
+  background: rgba(114, 95, 72, 0.12);
+  color: var(--muted);
+}
+
+.seat-status.active {
+  background: var(--court-soft);
+  color: var(--court);
+}
+
+.seat-status.present {
+  background: rgba(180, 122, 36, 0.16);
+  color: #74501a;
+}
+
+.seat-status.locked {
+  background: rgba(127, 29, 29, 0.12);
+  color: var(--accent);
+}
+
+.seat-status.done {
+  background: rgba(47, 111, 78, 0.15);
+  color: var(--success);
+}
+
+.password-panel {
+  display: grid;
+  gap: 12px;
+  border: 1px solid rgba(217, 197, 164, 0.78);
+  border-radius: 8px;
+  background: rgba(255, 253, 248, 0.82);
+  padding: 14px;
+}
+
+.password-panel input {
+  font-size: 1rem;
+  font-weight: 800;
+  text-align: left;
+}
+
+.password-hint {
+  border: 1px dashed rgba(217, 197, 164, 0.95);
+  border-radius: 8px;
+  background: rgba(255, 253, 248, 0.62);
+  color: var(--muted);
+  font-weight: 800;
+  margin: 0;
+  padding: 14px;
 }
 
 .error-box {
@@ -246,6 +405,119 @@ button:focus-visible {
   background: rgba(127, 29, 29, 0.06);
   margin-bottom: 16px;
   padding: 16px;
+}
+
+.inventory-panel {
+  display: grid;
+  gap: 18px;
+  border: 1px solid rgba(31, 95, 104, 0.26);
+  border-radius: 8px;
+  background: #fffdf8;
+  margin-bottom: 16px;
+  padding: 18px;
+}
+
+.inventory-header,
+.inventory-actions,
+.counter-row,
+.counter-controls {
+  display: flex;
+  align-items: center;
+}
+
+.inventory-header,
+.inventory-actions,
+.counter-row {
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.inventory-header h2 {
+  font-size: 1.85rem;
+}
+
+.dirty-pill,
+.saved-pill {
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 900;
+  padding: 6px 10px;
+  white-space: nowrap;
+}
+
+.dirty-pill {
+  background: rgba(180, 122, 36, 0.17);
+  color: #74501a;
+}
+
+.saved-pill {
+  background: var(--court-soft);
+  color: var(--court);
+}
+
+.inventory-section {
+  display: grid;
+  gap: 10px;
+}
+
+.inventory-section h3 {
+  margin: 0;
+  color: var(--court);
+  font-size: 1.08rem;
+}
+
+.inventory-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.resource-grid {
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+}
+
+.counter-row {
+  min-height: 64px;
+  border: 1px solid rgba(217, 197, 164, 0.82);
+  border-radius: 8px;
+  background: rgba(248, 231, 201, 0.26);
+  padding: 10px 12px;
+}
+
+.counter-row > span {
+  color: var(--ink);
+  font-weight: 900;
+}
+
+.counter-controls {
+  gap: 8px;
+}
+
+.counter-controls output {
+  min-width: 42px;
+  color: var(--ink);
+  font-size: 1.18rem;
+  font-weight: 900;
+  text-align: center;
+}
+
+.stepper-button {
+  width: 44px;
+  min-height: 44px;
+  padding: 0;
+}
+
+.inventory-actions {
+  border-top: 1px solid rgba(217, 197, 164, 0.72);
+  color: var(--muted);
+  font-size: 0.9rem;
+  font-weight: 800;
+  padding-top: 14px;
+}
+
+.inventory-actions > div {
+  display: flex;
+  gap: 10px;
 }
 
 .action-card {
@@ -317,12 +589,14 @@ button:focus-visible {
   .topbar,
   .login-panel,
   .game-grid,
-  .action-card {
+  .action-card,
+  .inventory-actions {
     grid-template-columns: 1fr;
   }
 
   .topbar,
-  .action-card {
+  .action-card,
+  .inventory-actions {
     align-items: stretch;
   }
 
@@ -332,5 +606,39 @@ button:focus-visible {
 
   .agenda-list {
     grid-template-columns: 1fr;
+  }
+
+  .seat-grid {
+    grid-template-columns: repeat(auto-fit, minmax(122px, 1fr));
+  }
+
+  .login-state-strip {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .inventory-header,
+  .inventory-actions,
+  .counter-row {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .inventory-grid,
+  .resource-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .counter-controls,
+  .inventory-actions > div {
+    width: 100%;
+  }
+
+  .counter-controls output {
+    flex: 1;
+  }
+
+  .inventory-actions > div button {
+    flex: 1;
   }
 }

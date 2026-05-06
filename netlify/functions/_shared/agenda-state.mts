@@ -3,6 +3,7 @@ export const INITIAL_PLAYER = 1;
 
 export type PlayerNumber = 1 | 2 | 3 | 4 | 5;
 export type Phase = "discard" | "choose" | "complete";
+export type PersonalResourceId = (typeof PERSONAL_RESOURCE_TRACKS)[number]["id"];
 
 export type Agenda = {
   id: string;
@@ -13,6 +14,15 @@ export type Agenda = {
   note?: string;
 };
 
+export type PlayerInventory = {
+  coins: number;
+  powerTokens: number;
+  prestige: number;
+  crave: number;
+  resources: Record<PersonalResourceId, number>;
+  updatedAt: string;
+};
+
 export type GameState = {
   version: number;
   phase: Phase;
@@ -21,14 +31,34 @@ export type GameState = {
   discarded: string | null;
   choices: Record<string, string>;
   sessions: Record<string, { token: string; createdAt: string }>;
+  credentials: Record<string, SeatCredential>;
+  playerNames: Record<string, string>;
+  inventories: Record<string, PlayerInventory>;
   createdAt: string;
   updatedAt: string;
+};
+
+export type SeatCredential = {
+  salt: string;
+  hash: string;
+  iterations: number;
+  createdAt: string;
 };
 
 export type RedactedState = {
   version: number;
   phase: Phase;
   turn: PlayerNumber;
+  players: Array<{
+    player: PlayerNumber;
+    name: string;
+    hasCustomName: boolean;
+    hasSession: boolean;
+    hasPassword: boolean;
+    hasChosen: boolean;
+    isCurrentTurn: boolean;
+    isSelf: boolean;
+  }>;
   selectedCount: number;
   remainingHiddenCount: number;
   discardedHiddenCount: number;
@@ -37,6 +67,7 @@ export type RedactedState = {
   canDiscard: boolean;
   canChoose: boolean;
   ownChoice: Agenda | null;
+  ownInventory: PlayerInventory | null;
   availableAgendas?: Agenda[];
 };
 
@@ -157,7 +188,17 @@ export const AGENDAS: Agenda[] = [
   },
 ];
 
+export const PERSONAL_RESOURCE_TRACKS = [
+  { id: "influence", label: "영향력" },
+  { id: "wealth", label: "부" },
+  { id: "morale", label: "사기" },
+  { id: "welfare", label: "복지" },
+  { id: "knowledge", label: "지식" },
+] as const;
+
 const AGENDA_BY_ID = new Map(AGENDAS.map((agenda) => [agenda.id, agenda]));
+const PERSONAL_COUNTER_MAX = 99;
+const RESOURCE_POSITION_MAX = 17;
 
 export function isPlayerNumber(value: unknown): value is PlayerNumber {
   return Number.isInteger(value) && Number(value) >= 1 && Number(value) <= PLAYER_COUNT;
@@ -182,6 +223,9 @@ export function createInitialState(now = new Date().toISOString()): GameState {
     discarded: null,
     choices: {},
     sessions: {},
+    credentials: {},
+    playerNames: {},
+    inventories: {},
     createdAt: now,
     updatedAt: now,
   };
@@ -213,8 +257,66 @@ export function normalizeState(value: unknown, now = new Date().toISOString()): 
         : null,
     choices: sanitizeChoices(candidate.choices),
     sessions: sanitizeSessions(candidate.sessions),
+    credentials: sanitizeCredentials(candidate.credentials),
+    playerNames: sanitizePlayerNames(candidate.playerNames),
+    inventories: sanitizeInventories(candidate.inventories, now),
     createdAt: typeof candidate.createdAt === "string" ? candidate.createdAt : now,
     updatedAt: typeof candidate.updatedAt === "string" ? candidate.updatedAt : now,
+  };
+}
+
+export function getPlayerLabel(state: GameState, player: PlayerNumber) {
+  return state.playerNames[String(player)] || `Player ${player}`;
+}
+
+export function createDefaultPlayerInventory(now = new Date().toISOString()): PlayerInventory {
+  return {
+    coins: 10,
+    powerTokens: 8,
+    prestige: 0,
+    crave: 0,
+    resources: Object.fromEntries(
+      PERSONAL_RESOURCE_TRACKS.map(({ id }) => [id, 0]),
+    ) as Record<PersonalResourceId, number>,
+    updatedAt: now,
+  };
+}
+
+export function getPlayerInventory(state: GameState, player: PlayerNumber): PlayerInventory {
+  return state.inventories[String(player)] || createDefaultPlayerInventory(state.updatedAt);
+}
+
+export function setSeatCredential(
+  state: GameState,
+  player: PlayerNumber,
+  credential: SeatCredential,
+  now = new Date().toISOString(),
+): GameState {
+  return {
+    ...state,
+    credentials: {
+      ...state.credentials,
+      [String(player)]: credential,
+    },
+    version: state.version + 1,
+    updatedAt: now,
+  };
+}
+
+export function setPlayerName(
+  state: GameState,
+  player: PlayerNumber,
+  name: string,
+  now = new Date().toISOString(),
+): GameState {
+  return {
+    ...state,
+    playerNames: {
+      ...state.playerNames,
+      [String(player)]: name,
+    },
+    version: state.version + 1,
+    updatedAt: now,
   };
 }
 
@@ -229,6 +331,46 @@ export function registerSession(
     sessions: {
       ...state.sessions,
       [String(player)]: { token, createdAt: now },
+    },
+    version: state.version + 1,
+    updatedAt: now,
+  };
+}
+
+export function clearSession(
+  state: GameState,
+  player: PlayerNumber,
+  now = new Date().toISOString(),
+): GameState {
+  if (!state.sessions[String(player)]) {
+    return state;
+  }
+
+  const sessions = { ...state.sessions };
+  delete sessions[String(player)];
+
+  return {
+    ...state,
+    sessions,
+    version: state.version + 1,
+    updatedAt: now,
+  };
+}
+
+export function savePlayerInventory(
+  state: GameState,
+  player: PlayerNumber,
+  inventory: unknown,
+  now = new Date().toISOString(),
+): GameState {
+  return {
+    ...state,
+    inventories: {
+      ...state.inventories,
+      [String(player)]: {
+        ...sanitizePlayerInventory(inventory, now),
+        updatedAt: now,
+      },
     },
     version: state.version + 1,
     updatedAt: now,
@@ -317,6 +459,21 @@ export function redactState(state: GameState, player: PlayerNumber | null): Reda
     version: state.version,
     phase: state.phase,
     turn: state.turn,
+    players: Array.from({ length: PLAYER_COUNT }, (_, index) => {
+      const seat = (index + 1) as PlayerNumber;
+      const isSelf = player === seat;
+
+      return {
+        player: seat,
+        name: getPlayerLabel(state, seat),
+        hasCustomName: Boolean(state.playerNames[String(seat)]),
+        hasSession: player ? Boolean(state.sessions[String(seat)]) : false,
+        hasPassword: Boolean(state.credentials[String(seat)]),
+        hasChosen: player ? Boolean(state.choices[String(seat)]) : false,
+        isCurrentTurn: player ? state.turn === seat : false,
+        isSelf,
+      };
+    }),
     selectedCount: Object.keys(state.choices).length,
     remainingHiddenCount: state.pool.length,
     discardedHiddenCount: state.discarded ? 1 : 0,
@@ -325,6 +482,7 @@ export function redactState(state: GameState, player: PlayerNumber | null): Reda
     canDiscard,
     canChoose,
     ownChoice: ownChoiceId ? getAgenda(ownChoiceId) : null,
+    ownInventory: player ? getPlayerInventory(state, player) : null,
   };
 
   if (canChoose) {
@@ -354,6 +512,85 @@ function sanitizeChoices(value: unknown): Record<string, string> {
   });
 
   return Object.fromEntries(entries);
+}
+
+function sanitizeCredentials(value: unknown): Record<string, SeatCredential> {
+  if (!value || typeof value !== "object") {
+    return {};
+  }
+
+  const entries = Object.entries(value as Record<string, unknown>).filter(
+    ([player, credential]): credential is SeatCredential =>
+      /^[1-5]$/.test(player) &&
+      Boolean(credential) &&
+      typeof credential === "object" &&
+      typeof (credential as SeatCredential).salt === "string" &&
+      typeof (credential as SeatCredential).hash === "string" &&
+      Number.isInteger((credential as SeatCredential).iterations) &&
+      (credential as SeatCredential).iterations > 0 &&
+      typeof (credential as SeatCredential).createdAt === "string",
+  );
+
+  return Object.fromEntries(entries);
+}
+
+function sanitizePlayerNames(value: unknown): Record<string, string> {
+  if (!value || typeof value !== "object") {
+    return {};
+  }
+
+  const entries = Object.entries(value as Record<string, unknown>)
+    .filter(([player, name]) => /^[1-5]$/.test(player) && isUsablePlayerName(name))
+    .map(([player, name]) => [player, (name as string).trim().replace(/\s+/g, " ")]);
+
+  return Object.fromEntries(entries);
+}
+
+function isUsablePlayerName(value: unknown): value is string {
+  return typeof value === "string" && value.trim().length >= 1 && value.trim().length <= 24;
+}
+
+function sanitizeInventories(value: unknown, now: string): Record<string, PlayerInventory> {
+  if (!value || typeof value !== "object") {
+    return {};
+  }
+
+  const entries = Object.entries(value as Record<string, unknown>)
+    .filter(([player]) => /^[1-5]$/.test(player))
+    .map(([player, inventory]) => [player, sanitizePlayerInventory(inventory, now)]);
+
+  return Object.fromEntries(entries);
+}
+
+function sanitizePlayerInventory(value: unknown, now: string): PlayerInventory {
+  const defaults = createDefaultPlayerInventory(now);
+  const candidate = value && typeof value === "object" ? (value as Partial<PlayerInventory>) : {};
+  const resources =
+    candidate.resources && typeof candidate.resources === "object"
+      ? (candidate.resources as Record<string, unknown>)
+      : {};
+
+  return {
+    coins: sanitizeCounter(candidate.coins, PERSONAL_COUNTER_MAX, defaults.coins),
+    powerTokens: sanitizeCounter(candidate.powerTokens, PERSONAL_COUNTER_MAX, defaults.powerTokens),
+    prestige: sanitizeCounter(candidate.prestige, PERSONAL_COUNTER_MAX, defaults.prestige),
+    crave: sanitizeCounter(candidate.crave, PERSONAL_COUNTER_MAX, defaults.crave),
+    resources: Object.fromEntries(
+      PERSONAL_RESOURCE_TRACKS.map(({ id }) => [
+        id,
+        sanitizeCounter(resources[id], RESOURCE_POSITION_MAX, defaults.resources[id]),
+      ]),
+    ) as Record<PersonalResourceId, number>,
+    updatedAt: typeof candidate.updatedAt === "string" ? candidate.updatedAt : now,
+  };
+}
+
+function sanitizeCounter(value: unknown, max: number, fallback: number) {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return fallback;
+  }
+
+  return Math.max(0, Math.min(max, Math.trunc(value)));
 }
 
 function sanitizeSessions(value: unknown): Record<string, { token: string; createdAt: string }> {
