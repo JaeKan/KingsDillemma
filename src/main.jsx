@@ -70,7 +70,7 @@ const sharedBoardSheetUrl =
   "https://docs.google.com/spreadsheets/d/1hJw0gYAeIafIFUJOBTDaC_2QR87CXyXABrOKvu3QG2M/edit?usp=sharing";
 const tokenCounters = [
   { id: "coins", label: "재화", max: 99, icon: "coin", tone: "coin" },
-  { id: "powerTokens", label: "권력 토큰", max: 99, icon: "power", tone: "power" },
+  { id: "powerTokens", label: "권력", max: 99, icon: "power", tone: "power" },
 ];
 const scoreTrackCounters = [
   { id: "prestige", label: "명망", max: 100, icon: "prestige", tone: "prestige" },
@@ -1524,7 +1524,7 @@ function PersonalInventoryPanel({ inventory, progress, ownChoice, houseId, busy,
 
       <div className="inventory-section resource-section">
         <div className="inventory-counter-group">
-          <h3>재화 · 권력</h3>
+          <h3>토큰</h3>
           <div className="inventory-resource-grid">
             {tokenCounters.map((counter) => (
               <CounterRow
@@ -1542,7 +1542,7 @@ function PersonalInventoryPanel({ inventory, progress, ownChoice, houseId, busy,
           </div>
         </div>
         <div className="inventory-counter-group">
-          <h3>명망 · 갈망</h3>
+          <h3>승리 점수</h3>
           <div className="inventory-resource-grid">
             {scoreTrackCounters.map((counter) => (
               <ScoreTrackRow
