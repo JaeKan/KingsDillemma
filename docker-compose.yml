@@ -1,0 +1,42 @@
+services:
+  web:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      APP_ENV: production
+      PORT: 3000
+      MYSQL_HOST: mysql
+      MYSQL_PORT: 3306
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-kings_dilemma}
+      MYSQL_USER: ${MYSQL_USER:-kings_dilemma}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-kings_dilemma_password}
+      LOGIN_CODE: ${LOGIN_CODE:-}
+    ports:
+      - "${APP_PORT:-3000}:3000"
+
+  mysql:
+    image: mysql:8.4
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-kings_dilemma}
+      MYSQL_USER: ${MYSQL_USER:-kings_dilemma}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-kings_dilemma_password}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-kings_dilemma_root_password}
+    command:
+      - "--character-set-server=utf8mb4"
+      - "--collation-server=utf8mb4_0900_ai_ci"
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u$${MYSQL_USER} -p$${MYSQL_PASSWORD} --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+
+volumes:
+  mysql-data:

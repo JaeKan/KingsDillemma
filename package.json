@@ -7,7 +7,12 @@
     "dev": "netlify dev --port 8888",
     "dev:vite": "vite --host 127.0.0.1 --port 3291 --strictPort",
     "build": "vite build",
-    "test": "tsx tests/agenda-state.test.ts",
+    "start": "tsx server/index.mts",
+    "serve": "npm run build && npm run start",
+    "test": "tsx tests/agenda-state.test.ts && tsx tests/agenda-api.test.ts",
+    "docker:up": "docker compose up --build -d",
+    "docker:logs": "docker compose logs -f web",
+    "mysql:import": "tsx scripts/import-state-to-mysql.mts",
     "deploy": "netlify deploy --build",
     "deploy:preview": "netlify deploy --build",
     "deploy:prod": "netlify deploy --prod --build"
@@ -18,7 +23,9 @@
     "@mui/icons-material": "^9.0.0",
     "@mui/material": "^9.0.0",
     "@netlify/blobs": "latest",
+    "express": "^5.2.1",
     "matter-js": "^0.20.0",
+    "mysql2": "^3.22.3",
     "react": "latest",
     "react-dom": "latest"
   },

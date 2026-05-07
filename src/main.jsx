@@ -34,6 +34,8 @@ import TableChartOutlinedIcon from "@mui/icons-material/TableChartOutlined";
 import MenuOutlinedIcon from "@mui/icons-material/MenuOutlined";
 import UndoOutlinedIcon from "@mui/icons-material/UndoOutlined";
 import VisibilityOutlinedIcon from "@mui/icons-material/VisibilityOutlined";
+import VolumeOffOutlinedIcon from "@mui/icons-material/VolumeOffOutlined";
+import VolumeUpOutlinedIcon from "@mui/icons-material/VolumeUpOutlined";
 import VpnKeyOutlinedIcon from "@mui/icons-material/VpnKeyOutlined";
 import WarningAmberOutlinedIcon from "@mui/icons-material/WarningAmberOutlined";
 import WorkspacePremiumOutlinedIcon from "@mui/icons-material/WorkspacePremiumOutlined";
@@ -70,6 +72,9 @@ const inventoryDraftPrefix = "kd-personal-inventory-draft:";
 const progressDraftPrefix = "kd-house-progress-draft:";
 const sharedBoardSheetUrl =
   "https://docs.google.com/spreadsheets/d/1hJw0gYAeIafIFUJOBTDaC_2QR87CXyXABrOKvu3QG2M/edit?usp=sharing";
+const bgmSource = "/Morrowind.mp3";
+const bgmMutedStorageKey = "kd-bgm-muted";
+const bgmVolume = 0.34;
 const tokenCounters = [
   { id: "coins", label: "재화", max: 99, icon: "coin", tone: "coin" },
   { id: "powerTokens", label: "권력", max: 99, icon: "power", tone: "power" },
@@ -134,6 +139,30 @@ function createSessionEndChecklistState() {
   return Object.fromEntries(sessionEndChecklistItems.map((item) => [item.id, false]));
 }
 
+function readStoredBgmMuted() {
+  if (typeof window === "undefined") {
+    return false;
+  }
+
+  try {
+    return window.localStorage.getItem(bgmMutedStorageKey) === "true";
+  } catch {
+    return false;
+  }
+}
+
+function writeStoredBgmMuted(muted) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  try {
+    window.localStorage.setItem(bgmMutedStorageKey, muted ? "true" : "false");
+  } catch {
+    // Ignore storage failures; audio state still works for the current page.
+  }
+}
+
 function App() {
   const [state, setState] = useState(null);
   const [authenticated, setAuthenticated] = useState(false);
@@ -151,9 +180,11 @@ function App() {
   const [finalBoardDraft, setFinalBoardDraft] = useState(createFinalBoardDraft);
   const [finalScoring, setFinalScoring] = useState(null);
   const [finalScoringBusy, setFinalScoringBusy] = useState(false);
+  const [bgmMuted, setBgmMuted] = useState(readStoredBgmMuted);
   const refreshInFlight = useRef(null);
   const mutationInFlight = useRef(false);
   const finalScoringRequest = useRef(0);
+  const bgmAudioRef = useRef(null);
   const finalBoardComplete = useMemo(() => isFinalBoardDraftComplete(finalBoardDraft), [finalBoardDraft]);
   const sessionEndChecklistComplete = useMemo(
     () => sessionEndChecklistItems.every((item) => sessionEndChecklist[item.id]),
@@ -236,6 +267,50 @@ function App() {
   useEffect(() => {
     refresh();
   }, [refresh]);
+
+  useEffect(() => {
+    const audio = bgmAudioRef.current;
+
+    if (!audio) {
+      return undefined;
+    }
+
+    audio.loop = true;
+    audio.muted = bgmMuted;
+    audio.volume = bgmVolume;
+    writeStoredBgmMuted(bgmMuted);
+
+    if (bgmMuted) {
+      audio.pause();
+      return undefined;
+    }
+
+    let active = true;
+    const removeInteractionListeners = () => {
+      window.removeEventListener("pointerdown", playAfterInteraction);
+      window.removeEventListener("keydown", playAfterInteraction);
+    };
+    const playBgm = () => {
+      if (!active || audio.muted) {
+        return;
+      }
+
+      void audio.play().then(removeInteractionListeners).catch(() => undefined);
+    };
+    const playAfterInteraction = () => {
+      removeInteractionListeners();
+      playBgm();
+    };
+
+    window.addEventListener("pointerdown", playAfterInteraction);
+    window.addEventListener("keydown", playAfterInteraction);
+    playBgm();
+
+    return () => {
+      active = false;
+      removeInteractionListeners();
+    };
+  }, [bgmMuted]);
 
   useEffect(() => {
     if (!sessionEndDialogOpen || !finalBoardComplete) {
@@ -453,6 +528,28 @@ function App() {
     setSettingsOpen(false);
     await handleEndSession();
   };
+
+  const handleToggleBgmMuted = useCallback(() => {
+    const nextMuted = !bgmMuted;
+    const audio = bgmAudioRef.current;
+
+    setBgmMuted(nextMuted);
+
+    if (!audio) {
+      return;
+    }
+
+    audio.muted = nextMuted;
+    audio.volume = bgmVolume;
+
+    if (nextMuted) {
+      audio.pause();
+      return;
+    }
+
+    void audio.play().catch(() => undefined);
+  }, [bgmMuted]);
+
   const sessionChecking = sessionStatus === "checking";
   const isCouncilRoute = Boolean(authenticated && state);
   const routeClass = sessionChecking ? "is-session-checking" : isCouncilRoute ? "is-council" : "is-entry";
@@ -460,12 +557,14 @@ function App() {
   return (
     <main className={`app-shell ${routeClass}`}>
       <DecorativeBackdrop />
+      <audio ref={bgmAudioRef} src={bgmSource} loop preload="auto" aria-hidden="true" />
       <header className="app-header" aria-label="게임 헤더">
         <BrandLockup />
       </header>
       {!sessionChecking ? (
         <FloatingSettings
           authenticated={authenticated}
+          bgmMuted={bgmMuted}
           busy={busy}
           canEndSession={Boolean(authenticated && state?.phase === "complete")}
           open={settingsOpen}
@@ -473,6 +572,7 @@ function App() {
           onLogout={handleSettingsLogout}
           onRefresh={refresh}
           onReset={handleSettingsReset}
+          onToggleBgmMuted={handleToggleBgmMuted}
           onToggle={() => setSettingsOpen((current) => !current)}
         />
       ) : null}
@@ -696,7 +796,19 @@ function FinalScoreSummary({ boardComplete, scoring, scoringBusy }) {
   );
 }
 
-function FloatingSettings({ authenticated, busy, canEndSession, open, onEndSession, onLogout, onRefresh, onReset, onToggle }) {
+function FloatingSettings({
+  authenticated,
+  bgmMuted,
+  busy,
+  canEndSession,
+  open,
+  onEndSession,
+  onLogout,
+  onRefresh,
+  onReset,
+  onToggle,
+  onToggleBgmMuted,
+}) {
   return (
     <div className="settings-float">
       <div className="settings-float-actions">
@@ -721,6 +833,15 @@ function FloatingSettings({ authenticated, busy, canEndSession, open, onEndSessi
       </div>
       {open ? (
         <div className="settings-menu" id="settings-menu">
+          <button
+            className="ghost-button wide"
+            type="button"
+            aria-pressed={bgmMuted}
+            onClick={onToggleBgmMuted}
+          >
+            <TokenIcon type={bgmMuted ? "soundOff" : "soundOn"} />
+            {bgmMuted ? "BGM 음소거 해제" : "BGM 음소거"}
+          </button>
           <a className="settings-link" href={sharedBoardSheetUrl} target="_blank" rel="noreferrer">
             <TokenIcon type="sheet" />
             공용 보드 시트
@@ -2371,6 +2492,8 @@ function TokenIcon({ type }) {
     scroll: ArticleOutlinedIcon,
     seal: WorkspacePremiumOutlinedIcon,
     sheet: TableChartOutlinedIcon,
+    soundOff: VolumeOffOutlinedIcon,
+    soundOn: VolumeUpOutlinedIcon,
     turn: AutorenewOutlinedIcon,
     undo: UndoOutlinedIcon,
     warning: WarningAmberOutlinedIcon,

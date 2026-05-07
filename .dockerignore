@@ -1,0 +1,10 @@
+.git
+.netlify
+.env
+.env.*
+dist
+node_modules
+netlify-dev-*.log
+netlify-dev-*.err.log
+npm-debug.log
+docs/*.pdf
