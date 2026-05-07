@@ -49,7 +49,8 @@ body::before {
 }
 
 button,
-input {
+input,
+textarea {
   font: inherit;
 }
 
@@ -107,7 +108,22 @@ input {
   padding: 0 13px;
 }
 
+textarea {
+  width: 100%;
+  min-height: 92px;
+  resize: vertical;
+  border: 1px solid rgba(234, 223, 189, 0.24);
+  border-radius: var(--radius);
+  background: rgba(9, 14, 14, 0.42);
+  color: var(--ink-strong);
+  font-size: 0.95rem;
+  font-weight: 760;
+  line-height: 1.45;
+  padding: 11px 13px;
+}
+
 input:focus,
+textarea:focus,
 button:focus-visible {
   outline: 3px solid rgba(216, 178, 90, 0.34);
   outline-offset: 2px;
@@ -187,7 +203,7 @@ svg:not(.MuiSvgIcon-root) {
   min-height: 0;
   overflow: hidden;
   padding: 4px 0;
-  --council-panel-title-size: 1.42rem;
+  --council-panel-title-size: 1.18rem;
 }
 
 .app-shell.is-entry {
@@ -405,47 +421,6 @@ svg:not(.MuiSvgIcon-root) {
   gap: 10px;
 }
 
-.settings-refresh-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  min-height: 54px;
-  padding: 0 16px 0 14px;
-  border: 1px solid rgba(234, 223, 189, 0.26);
-  border-radius: 999px;
-  background: rgba(17, 25, 24, 0.92);
-  color: var(--ink);
-  font-family: inherit;
-  font-size: 0.82rem;
-  font-weight: 850;
-  letter-spacing: -0.02em;
-  line-height: 1.2;
-  box-shadow: var(--shadow);
-  cursor: pointer;
-}
-
-.settings-refresh-button:hover:not(:disabled) {
-  background: rgba(36, 55, 49, 0.96);
-  border-color: rgba(216, 178, 90, 0.56);
-}
-
-.settings-refresh-button:disabled {
-  opacity: 0.55;
-  cursor: not-allowed;
-}
-
-.settings-refresh-button span {
-  white-space: nowrap;
-}
-
-.settings-refresh-button svg {
-  width: 18px;
-  height: 18px;
-  flex-shrink: 0;
-  color: var(--gold-2);
-}
-
 .settings-toggle {
   width: 54px;
   min-height: 54px;
@@ -484,6 +459,194 @@ svg:not(.MuiSvgIcon-root) {
 .settings-menu .ghost-button {
   min-height: 44px;
   justify-content: center;
+}
+
+.tips-menu {
+  width: 236px;
+}
+
+.tips-menu-note {
+  display: grid;
+  gap: 5px;
+  border: 1px solid rgba(216, 178, 90, 0.28);
+  border-radius: var(--radius);
+  background: rgba(216, 178, 90, 0.1);
+  color: var(--muted);
+  font-size: 0.78rem;
+  line-height: 1.35;
+  padding: 10px 12px;
+  word-break: keep-all;
+}
+
+.tips-menu-note-button {
+  width: 100%;
+  display: grid;
+  justify-items: start;
+  min-height: auto;
+  text-align: left;
+  white-space: normal;
+}
+
+.tips-menu-note-button:hover,
+.tips-menu-note-button:focus-visible {
+  border-color: rgba(216, 178, 90, 0.5);
+  background: rgba(216, 178, 90, 0.16);
+}
+
+.tips-menu-note strong {
+  color: var(--gold-2);
+  font-size: 0.8rem;
+}
+
+.settings-volume-control {
+  display: grid;
+  gap: 9px;
+  border: 1px solid rgba(234, 223, 189, 0.24);
+  border-radius: var(--radius);
+  background: rgba(234, 223, 189, 0.08);
+  color: var(--ink);
+  padding: 10px 12px 12px;
+}
+
+.settings-volume-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 0.82rem;
+  font-weight: 850;
+  line-height: 1;
+}
+
+.settings-volume-heading span {
+  color: var(--gold-2);
+  font-variant-numeric: tabular-nums;
+}
+
+.settings-volume-control input[type="range"] {
+  appearance: none;
+  width: 100%;
+  height: 18px;
+  accent-color: var(--gold-2);
+  background: transparent;
+  cursor: pointer;
+}
+
+.settings-volume-control input[type="range"]:focus-visible {
+  outline: 2px solid rgba(216, 178, 90, 0.86);
+  outline-offset: 3px;
+}
+
+.settings-volume-control input[type="range"]::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(234, 223, 189, 0.24);
+}
+
+.settings-volume-control input[type="range"]::-webkit-slider-thumb {
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  margin-top: -6px;
+  border: 1px solid rgba(255, 247, 224, 0.7);
+  border-radius: 50%;
+  background: var(--gold-2);
+}
+
+.settings-volume-control input[type="range"]::-moz-range-track {
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(234, 223, 189, 0.24);
+}
+
+.settings-volume-control input[type="range"]::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border: 1px solid rgba(255, 247, 224, 0.7);
+  border-radius: 50%;
+  background: var(--gold-2);
+}
+
+.settings-switch-control {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 48px;
+  border: 1px solid rgba(234, 223, 189, 0.24);
+  border-radius: var(--radius);
+  background: rgba(234, 223, 189, 0.08);
+  color: var(--ink);
+  padding: 9px 10px 9px 12px;
+}
+
+.settings-switch-control.disabled {
+  opacity: 0.58;
+}
+
+.settings-switch-control > span {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.settings-switch-control strong {
+  color: var(--ink);
+  font-size: 0.78rem;
+  font-weight: 900;
+  line-height: 1.1;
+}
+
+.settings-switch-control small {
+  color: var(--gold-2);
+  font-size: 0.64rem;
+  font-weight: 950;
+  letter-spacing: 0;
+}
+
+.settings-switch-control input {
+  appearance: none;
+  position: relative;
+  width: 42px;
+  height: 24px;
+  min-height: 24px;
+  flex: 0 0 auto;
+  border: 1px solid rgba(234, 223, 189, 0.36);
+  border-radius: 999px;
+  background: rgba(234, 223, 189, 0.16);
+  cursor: pointer;
+  padding: 0;
+}
+
+.settings-switch-control input::before {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: rgba(234, 223, 189, 0.9);
+  transition: transform 160ms ease, background 160ms ease;
+}
+
+.settings-switch-control input:checked {
+  border-color: rgba(216, 178, 90, 0.7);
+  background: rgba(216, 178, 90, 0.34);
+}
+
+.settings-switch-control input:checked::before {
+  transform: translateX(18px);
+  background: var(--gold-2);
+}
+
+.settings-switch-control input:focus-visible {
+  outline: 2px solid rgba(216, 178, 90, 0.86);
+  outline-offset: 3px;
+}
+
+.settings-switch-control input:disabled {
+  cursor: not-allowed;
 }
 
 .settings-menu .session-end-button {
@@ -754,6 +917,266 @@ svg:not(.MuiSvgIcon-root) {
 
 .session-end-actions button {
   min-height: 44px;
+}
+
+.score-guide-dialog {
+  width: min(100%, 760px);
+  max-height: calc(100dvh - 36px);
+  overflow-y: auto;
+  border: 1px solid rgba(234, 223, 189, 0.24);
+  border-radius: var(--radius);
+  background: rgba(17, 25, 24, 0.98);
+  box-shadow: var(--shadow);
+  color: var(--ink);
+  display: grid;
+  gap: 16px;
+  padding: 20px;
+}
+
+.dilemma-dialog {
+  width: min(100%, 920px);
+  max-height: calc(100dvh - 36px);
+  overflow-y: auto;
+  border: 1px solid rgba(234, 223, 189, 0.24);
+  border-radius: var(--radius);
+  background: rgba(17, 25, 24, 0.98);
+  box-shadow: var(--shadow);
+  color: var(--ink);
+  display: grid;
+  gap: 16px;
+  padding: 20px;
+}
+
+.dilemma-form {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
+.dilemma-dialog-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  min-width: 0;
+}
+
+.dilemma-dialog-grid.compact {
+  grid-template-columns: minmax(120px, 0.56fr) minmax(0, 1fr) minmax(120px, 0.58fr);
+}
+
+.dilemma-field {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.dilemma-field > span,
+.dilemma-radio-group legend,
+.dilemma-outcome-editor legend {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 930;
+  letter-spacing: 0;
+  line-height: 1;
+}
+
+.dilemma-field input,
+.dilemma-field textarea {
+  min-width: 0;
+  font-size: 0.9rem;
+}
+
+.dilemma-field textarea {
+  min-height: 104px;
+}
+
+.dilemma-radio-group,
+.dilemma-outcome-editor {
+  min-width: 0;
+  border: 1px solid rgba(234, 223, 189, 0.14);
+  border-radius: var(--radius);
+  background: rgba(234, 223, 189, 0.045);
+}
+
+.dilemma-radio-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  padding: 11px;
+}
+
+.dilemma-radio-group legend,
+.dilemma-outcome-editor legend {
+  padding: 0 5px;
+}
+
+.dilemma-radio-group label {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 34px;
+  border: 1px solid rgba(234, 223, 189, 0.14);
+  border-radius: 999px;
+  background: rgba(5, 9, 9, 0.22);
+  color: var(--ink-strong);
+  font-size: 0.84rem;
+  font-weight: 850;
+  padding: 0 11px;
+}
+
+.dilemma-radio-group input {
+  width: 15px;
+  min-height: 15px;
+  accent-color: var(--gold-2);
+}
+
+.dilemma-outcome-edit-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  min-width: 0;
+}
+
+.dilemma-outcome-editor {
+  display: grid;
+  gap: 9px;
+  padding: 12px;
+}
+
+.score-guide-copy {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.94rem;
+  line-height: 1.55;
+  word-break: keep-all;
+}
+
+.score-guide-formula {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid rgba(216, 178, 90, 0.28);
+  border-radius: var(--radius);
+  background: rgba(216, 178, 90, 0.1);
+  color: var(--ink-strong);
+  font-size: 0.88rem;
+  font-weight: 900;
+  line-height: 1.25;
+  padding: 10px;
+}
+
+.score-guide-formula span,
+.score-guide-formula strong {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+}
+
+.score-guide-formula .score-guide-formula-item,
+.score-guide-formula strong {
+  border-radius: 999px;
+  background: rgba(234, 223, 189, 0.1);
+  padding: 0 10px;
+}
+
+.score-guide-formula strong {
+  color: var(--gold-2);
+}
+
+.score-guide-sections {
+  display: grid;
+  gap: 10px;
+}
+
+.score-guide-section {
+  display: grid;
+  gap: 8px;
+  border: 1px solid rgba(234, 223, 189, 0.14);
+  border-radius: var(--radius);
+  background: rgba(234, 223, 189, 0.055);
+  padding: 12px;
+}
+
+.score-guide-section h3 {
+  margin: 0;
+  color: var(--ink-strong);
+  font-size: 1rem;
+  line-height: 1.25;
+}
+
+.score-guide-section p,
+.score-guide-section ul {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+  line-height: 1.5;
+  word-break: keep-all;
+}
+
+.score-guide-section ul {
+  display: grid;
+  gap: 6px;
+  padding-left: 19px;
+}
+
+.score-guide-table-wrap {
+  overflow-x: auto;
+}
+
+.score-guide-table {
+  width: 100%;
+  min-width: 650px;
+  border-collapse: collapse;
+  color: var(--ink);
+  font-size: 0.82rem;
+}
+
+.score-guide-table th,
+.score-guide-table td {
+  border-bottom: 1px solid rgba(234, 223, 189, 0.12);
+  padding: 8px 7px;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.score-guide-table thead th {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 900;
+}
+
+.score-guide-table tbody th,
+.score-guide-table tbody td:first-child {
+  color: var(--ink-strong);
+  font-weight: 900;
+}
+
+.score-guide-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.secondary-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  border: 1px solid rgba(234, 223, 189, 0.24);
+  border-radius: var(--radius);
+  background: rgba(234, 223, 189, 0.08);
+  color: var(--ink);
+  font-size: 0.94rem;
+  font-weight: 850;
+  line-height: 1;
+  padding: 0 16px;
+  text-decoration: none;
+}
+
+.secondary-button:hover,
+.secondary-button:focus-visible {
+  background: rgba(234, 223, 189, 0.14);
 }
 
 .council-entry {
@@ -1215,7 +1638,7 @@ label {
 
 .status-item {
   display: grid;
-  grid-template-columns: 28px 1fr auto;
+  grid-template-columns: 28px max-content minmax(0, 1fr);
   align-items: center;
   gap: 8px;
   min-height: 34px;
@@ -1237,12 +1660,18 @@ label {
   color: var(--muted);
   font-size: 0.78rem;
   font-weight: 750;
+  white-space: nowrap;
+  word-break: keep-all;
 }
 
 .status-item strong {
+  min-width: 0;
   color: var(--ink-strong);
   font-size: 0.82rem;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
   text-align: right;
+  word-break: keep-all;
 }
 
 .turn-track {
@@ -1724,6 +2153,7 @@ label {
   grid-template-columns: minmax(0, 1fr) max-content;
   grid-template-areas:
     "head actions"
+    "dilemma dilemma"
     "resources resources"
     "agenda agenda"
     "progress progress";
@@ -1755,6 +2185,187 @@ label {
   border-color: rgba(63, 123, 101, 0.3);
   background: rgba(63, 123, 101, 0.18);
   color: #c3efd8;
+}
+
+.dilemma-ledger-card {
+  grid-area: dilemma;
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  border: 1px solid rgba(216, 178, 90, 0.2);
+  border-radius: var(--radius);
+  background:
+    linear-gradient(135deg, rgba(216, 178, 90, 0.08), rgba(192, 79, 69, 0.055)),
+    rgba(234, 223, 189, 0.055);
+  padding: 11px;
+}
+
+.dilemma-summary-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+}
+
+.dilemma-summary-head > div:first-child {
+  min-width: 0;
+}
+
+.dilemma-summary-head h3 {
+  margin: 0;
+  color: var(--ink-strong);
+  font-size: 1rem;
+  line-height: 1.15;
+}
+
+.dilemma-summary-actions {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 7px;
+}
+
+.dilemma-status-pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;
+  max-width: 180px;
+  overflow: hidden;
+  border: 1px solid rgba(63, 123, 101, 0.3);
+  border-radius: 999px;
+  background: rgba(63, 123, 101, 0.16);
+  color: #c3efd8;
+  font-size: 0.72rem;
+  font-weight: 900;
+  line-height: 1.15;
+  padding: 0 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dilemma-status-pill.locked {
+  border-color: rgba(216, 178, 90, 0.32);
+  background: rgba(216, 178, 90, 0.13);
+  color: var(--gold-2);
+}
+
+.dilemma-edit-button {
+  min-height: 34px;
+  font-size: 0.8rem;
+  padding-inline: 11px;
+}
+
+.dilemma-empty,
+.dilemma-updated,
+.dilemma-outcome-empty {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 780;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.dilemma-summary-body {
+  display: grid;
+  gap: 9px;
+  min-width: 0;
+}
+
+.dilemma-facts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.dilemma-fact,
+.dilemma-text-preview,
+.dilemma-outcome-preview {
+  min-width: 0;
+  border: 1px solid rgba(234, 223, 189, 0.13);
+  border-radius: var(--radius);
+  background: rgba(5, 9, 9, 0.18);
+  padding: 8px;
+}
+
+.dilemma-fact {
+  display: grid;
+  gap: 3px;
+}
+
+.dilemma-fact span,
+.dilemma-text-preview > span,
+.dilemma-outcome-preview header span {
+  color: var(--muted);
+  font-size: 0.66rem;
+  font-weight: 920;
+  line-height: 1;
+}
+
+.dilemma-fact strong {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--ink-strong);
+  font-size: 0.82rem;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dilemma-text-preview {
+  display: grid;
+  gap: 5px;
+}
+
+.dilemma-text-preview p {
+  display: -webkit-box;
+  overflow: hidden;
+  margin: 0;
+  color: var(--ink);
+  font-size: 0.82rem;
+  font-weight: 760;
+  line-height: 1.36;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
+.dilemma-outcome-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.dilemma-outcome-preview {
+  display: grid;
+  align-content: start;
+  gap: 7px;
+}
+
+.dilemma-outcome-preview.selected {
+  border-color: rgba(216, 178, 90, 0.34);
+  background: rgba(216, 178, 90, 0.08);
+}
+
+.dilemma-outcome-preview header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+
+.dilemma-outcome-preview header strong {
+  color: var(--gold-2);
+  font-size: 0.84rem;
+}
+
+.dilemma-updated {
+  justify-self: end;
 }
 
 .inventory-section {
@@ -2248,7 +2859,7 @@ label {
 }
 
 .achievement-ledger {
-  grid-template-columns: minmax(240px, 0.42fr) minmax(0, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 360px), 1fr));
   align-items: stretch;
 }
 
@@ -2562,19 +3173,19 @@ label {
 
 .alignment-achievement-list {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
   grid-auto-rows: minmax(0, 1fr);
   gap: 4px;
   height: 100%;
 }
 
 .progress-section.has-own-choice .alignment-achievement-list {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
 }
 
 .alignment-progress-row {
   display: grid;
-  grid-template-columns: minmax(96px, 1fr) max-content max-content;
+  grid-template-columns: minmax(72px, 1fr) max-content max-content;
   align-items: center;
   gap: 5px;
   min-width: 0;
@@ -2644,6 +3255,7 @@ label {
     grid-template-columns: minmax(0, 1fr) minmax(320px, 0.72fr);
     grid-template-areas:
       "head actions"
+      "dilemma dilemma"
       "resources agenda"
       "progress progress";
     align-self: start;
@@ -2731,7 +3343,7 @@ label {
   .app-shell.is-council {
     width: min(1920px, calc(100% - 16px));
     padding: 8px 0;
-    --council-panel-title-size: 1.56rem;
+    --council-panel-title-size: 1.32rem;
   }
 
   .council-layout {
@@ -2883,6 +3495,7 @@ label {
     grid-template-columns: minmax(0, 1fr) minmax(360px, 0.72fr);
     grid-template-areas:
       "head actions"
+      "dilemma dilemma"
       "resources agenda"
       "progress progress";
     align-content: start;
@@ -3410,6 +4023,7 @@ label {
   .ledger-heading,
   .session-check-panel,
   .session-score-heading,
+  .dilemma-summary-head,
   .inventory-header,
   .inventory-actions,
   .agenda-section-heading,
@@ -3450,6 +4064,7 @@ label {
     grid-template-columns: 1fr;
     grid-template-areas:
       "head"
+      "dilemma"
       "resources"
       "agenda"
       "progress"
@@ -3458,6 +4073,11 @@ label {
   }
 
   .seat-grid,
+  .dilemma-facts,
+  .dilemma-outcome-grid,
+  .dilemma-dialog-grid,
+  .dilemma-dialog-grid.compact,
+  .dilemma-outcome-edit-grid,
   .inventory-grid,
   .inventory-resource-grid,
   .session-board-grid,
@@ -3473,6 +4093,21 @@ label {
 
   .inventory-resource-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .dilemma-summary-actions {
+    width: 100%;
+    justify-content: stretch;
+  }
+
+  .dilemma-status-pill,
+  .dilemma-edit-button {
+    flex: 1 1 0;
+    max-width: none;
+  }
+
+  .dilemma-dialog {
+    padding: 16px;
   }
 
   .alignment-progress-row {
@@ -3534,8 +4169,22 @@ label {
     flex: 1;
   }
 
+  .achievement-progress-row .counter-controls,
+  .alignment-progress-row .counter-controls {
+    grid-column: auto;
+    width: auto;
+  }
+
+  .achievement-progress-row .counter-controls output,
+  .alignment-progress-row .counter-controls output {
+    flex: 0 0 auto;
+    min-width: 34px;
+  }
+
   .inventory-actions > div,
   .session-end-actions,
+  .score-guide-actions,
+  .score-guide-actions button,
   .action-card button,
   .agenda-card button {
     width: 100%;

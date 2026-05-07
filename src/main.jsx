@@ -22,7 +22,6 @@ import MilitaryTechOutlinedIcon from "@mui/icons-material/MilitaryTechOutlined";
 import PaidOutlinedIcon from "@mui/icons-material/PaidOutlined";
 import PetsOutlinedIcon from "@mui/icons-material/PetsOutlined";
 import PestControlRodentOutlinedIcon from "@mui/icons-material/PestControlRodentOutlined";
-import RefreshOutlinedIcon from "@mui/icons-material/RefreshOutlined";
 import RemoveOutlinedIcon from "@mui/icons-material/RemoveOutlined";
 import RestartAltOutlinedIcon from "@mui/icons-material/RestartAltOutlined";
 import SailingOutlinedIcon from "@mui/icons-material/SailingOutlined";
@@ -72,9 +71,16 @@ const inventoryDraftPrefix = "kd-personal-inventory-draft:";
 const progressDraftPrefix = "kd-house-progress-draft:";
 const sharedBoardSheetUrl =
   "https://docs.google.com/spreadsheets/d/1hJw0gYAeIafIFUJOBTDaC_2QR87CXyXABrOKvu3QG2M/edit?usp=sharing";
+const rulebookPdfUrl = "/king_dilemma_rulebook.pdf";
 const bgmSource = "/Morrowind.mp3";
 const bgmMutedStorageKey = "kd-bgm-muted";
-const bgmVolume = 0.34;
+const bgmVolumeStorageKey = "kd-bgm-volume";
+const defaultBgmVolume = 0.34;
+const dilemmaOutcomeLabels = {
+  "": "미정",
+  aye: "찬성",
+  nay: "반대",
+};
 const tokenCounters = [
   { id: "coins", label: "재화", max: 99, icon: "coin", tone: "coin" },
   { id: "powerTokens", label: "권력", max: 99, icon: "power", tone: "power" },
@@ -139,6 +145,11 @@ function createSessionEndChecklistState() {
   return Object.fromEntries(sessionEndChecklistItems.map((item) => [item.id, false]));
 }
 
+function clampBgmVolume(value) {
+  const volume = Number(value);
+  return Number.isFinite(volume) ? Math.min(Math.max(volume, 0), 1) : defaultBgmVolume;
+}
+
 function readStoredBgmMuted() {
   if (typeof window === "undefined") {
     return false;
@@ -151,6 +162,19 @@ function readStoredBgmMuted() {
   }
 }
 
+function readStoredBgmVolume() {
+  if (typeof window === "undefined") {
+    return defaultBgmVolume;
+  }
+
+  try {
+    const storedVolume = window.localStorage.getItem(bgmVolumeStorageKey);
+    return storedVolume === null ? defaultBgmVolume : clampBgmVolume(storedVolume);
+  } catch {
+    return defaultBgmVolume;
+  }
+}
+
 function writeStoredBgmMuted(muted) {
   if (typeof window === "undefined") {
     return;
@@ -158,6 +182,18 @@ function writeStoredBgmMuted(muted) {
 
   try {
     window.localStorage.setItem(bgmMutedStorageKey, muted ? "true" : "false");
+  } catch {
+    // Ignore storage failures; audio state still works for the current page.
+  }
+}
+
+function writeStoredBgmVolume(volume) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  try {
+    window.localStorage.setItem(bgmVolumeStorageKey, String(clampBgmVolume(volume)));
   } catch {
     // Ignore storage failures; audio state still works for the current page.
   }
@@ -174,17 +210,24 @@ function App() {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [tipsOpen, setTipsOpen] = useState(false);
   const [hasUnsavedInventoryChanges, setHasUnsavedInventoryChanges] = useState(false);
   const [sessionEndDialogOpen, setSessionEndDialogOpen] = useState(false);
   const [sessionEndChecklist, setSessionEndChecklist] = useState(createSessionEndChecklistState);
   const [finalBoardDraft, setFinalBoardDraft] = useState(createFinalBoardDraft);
   const [finalScoring, setFinalScoring] = useState(null);
   const [finalScoringBusy, setFinalScoringBusy] = useState(false);
+  const [scoreGuideOpen, setScoreGuideOpen] = useState(false);
+  const [secretAgendaGuideOpen, setSecretAgendaGuideOpen] = useState(false);
+  const [realtimeEnabled, setRealtimeEnabled] = useState(false);
   const [bgmMuted, setBgmMuted] = useState(readStoredBgmMuted);
+  const [bgmVolume, setBgmVolume] = useState(readStoredBgmVolume);
   const refreshInFlight = useRef(null);
   const mutationInFlight = useRef(false);
   const finalScoringRequest = useRef(0);
   const bgmAudioRef = useRef(null);
+  const settingsToggleRef = useRef(null);
+  const tipsToggleRef = useRef(null);
   const finalBoardComplete = useMemo(() => isFinalBoardDraftComplete(finalBoardDraft), [finalBoardDraft]);
   const sessionEndChecklistComplete = useMemo(
     () => sessionEndChecklistItems.every((item) => sessionEndChecklist[item.id]),
@@ -214,6 +257,7 @@ function App() {
         try {
           const result = await apiRequest();
           setAuthenticated(Boolean(result.authenticated));
+          setRealtimeEnabled(Boolean(result.realtimeEnabled));
           setState(result.state);
           setError("");
           return result;
@@ -246,6 +290,9 @@ function App() {
         });
 
         setAuthenticated((wasAuthenticated) => Boolean(result.authenticated ?? wasAuthenticated));
+        setRealtimeEnabled((wasRealtimeEnabled) =>
+          typeof result.realtimeEnabled === "boolean" ? result.realtimeEnabled : wasRealtimeEnabled,
+        );
 
         if (result.state) {
           setState(result.state);
@@ -269,6 +316,40 @@ function App() {
   }, [refresh]);
 
   useEffect(() => {
+    if (
+      !realtimeEnabled ||
+      !authenticated ||
+      sessionStatus === "checking" ||
+      hasUnsavedInventoryChanges ||
+      sessionEndDialogOpen
+    ) {
+      return undefined;
+    }
+
+    const refreshIfVisible = () => {
+      if (document.visibilityState !== "visible" || mutationInFlight.current || refreshInFlight.current) {
+        return;
+      }
+
+      void refresh();
+    };
+
+    const events = new EventSource("/api/agenda/events");
+    events.addEventListener("connected", refreshIfVisible);
+    events.addEventListener("state", refreshIfVisible);
+    window.addEventListener("focus", refreshIfVisible);
+    document.addEventListener("visibilitychange", refreshIfVisible);
+
+    return () => {
+      events.close();
+      events.removeEventListener("connected", refreshIfVisible);
+      events.removeEventListener("state", refreshIfVisible);
+      window.removeEventListener("focus", refreshIfVisible);
+      document.removeEventListener("visibilitychange", refreshIfVisible);
+    };
+  }, [authenticated, hasUnsavedInventoryChanges, realtimeEnabled, refresh, sessionEndDialogOpen, sessionStatus]);
+
+  useEffect(() => {
     const audio = bgmAudioRef.current;
 
     if (!audio) {
@@ -279,9 +360,17 @@ function App() {
     audio.muted = bgmMuted;
     audio.volume = bgmVolume;
     writeStoredBgmMuted(bgmMuted);
+    writeStoredBgmVolume(bgmVolume);
 
     if (bgmMuted) {
       audio.pause();
+    }
+  }, [bgmMuted, bgmVolume]);
+
+  useEffect(() => {
+    const audio = bgmAudioRef.current;
+
+    if (!audio || bgmMuted) {
       return undefined;
     }
 
@@ -529,18 +618,50 @@ function App() {
     await handleEndSession();
   };
 
+  const handleToggleSettings = useCallback(() => {
+    setTipsOpen(false);
+    setSettingsOpen((current) => !current);
+  }, []);
+
+  const handleToggleTips = useCallback(() => {
+    setSettingsOpen(false);
+    setTipsOpen((current) => !current);
+  }, []);
+
+  const handleOpenScoreGuide = useCallback(() => {
+    setSettingsOpen(false);
+    setTipsOpen(false);
+    setScoreGuideOpen(true);
+  }, []);
+
+  const handleCloseScoreGuide = useCallback(() => {
+    setScoreGuideOpen(false);
+  }, []);
+
+  const handleOpenSecretAgendaGuide = useCallback(() => {
+    setSettingsOpen(false);
+    setTipsOpen(false);
+    setSecretAgendaGuideOpen(true);
+  }, []);
+
+  const handleCloseSecretAgendaGuide = useCallback(() => {
+    setSecretAgendaGuideOpen(false);
+  }, []);
+
   const handleToggleBgmMuted = useCallback(() => {
     const nextMuted = !bgmMuted;
     const audio = bgmAudioRef.current;
+    const nextVolume = !nextMuted && bgmVolume === 0 ? defaultBgmVolume : bgmVolume;
 
     setBgmMuted(nextMuted);
+    setBgmVolume(nextVolume);
 
     if (!audio) {
       return;
     }
 
     audio.muted = nextMuted;
-    audio.volume = bgmVolume;
+    audio.volume = nextVolume;
 
     if (nextMuted) {
       audio.pause();
@@ -548,7 +669,41 @@ function App() {
     }
 
     void audio.play().catch(() => undefined);
-  }, [bgmMuted]);
+  }, [bgmMuted, bgmVolume]);
+
+  const handleBgmVolumeChange = useCallback((event) => {
+    const nextVolume = clampBgmVolume(event.target.valueAsNumber / 100);
+    const nextMuted = nextVolume === 0;
+    const audio = bgmAudioRef.current;
+
+    setBgmVolume(nextVolume);
+    setBgmMuted(nextMuted);
+
+    if (!audio) {
+      return;
+    }
+
+    audio.volume = nextVolume;
+    audio.muted = nextMuted;
+
+    if (nextMuted) {
+      audio.pause();
+      return;
+    }
+
+    void audio.play().catch(() => undefined);
+  }, []);
+
+  const handleToggleRandomDiscard = useCallback(() => {
+    if (!state) {
+      return;
+    }
+
+    void mutate({
+      action: "setRandomDiscardEnabled",
+      enabled: !(state.randomDiscardEnabled ?? true),
+    });
+  }, [mutate, state]);
 
   const sessionChecking = sessionStatus === "checking";
   const isCouncilRoute = Boolean(authenticated && state);
@@ -565,15 +720,30 @@ function App() {
         <FloatingSettings
           authenticated={authenticated}
           bgmMuted={bgmMuted}
+          bgmVolume={bgmVolume}
           busy={busy}
           canEndSession={Boolean(authenticated && state?.phase === "complete")}
+          canToggleRandomDiscard={Boolean(
+            authenticated &&
+              state &&
+              (state.phase === "house-select" ||
+                (state.phase === "discard" && !state.discardedHiddenCount && !state.selectedCount)),
+          )}
           open={settingsOpen}
+          randomDiscardEnabled={state?.randomDiscardEnabled ?? true}
+          tipsOpen={tipsOpen}
           onEndSession={handleSettingsEndSession}
           onLogout={handleSettingsLogout}
-          onRefresh={refresh}
+          onOpenScoreGuide={handleOpenScoreGuide}
+          onOpenSecretAgendaGuide={handleOpenSecretAgendaGuide}
           onReset={handleSettingsReset}
+          onBgmVolumeChange={handleBgmVolumeChange}
+          onToggleRandomDiscard={handleToggleRandomDiscard}
           onToggleBgmMuted={handleToggleBgmMuted}
-          onToggle={() => setSettingsOpen((current) => !current)}
+          onToggle={handleToggleSettings}
+          onToggleTips={handleToggleTips}
+          tipsToggleRef={tipsToggleRef}
+          toggleRef={settingsToggleRef}
         />
       ) : null}
 
@@ -621,6 +791,12 @@ function App() {
         onCancel={handleCancelSessionEnd}
         onConfirm={handleConfirmSessionEnd}
         onToggle={handleToggleSessionEndCheck}
+      />
+      <ScoreGuideDialog open={scoreGuideOpen} onClose={handleCloseScoreGuide} restoreFocusRef={tipsToggleRef} />
+      <SecretAgendaScoreDialog
+        open={secretAgendaGuideOpen}
+        onClose={handleCloseSecretAgendaGuide}
+        restoreFocusRef={tipsToggleRef}
       />
     </main>
   );
@@ -799,28 +975,44 @@ function FinalScoreSummary({ boardComplete, scoring, scoringBusy }) {
 function FloatingSettings({
   authenticated,
   bgmMuted,
+  bgmVolume,
   busy,
   canEndSession,
+  canToggleRandomDiscard,
   open,
+  randomDiscardEnabled,
+  tipsOpen,
   onEndSession,
   onLogout,
-  onRefresh,
+  onOpenScoreGuide,
+  onOpenSecretAgendaGuide,
   onReset,
+  onBgmVolumeChange,
   onToggle,
   onToggleBgmMuted,
+  onToggleRandomDiscard,
+  onToggleTips,
+  tipsToggleRef,
+  toggleRef,
 }) {
+  const bgmVolumePercent = Math.round(bgmVolume * 100);
+
   return (
     <div className="settings-float">
       <div className="settings-float-actions">
-        {authenticated ? (
-          <button className="settings-refresh-button" type="button" onClick={onRefresh} disabled={busy}>
-            <span className="settings-refresh-icon" aria-hidden="true">
-              <TokenIcon type="refresh" />
-            </span>
-            <span>상태 새로고침</span>
-          </button>
-        ) : null}
         <button
+          ref={tipsToggleRef}
+          className="settings-toggle"
+          type="button"
+          aria-controls="tips-menu"
+          aria-expanded={tipsOpen}
+          aria-label="팁 메뉴"
+          onClick={onToggleTips}
+        >
+          <TokenIcon type="tip" />
+        </button>
+        <button
+          ref={toggleRef}
           className="settings-toggle"
           type="button"
           aria-controls="settings-menu"
@@ -831,6 +1023,28 @@ function FloatingSettings({
           <TokenIcon type="menu" />
         </button>
       </div>
+      {tipsOpen ? (
+        <div className="settings-menu tips-menu" id="tips-menu">
+          <button className="ghost-button wide" type="button" onClick={onOpenScoreGuide}>
+            <TokenIcon type="balance" />
+            점수 산정방식
+          </button>
+          <a className="settings-link" href={rulebookPdfUrl} target="_blank" rel="noreferrer">
+            <TokenIcon type="scroll" />
+            룰북 PDF 보기
+            <TokenIcon type="external" />
+          </a>
+          <button
+            className="tips-menu-note tips-menu-note-button"
+            type="button"
+            aria-label="비밀 의제 점수 산정방식 자세히 보기"
+            onClick={onOpenSecretAgendaGuide}
+          >
+            <strong>비밀 의제</strong>
+            <span>자원 목표 점수와 재화 순위 점수를 더해 산정합니다.</span>
+          </button>
+        </div>
+      ) : null}
       {open ? (
         <div className="settings-menu" id="settings-menu">
           <button
@@ -842,6 +1056,34 @@ function FloatingSettings({
             <TokenIcon type={bgmMuted ? "soundOff" : "soundOn"} />
             {bgmMuted ? "BGM 음소거 해제" : "BGM 음소거"}
           </button>
+          <div className="settings-volume-control">
+            <div className="settings-volume-heading">
+              <label htmlFor="bgm-volume">BGM 볼륨</label>
+              <span>{bgmVolumePercent}%</span>
+            </div>
+            <input
+              id="bgm-volume"
+              type="range"
+              min="0"
+              max="100"
+              step="1"
+              value={bgmVolumePercent}
+              onChange={onBgmVolumeChange}
+            />
+          </div>
+          <label className={`settings-switch-control${!canToggleRandomDiscard ? " disabled" : ""}`}>
+            <span>
+              <strong>무작위 의제 폐기</strong>
+              <small>{randomDiscardEnabled ? "ON" : "OFF"}</small>
+            </span>
+            <input
+              checked={randomDiscardEnabled}
+              disabled={busy || !canToggleRandomDiscard}
+              onChange={onToggleRandomDiscard}
+              role="switch"
+              type="checkbox"
+            />
+          </label>
           <a className="settings-link" href={sharedBoardSheetUrl} target="_blank" rel="noreferrer">
             <TokenIcon type="sheet" />
             공용 보드 시트
@@ -871,6 +1113,320 @@ function FloatingSettings({
           </button>
         </div>
       ) : null}
+    </div>
+  );
+}
+
+function SecretAgendaScoreDialog({ open, onClose, restoreFocusRef }) {
+  const dialogRef = useRef(null);
+  const closeButtonRef = useRef(null);
+
+  useEffect(() => {
+    if (!open) {
+      return undefined;
+    }
+
+    const focusCloseButton = window.setTimeout(() => {
+      closeButtonRef.current?.focus();
+    }, 0);
+
+    const handleKeyDown = (event) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        onClose();
+        return;
+      }
+
+      if (event.key !== "Tab" || !dialogRef.current) {
+        return;
+      }
+
+      const focusable = Array.from(
+        dialogRef.current.querySelectorAll(
+          'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        ),
+      ).filter((element) => element instanceof HTMLElement && element.getClientRects().length > 0);
+
+      if (!focusable.length) {
+        event.preventDefault();
+        return;
+      }
+
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+
+    document.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      window.clearTimeout(focusCloseButton);
+      document.removeEventListener("keydown", handleKeyDown);
+      window.setTimeout(() => {
+        restoreFocusRef?.current?.focus();
+      }, 0);
+    };
+  }, [onClose, open, restoreFocusRef]);
+
+  if (!open) {
+    return null;
+  }
+
+  return (
+    <div className="session-end-overlay" role="presentation">
+      <section
+        ref={dialogRef}
+        className="score-guide-dialog secret-agenda-guide-dialog"
+        aria-labelledby="secret-agenda-guide-title"
+        aria-describedby="secret-agenda-guide-copy"
+        aria-modal="true"
+        role="dialog"
+      >
+        <div className="session-end-heading">
+          <span className="session-end-seal" aria-hidden="true">
+            <TokenIcon type="scroll" />
+          </span>
+          <div>
+            <p className="section-label">룰북 p.30</p>
+            <h2 id="secret-agenda-guide-title">비밀 의제 점수</h2>
+          </div>
+        </div>
+        <p className="score-guide-copy" id="secret-agenda-guide-copy">
+          비밀 의제 카드는 게임 종료 시 가장 큰 승점 원천입니다. 카드의 자원 목표 점수와 재화 순위 점수(룰북의
+          자금/코인 순위 목표)를 각각 계산한 뒤 더해서 비밀 의제 점수로 기록합니다.
+        </p>
+        <div className="score-guide-formula" aria-label="비밀 의제 점수 공식">
+          <span className="score-guide-formula-item">자원 목표 점수</span>
+          <span className="score-guide-formula-operator">+</span>
+          <span className="score-guide-formula-item">재화 순위 점수</span>
+          <strong>= 비밀 의제 점수</strong>
+        </div>
+        <div className="score-guide-sections">
+          <section className="score-guide-section">
+            <h3>1. 자원 목표 점수</h3>
+            <ul>
+              <li>게임이 끝난 순간 공용 보드의 5개 자원 마커 최종 위치를 봅니다.</li>
+              <li>자신의 비밀 의제 카드에 표시된 자원 목표 도표에 그 위치들을 대입합니다.</li>
+              <li>도표가 요구하는 구역 안에 들어간 자원 마커 수에 따라 카드에 적힌 승점을 받습니다.</li>
+            </ul>
+          </section>
+          <section className="score-guide-section">
+            <h3>2. 재화 순위 점수</h3>
+            <ul>
+              <li>각 가문이 게임 종료 시 가문 스크린 뒤에 남긴 재화 수를 비교합니다.</li>
+              <li>비밀 의제 카드 하단의 자금/코인 순위 표에서 1위, 2위, 3위에 해당하는 점수를 받습니다.</li>
+              <li>카드마다 재화 순위 점수가 다르므로, 같은 순위라도 비밀 의제에 따라 받는 점수가 달라집니다.</li>
+              <li>1위부터 3위 안에 들지 못하면 카드에 표시된 재화 순위 점수가 없으므로 0점으로 처리합니다.</li>
+            </ul>
+          </section>
+          <section className="score-guide-section">
+            <h3>3. 동률 처리</h3>
+            <ul>
+              <li>재화 수가 같으면 동률인 모든 가문이 같은 순위를 공유합니다.</li>
+              <li>동률인 가문들은 각자 자기 비밀 의제 카드의 해당 순위 점수를 받습니다.</li>
+              <li>자원 위치 동률도 룰북의 일반 동률 규칙처럼 묶인 자원이 같은 위치를 공유합니다.</li>
+            </ul>
+          </section>
+        </div>
+        <div className="score-guide-actions">
+          <a className="secondary-button" href={rulebookPdfUrl} target="_blank" rel="noreferrer">
+            룰북 PDF
+          </a>
+          <button ref={closeButtonRef} className="primary-button" type="button" onClick={onClose}>
+            확인
+          </button>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function ScoreGuideDialog({ open, onClose, restoreFocusRef }) {
+  const dialogRef = useRef(null);
+  const closeButtonRef = useRef(null);
+
+  useEffect(() => {
+    if (!open) {
+      return undefined;
+    }
+
+    const focusCloseButton = window.setTimeout(() => {
+      closeButtonRef.current?.focus();
+    }, 0);
+
+    const handleKeyDown = (event) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        onClose();
+        return;
+      }
+
+      if (event.key !== "Tab" || !dialogRef.current) {
+        return;
+      }
+
+      const focusable = Array.from(
+        dialogRef.current.querySelectorAll(
+          'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        ),
+      ).filter((element) => element instanceof HTMLElement && element.getClientRects().length > 0);
+
+      if (!focusable.length) {
+        event.preventDefault();
+        return;
+      }
+
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+
+    document.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      window.clearTimeout(focusCloseButton);
+      document.removeEventListener("keydown", handleKeyDown);
+      window.setTimeout(() => {
+        restoreFocusRef?.current?.focus();
+      }, 0);
+    };
+  }, [onClose, open, restoreFocusRef]);
+
+  if (!open) {
+    return null;
+  }
+
+  return (
+    <div className="session-end-overlay" role="presentation">
+      <section
+        ref={dialogRef}
+        className="score-guide-dialog"
+        aria-labelledby="score-guide-title"
+        aria-describedby="score-guide-copy"
+        aria-modal="true"
+        role="dialog"
+      >
+        <div className="session-end-heading">
+          <span className="session-end-seal" aria-hidden="true">
+            <TokenIcon type="balance" />
+          </span>
+          <div>
+            <p className="section-label">룰북 기준</p>
+            <h2 id="score-guide-title">점수 산정방식</h2>
+          </div>
+        </div>
+        <p className="score-guide-copy" id="score-guide-copy">
+          왕이 사망하거나 안정도 트랙 끝에서 퇴위해 한 게임이 끝났을 때 계산합니다. 중간 저장으로 세션만 멈춘
+          경우에는 점수를 산정하지 않습니다.
+        </p>
+        <div className="score-guide-formula" aria-label="최종 승점 공식">
+          <span className="score-guide-formula-item">비밀 의제: 자원 목표 + 재화 순위</span>
+          <span className="score-guide-formula-operator">+</span>
+          <span className="score-guide-formula-item">공개 의제</span>
+          <span className="score-guide-formula-operator">+</span>
+          <span className="score-guide-formula-item">권력 보너스</span>
+          <strong>= 합계</strong>
+        </div>
+        <div className="score-guide-sections">
+          <section className="score-guide-section">
+            <h3>1. 승점 합산</h3>
+            <ul>
+              <li>비밀 의제: 자원 목표 점수와 재화 순위 점수를 더해 산정합니다.</li>
+              <li>자원 목표: 공용 보드 최종 자원 위치를 비밀 의제 카드의 자원 조건에 대입합니다.</li>
+              <li>재화 순위: 남은 재화가 1위, 2위, 3위인지에 따라 비밀 의제 카드 하단의 순위 점수를 받습니다.</li>
+              <li>긍정 공개 의제: 해당 자원이 가장 높으면 +3, 두 번째로 높으면 +1입니다.</li>
+              <li>부정 공개 의제: 해당 자원이 가장 낮으면 -3, 두 번째로 낮으면 -1입니다.</li>
+              <li>권력 보너스: 남은 권력 최다 가문은 +2, 2위 가문은 +1입니다.</li>
+            </ul>
+          </section>
+          <section className="score-guide-section">
+            <h3>2. 비밀 의제 점수</h3>
+            <ul>
+              <li>각 비밀 의제 카드는 자원 목표와 재화 순위 목표 두 가지 점수 조건을 가집니다.</li>
+              <li>자원 목표는 게임 종료 시 공용 보드의 자원 마커 위치를 카드의 자원 구간/도표에 대입해 계산합니다.</li>
+              <li>
+                재화 순위 목표는 남은 재화가 다른 가문과 비교해 몇 위인지 보고 카드 하단의 1위, 2위, 3위 점수를
+                받습니다.
+              </li>
+              <li>재화 순위가 동률이면 동률인 모든 가문이 같은 순위 점수를 받습니다.</li>
+            </ul>
+          </section>
+          <section className="score-guide-section">
+            <h3>3. 순위와 동률</h3>
+            <ul>
+              <li>자원 위치나 재화/권력 수량이 동률이면 묶인 대상이 같은 순위 보너스 또는 페널티를 받습니다.</li>
+              <li>승점 합계가 가장 높은 가문이 이번 게임의 승자입니다. 승점 동률이면 승리는 공유됩니다.</li>
+              <li>마지막 등수는 항상 존재합니다. 5인 게임에서 4위 동률 뒤에 아무도 없으면 둘 다 Last로 봅니다.</li>
+            </ul>
+          </section>
+          <section className="score-guide-section">
+            <h3>4. 명망/갈망 기록</h3>
+            <p>
+              이 앱은 승점 합계와 순위까지만 자동 계산합니다. 명망/갈망은 승점 순위와 종료 조건을 아래 룰북 표에
+              대입해 각 가문 장부에 직접 반영합니다.
+            </p>
+            <div className="score-guide-table-wrap">
+              <table className="score-guide-table">
+                <thead>
+                  <tr>
+                    <th scope="col">조건</th>
+                    <th scope="col">1위</th>
+                    <th scope="col">2위</th>
+                    <th scope="col">3위</th>
+                    <th scope="col">4위</th>
+                    <th scope="col">Last</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <th scope="row">왕 사망</th>
+                    <td>명망 5</td>
+                    <td>명망 4</td>
+                    <td>명망 2, 갈망 1</td>
+                    <td>명망 2, 갈망 1</td>
+                    <td>갈망 2</td>
+                  </tr>
+                  <tr>
+                    <th scope="row">상단 퇴위</th>
+                    <td>명망 3</td>
+                    <td>명망 2</td>
+                    <td>명망 1</td>
+                    <td>명망 1</td>
+                    <td>갈망 2</td>
+                  </tr>
+                  <tr>
+                    <th scope="row">하단 퇴위</th>
+                    <td>갈망 3</td>
+                    <td>갈망 2</td>
+                    <td>갈망 1</td>
+                    <td>갈망 1</td>
+                    <td>명망 2</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+        </div>
+        <div className="score-guide-actions">
+          <button ref={closeButtonRef} className="primary-button" type="button" onClick={onClose}>
+            확인
+          </button>
+        </div>
+      </section>
     </div>
   );
 }
@@ -940,7 +1496,7 @@ function LoginPanel({
           <p className="section-label">왕국 회기</p>
           <h2 id="login-title">참여할 가문을 선택하세요</h2>
           <p>
-            이번 회의에 참여할 5개 가문을 고릅니다. 명망이 낮은 가문부터, 동률이면 가문 번호순으로 비밀 의제를 선택합니다.
+            이번 회의에 참여할 5개 가문을 고릅니다. 명망이 낮은 가문부터, 동률이면 가문 번호가 높은 순서로 비밀 의제를 선택합니다.
           </p>
         </div>
         {selectedHouse ? (
@@ -1199,6 +1755,7 @@ function GamePanel({ state, busy, mutate, onDirtyChange }) {
       : "";
   const availableAgendas = state.availableAgendas || [];
   const hasAgendaDraft = availableAgendas.length > 0;
+  const discardSelectionMode = Boolean(state.canDiscard && !state.randomDiscardEnabled);
   const hasCouncilContext = state.canDiscard;
 
   return (
@@ -1265,11 +1822,12 @@ function GamePanel({ state, busy, mutate, onDirtyChange }) {
             <ActionPanel state={state} busy={busy} mutate={mutate} />
           </aside>
         ) : null}
-        <AgendaList agendas={availableAgendas} busy={busy} mutate={mutate} />
+        <AgendaList agendas={availableAgendas} busy={busy} mode={discardSelectionMode ? "discard" : "choose"} mutate={mutate} />
         <PersonalInventoryPanel
           inventory={state.ownInventory}
           progress={state.ownHouseProgress}
           ownChoice={state.ownChoice}
+          dilemma={state.phase === "complete" ? state.dilemma : null}
           houseId={state.currentHouseId}
           busy={busy}
           mutate={mutate}
@@ -1415,7 +1973,7 @@ function GameMessage({ state }) {
     if (state.phase === "house-select") {
       const remaining = Math.max((state.requiredHouseCount || REQUIRED_HOUSE_COUNT) - (state.claimedHouseCount || 0), 0);
       return remaining
-        ? `${remaining}개 가문이 더 선택되면 명망이 낮은 가문부터 비밀 의제 드래프트를 시작합니다. 동률이면 가문 번호순입니다.`
+        ? `${remaining}개 가문이 더 선택되면 명망이 낮은 가문부터 비밀 의제 드래프트를 시작합니다. 동률이면 가문 번호가 높은 순서입니다.`
         : "의석이 모두 찼습니다. 첫 가문이 폐기 의식을 시작합니다.";
     }
 
@@ -1424,7 +1982,9 @@ function GameMessage({ state }) {
     }
 
     if (state.canDiscard) {
-      return `${getHouseDisplayName(state, state.currentHouseId)} 차례입니다. 봉인된 6장 중 1장을 폐기하고 남은 의제를 펼칩니다.`;
+      return state.randomDiscardEnabled
+        ? `${getHouseDisplayName(state, state.currentHouseId)} 차례입니다. 봉인된 6장 중 1장을 무작위로 폐기하고 남은 의제를 펼칩니다.`
+        : `${getHouseDisplayName(state, state.currentHouseId)} 차례입니다. 봉인된 6장 중 폐기할 의제 1장을 직접 고르세요.`;
     }
 
     if (state.canChoose) {
@@ -1486,13 +2046,18 @@ function AgendaTitle({ agenda }) {
   );
 }
 
-function PersonalInventoryPanel({ inventory, progress, ownChoice, houseId, busy, mutate, onDirtyChange }) {
+function PersonalInventoryPanel({ inventory, progress, ownChoice, dilemma, houseId, busy, mutate, onDirtyChange }) {
   const storageKey = houseId ? `${inventoryDraftPrefix}${houseId}` : "";
   const progressStorageKey = houseId ? `${progressDraftPrefix}${houseId}` : "";
   const serverInventory = useMemo(() => normalizeInventory(inventory), [inventory]);
   const serverProgress = useMemo(() => normalizeHouseProgress(progress), [progress]);
+  const serverDilemma = useMemo(() => normalizeDilemmaRecord(dilemma), [dilemma]);
   const [draft, setDraft] = useState(serverInventory);
   const [progressDraft, setProgressDraft] = useState(serverProgress);
+  const [dilemmaDialogOpen, setDilemmaDialogOpen] = useState(false);
+  const [dilemmaDraft, setDilemmaDraft] = useState(() => createDilemmaDraft(serverDilemma));
+  const [dilemmaEditToken, setDilemmaEditToken] = useState("");
+  const dilemmaEditButtonRef = useRef(null);
   const inventoryDirty = useMemo(() => !inventoriesMatch(draft, serverInventory), [draft, serverInventory]);
   const progressDirty = useMemo(() => !progressMatches(progressDraft, serverProgress), [progressDraft, serverProgress]);
   const isDirty = inventoryDirty || progressDirty;
@@ -1518,6 +2083,12 @@ function PersonalInventoryPanel({ inventory, progress, ownChoice, houseId, busy,
       setProgressDraft(serverProgress);
     }
   }, [progressDirty, serverProgress]);
+
+  useEffect(() => {
+    if (!dilemmaDialogOpen) {
+      setDilemmaDraft(createDilemmaDraft(serverDilemma));
+    }
+  }, [dilemmaDialogOpen, serverDilemma]);
 
   useEffect(() => {
     onDirtyChange(isDirty);
@@ -1668,6 +2239,67 @@ function PersonalInventoryPanel({ inventory, progress, ownChoice, houseId, busy,
     }
   };
 
+  const beginDilemmaEdit = useCallback(async () => {
+    if (!dilemma || !houseId) {
+      return;
+    }
+
+    const result = await mutate({ action: "beginDilemmaEdit" });
+
+    if (!result?.dilemmaEditToken) {
+      return;
+    }
+
+    setDilemmaEditToken(result.dilemmaEditToken);
+    setDilemmaDraft(createDilemmaDraft(result.state?.dilemma || serverDilemma));
+    setDilemmaDialogOpen(true);
+  }, [dilemma, houseId, mutate, serverDilemma]);
+
+  const updateDilemmaField = useCallback((field, value) => {
+    setDilemmaDraft((current) => ({
+      ...current,
+      [field]: value,
+    }));
+  }, []);
+
+  const updateDilemmaOutcome = useCallback((side, field, value) => {
+    setDilemmaDraft((current) => ({
+      ...current,
+      [side]: {
+        ...current[side],
+        [field]: value,
+      },
+    }));
+  }, []);
+
+  const cancelDilemmaEdit = useCallback(async () => {
+    const token = dilemmaEditToken;
+    setDilemmaDialogOpen(false);
+    setDilemmaEditToken("");
+    setDilemmaDraft(createDilemmaDraft(serverDilemma));
+
+    if (token) {
+      await mutate({ action: "cancelDilemmaEdit", dilemmaEditToken: token });
+    }
+  }, [dilemmaEditToken, mutate, serverDilemma]);
+
+  const saveDilemma = useCallback(async () => {
+    if (!dilemmaEditToken) {
+      return;
+    }
+
+    const result = await mutate({
+      action: "saveDilemma",
+      dilemmaEditToken,
+      dilemma: createDilemmaPayload(dilemmaDraft),
+    });
+
+    if (result) {
+      setDilemmaDialogOpen(false);
+      setDilemmaEditToken("");
+    }
+  }, [dilemmaDraft, dilemmaEditToken, mutate]);
+
   return (
     <section className="inventory-panel" aria-labelledby="inventory-title">
       <div className="inventory-header">
@@ -1677,6 +2309,16 @@ function PersonalInventoryPanel({ inventory, progress, ownChoice, houseId, busy,
         </div>
         {isDirty ? <span className="dirty-pill">저장 필요</span> : <span className="saved-pill">저장 완료</span>}
       </div>
+
+      {dilemma ? (
+        <DilemmaSummaryCard
+          busy={busy}
+          currentHouseId={houseId}
+          dilemma={serverDilemma}
+          editButtonRef={dilemmaEditButtonRef}
+          onEdit={beginDilemmaEdit}
+        />
+      ) : null}
 
       <div className="inventory-section resource-section">
         <div className="inventory-counter-group">
@@ -1825,7 +2467,350 @@ function PersonalInventoryPanel({ inventory, progress, ownChoice, houseId, busy,
           </button>
         </div>
       </div>
+      <DilemmaEditDialog
+        busy={busy}
+        draft={dilemmaDraft}
+        open={dilemmaDialogOpen}
+        restoreFocusRef={dilemmaEditButtonRef}
+        onCancel={cancelDilemmaEdit}
+        onFieldChange={updateDilemmaField}
+        onOutcomeChange={updateDilemmaOutcome}
+        onSave={saveDilemma}
+      />
     </section>
+  );
+}
+
+function DilemmaSummaryCard({ busy, currentHouseId, dilemma, editButtonRef, onEdit }) {
+  const lockedByOther = Boolean(dilemma.editLock && dilemma.editLock.houseId !== currentHouseId);
+  const isBlank = isDilemmaBlank(dilemma);
+  const statusText = dilemma.editLock
+    ? `${dilemma.editLock.houseName} 수정 중`
+    : isBlank
+      ? "미작성"
+      : "저장됨";
+  const canEdit = Boolean(currentHouseId) && !lockedByOther;
+
+  return (
+    <section className="dilemma-ledger-card" aria-labelledby="dilemma-ledger-title">
+      <div className="dilemma-summary-head">
+        <div>
+          <p className="section-label">공용 딜레마</p>
+          <h3 id="dilemma-ledger-title">딜레마</h3>
+        </div>
+        <div className="dilemma-summary-actions">
+          <span className={`dilemma-status-pill${dilemma.editLock ? " locked" : ""}`}>{statusText}</span>
+          <button
+            ref={editButtonRef}
+            className="ghost-button dilemma-edit-button"
+            type="button"
+            onClick={onEdit}
+            disabled={busy || !canEdit}
+            title={lockedByOther ? "다른 가문이 편집을 마칠 때까지 기다려야 합니다." : "딜레마 기록을 편집합니다."}
+          >
+            <TokenIcon type="scroll" />
+            편집
+          </button>
+        </div>
+      </div>
+
+      {isBlank ? (
+        <p className="dilemma-empty">이번 라운드의 딜레마 기록이 아직 없습니다.</p>
+      ) : (
+        <div className="dilemma-summary-body">
+          <div className="dilemma-facts">
+            <DilemmaFact label="카드" value={formatDilemmaCardLabel(dilemma)} />
+            <DilemmaFact label="위치" value={dilemma.timeCounterSlot} />
+            <DilemmaFact label="결과" value={dilemmaOutcomeLabels[dilemma.selectedOutcome] || "미정"} />
+          </div>
+          <DilemmaTextPreview label="질문" value={dilemma.question || dilemma.context} />
+          <DilemmaTextPreview label="메모" value={dilemma.councilNotes} />
+          <div className="dilemma-outcome-grid">
+            <DilemmaOutcomePreview label="찬성" selected={dilemma.selectedOutcome === "aye"} outcome={dilemma.aye} />
+            <DilemmaOutcomePreview label="반대" selected={dilemma.selectedOutcome === "nay"} outcome={dilemma.nay} />
+          </div>
+          <DilemmaTextPreview label="해결" value={dilemma.resolutionNotes || dilemma.voteNotes} />
+          {dilemma.updatedByName ? (
+            <p className="dilemma-updated">
+              {dilemma.updatedByName} 저장 · {formatLocalDateTime(dilemma.updatedAt)}
+            </p>
+          ) : null}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function DilemmaFact({ label, value }) {
+  return (
+    <div className="dilemma-fact">
+      <span>{label}</span>
+      <strong>{value || "-"}</strong>
+    </div>
+  );
+}
+
+function DilemmaTextPreview({ label, value }) {
+  return (
+    <div className="dilemma-text-preview">
+      <span>{label}</span>
+      <p>{value || "미입력"}</p>
+    </div>
+  );
+}
+
+function DilemmaOutcomePreview({ label, outcome, selected }) {
+  const hasContent = outcome.preview || outcome.result;
+
+  return (
+    <article className={`dilemma-outcome-preview${selected ? " selected" : ""}`}>
+      <header>
+        <strong>{label}</strong>
+        {selected ? <span>선택</span> : null}
+      </header>
+      {hasContent ? (
+        <>
+          <DilemmaTextPreview label="공개" value={outcome.preview} />
+          <DilemmaTextPreview label="결과" value={outcome.result} />
+        </>
+      ) : (
+        <p className="dilemma-outcome-empty">결과 미입력</p>
+      )}
+    </article>
+  );
+}
+
+function DilemmaEditDialog({
+  busy,
+  draft,
+  open,
+  restoreFocusRef,
+  onCancel,
+  onFieldChange,
+  onOutcomeChange,
+  onSave,
+}) {
+  const dialogRef = useRef(null);
+  const firstInputRef = useRef(null);
+
+  useEffect(() => {
+    if (!open) {
+      return undefined;
+    }
+
+    const focusFirstInput = window.setTimeout(() => {
+      firstInputRef.current?.focus();
+    }, 0);
+
+    const handleKeyDown = (event) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        onCancel();
+        return;
+      }
+
+      if (event.key !== "Tab" || !dialogRef.current) {
+        return;
+      }
+
+      const focusable = Array.from(
+        dialogRef.current.querySelectorAll(
+          'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        ),
+      ).filter((element) => element instanceof HTMLElement && element.getClientRects().length > 0);
+
+      if (!focusable.length) {
+        event.preventDefault();
+        return;
+      }
+
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+
+    document.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      window.clearTimeout(focusFirstInput);
+      document.removeEventListener("keydown", handleKeyDown);
+      window.setTimeout(() => {
+        restoreFocusRef?.current?.focus();
+      }, 0);
+    };
+  }, [onCancel, open, restoreFocusRef]);
+
+  if (!open) {
+    return null;
+  }
+
+  const submit = (event) => {
+    event.preventDefault();
+    onSave();
+  };
+
+  return (
+    <div className="session-end-overlay" role="presentation">
+      <section
+        ref={dialogRef}
+        className="dilemma-dialog"
+        aria-labelledby="dilemma-dialog-title"
+        aria-modal="true"
+        role="dialog"
+      >
+        <div className="session-end-heading">
+          <span className="session-end-seal" aria-hidden="true">
+            <TokenIcon type="scroll" />
+          </span>
+          <div>
+            <p className="section-label">공용 기록</p>
+            <h2 id="dilemma-dialog-title">딜레마 편집</h2>
+          </div>
+        </div>
+        <form className="dilemma-form" onSubmit={submit}>
+          <div className="dilemma-dialog-grid compact">
+            <DilemmaInput
+              ref={firstInputRef}
+              label="카드 번호"
+              value={draft.cardCode}
+              onChange={(value) => onFieldChange("cardCode", value)}
+              placeholder="예: 12, II-4"
+            />
+            <DilemmaInput
+              label="제목"
+              value={draft.title}
+              onChange={(value) => onFieldChange("title", value)}
+              placeholder="딜레마 제목"
+            />
+            <DilemmaInput
+              label="타임 카운터"
+              value={draft.timeCounterSlot}
+              onChange={(value) => onFieldChange("timeCounterSlot", value)}
+              placeholder="라운드/위치"
+            />
+          </div>
+          <div className="dilemma-dialog-grid">
+            <DilemmaTextarea
+              label="상황"
+              value={draft.context}
+              onChange={(value) => onFieldChange("context", value)}
+              placeholder="카드 전문 대신 요약이나 진행상황을 적습니다."
+            />
+            <DilemmaTextarea
+              label="질문"
+              value={draft.question}
+              onChange={(value) => onFieldChange("question", value)}
+              placeholder="찬성/반대로 결정할 질문"
+            />
+          </div>
+          <DilemmaTextarea
+            label="메모"
+            value={draft.councilNotes}
+            onChange={(value) => onFieldChange("councilNotes", value)}
+            placeholder="논의 내용, 협상, 주의할 카드 효과"
+          />
+          <fieldset className="dilemma-radio-group">
+            <legend>선택 결과</legend>
+            {[
+              ["", "미정"],
+              ["aye", "찬성"],
+              ["nay", "반대"],
+            ].map(([value, label]) => (
+              <label key={value || "pending"}>
+                <input
+                  type="radio"
+                  name="selectedOutcome"
+                  value={value}
+                  checked={draft.selectedOutcome === value}
+                  onChange={(event) => onFieldChange("selectedOutcome", event.target.value)}
+                />
+                <span>{label}</span>
+              </label>
+            ))}
+          </fieldset>
+          <div className="dilemma-outcome-edit-grid">
+            <DilemmaOutcomeEditor
+              label="찬성"
+              outcome={draft.aye}
+              onChange={(field, value) => onOutcomeChange("aye", field, value)}
+            />
+            <DilemmaOutcomeEditor
+              label="반대"
+              outcome={draft.nay}
+              onChange={(field, value) => onOutcomeChange("nay", field, value)}
+            />
+          </div>
+          <div className="dilemma-dialog-grid">
+            <DilemmaTextarea
+              label="투표 메모"
+              value={draft.voteNotes}
+              onChange={(value) => onFieldChange("voteNotes", value)}
+              placeholder="권력 합계, 동률, 전원 패스, 사회자 결정"
+            />
+            <DilemmaTextarea
+              label="해결 후속"
+              value={draft.resolutionNotes}
+              onChange={(value) => onFieldChange("resolutionNotes", value)}
+              placeholder="자원/안정도/모멘텀, 스티커, 봉투, 카드 처리"
+            />
+          </div>
+          <div className="session-end-actions">
+            <button className="ghost-button" type="button" onClick={onCancel} disabled={busy}>
+              취소
+            </button>
+            <button className="primary-button" type="submit" disabled={busy}>
+              <TokenIcon type="save" />
+              {busy ? "저장 중" : "저장"}
+            </button>
+          </div>
+        </form>
+      </section>
+    </div>
+  );
+}
+
+const DilemmaInput = React.forwardRef(function DilemmaInput({ label, value, onChange, placeholder }, ref) {
+  return (
+    <label className="dilemma-field">
+      <span>{label}</span>
+      <input ref={ref} value={value} onChange={(event) => onChange(event.target.value)} placeholder={placeholder} />
+    </label>
+  );
+});
+
+function DilemmaTextarea({ label, value, onChange, placeholder }) {
+  return (
+    <label className="dilemma-field">
+      <span>{label}</span>
+      <textarea value={value} onChange={(event) => onChange(event.target.value)} placeholder={placeholder} />
+    </label>
+  );
+}
+
+function DilemmaOutcomeEditor({ label, outcome, onChange }) {
+  return (
+    <fieldset className="dilemma-outcome-editor">
+      <legend>{label}</legend>
+      <DilemmaTextarea
+        label="공개 결과"
+        value={outcome.preview}
+        onChange={(value) => onChange("preview", value)}
+        placeholder="카드 앞면의 공개 기호/보이는 결과"
+      />
+      <DilemmaTextarea
+        label="적용 결과"
+        value={outcome.result}
+        onChange={(value) => onChange("result", value)}
+        placeholder="결정 후 실제 처리할 내용"
+      />
+    </fieldset>
   );
 }
 
@@ -2111,6 +3096,120 @@ function formatSignedScore(value) {
   return value > 0 ? `+${value}` : String(value);
 }
 
+function createDilemmaDraft(value = {}) {
+  const candidate = value && typeof value === "object" ? value : {};
+
+  return {
+    cardCode: normalizeTextField(candidate.cardCode),
+    title: normalizeTextField(candidate.title),
+    timeCounterSlot: normalizeTextField(candidate.timeCounterSlot),
+    context: normalizeTextField(candidate.context),
+    question: normalizeTextField(candidate.question),
+    councilNotes: normalizeTextField(candidate.councilNotes),
+    aye: normalizeDilemmaOutcome(candidate.aye),
+    nay: normalizeDilemmaOutcome(candidate.nay),
+    selectedOutcome: candidate.selectedOutcome === "aye" || candidate.selectedOutcome === "nay" ? candidate.selectedOutcome : "",
+    voteNotes: normalizeTextField(candidate.voteNotes),
+    resolutionNotes: normalizeTextField(candidate.resolutionNotes),
+  };
+}
+
+function createDilemmaPayload(draft) {
+  return {
+    ...createDilemmaDraft(draft),
+    updatedAt: "",
+    updatedBy: null,
+    updatedByName: "",
+    editLock: null,
+  };
+}
+
+function normalizeDilemmaRecord(value) {
+  const candidate = value && typeof value === "object" ? value : {};
+  const draft = createDilemmaDraft(candidate);
+
+  return {
+    ...draft,
+    updatedAt: typeof candidate.updatedAt === "string" ? candidate.updatedAt : "",
+    updatedBy: typeof candidate.updatedBy === "string" ? candidate.updatedBy : null,
+    updatedByName: normalizeTextField(candidate.updatedByName),
+    editLock: normalizeDilemmaEditLock(candidate.editLock),
+  };
+}
+
+function normalizeDilemmaOutcome(value) {
+  const candidate = value && typeof value === "object" ? value : {};
+
+  return {
+    preview: normalizeTextField(candidate.preview),
+    result: normalizeTextField(candidate.result),
+  };
+}
+
+function normalizeDilemmaEditLock(value) {
+  if (!value || typeof value !== "object" || typeof value.houseId !== "string") {
+    return null;
+  }
+
+  return {
+    houseId: value.houseId,
+    houseName: normalizeTextField(value.houseName),
+    acquiredAt: typeof value.acquiredAt === "string" ? value.acquiredAt : "",
+    updatedAt: typeof value.updatedAt === "string" ? value.updatedAt : "",
+    expiresAt: typeof value.expiresAt === "string" ? value.expiresAt : "",
+  };
+}
+
+function normalizeTextField(value) {
+  return typeof value === "string" ? value : "";
+}
+
+function isDilemmaBlank(dilemma) {
+  const draft = createDilemmaDraft(dilemma);
+
+  return [
+    draft.cardCode,
+    draft.title,
+    draft.timeCounterSlot,
+    draft.context,
+    draft.question,
+    draft.councilNotes,
+    draft.aye.preview,
+    draft.aye.result,
+    draft.nay.preview,
+    draft.nay.result,
+    draft.voteNotes,
+    draft.resolutionNotes,
+    draft.selectedOutcome,
+  ].every((value) => !String(value).trim());
+}
+
+function formatDilemmaCardLabel(dilemma) {
+  const code = dilemma.cardCode.trim();
+  const title = dilemma.title.trim();
+
+  if (code && title) {
+    return `${code} · ${title}`;
+  }
+
+  return code || title || "";
+}
+
+function formatLocalDateTime(value) {
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return "";
+  }
+
+  return date.toLocaleString("ko-KR", {
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
 function normalizeInventory(value) {
   const defaults = createDefaultInventory();
   const candidate = value && typeof value === "object" ? value : {};
@@ -2300,23 +3399,36 @@ function ActionPanel({ state, busy, mutate }) {
     return null;
   }
 
+  if (!state.randomDiscardEnabled) {
+    return (
+      <div className="action-card">
+        <div>
+          <p className="section-label">봉인 의제 폐기</p>
+          <h3>폐기할 의제 직접 선택</h3>
+          <p>아래 목록에서 이번 드래프트에서 제외할 비밀 의제 1장을 고릅니다.</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="action-card">
       <div>
         <p className="section-label">봉인 의제 폐기</p>
-        <h3>봉인 의제 1장을 폐기하고 시작</h3>
+        <h3>봉인 의제 1장을 무작위 폐기</h3>
         <p>폐기된 의제는 공개하지 않습니다.</p>
       </div>
       <button className="primary-button" type="button" onClick={() => mutate({ action: "discard" })} disabled={busy}>
         <TokenIcon type="flame" />
-        의제 폐기
+        무작위 폐기
       </button>
     </div>
   );
 }
 
-function AgendaList({ agendas, busy, mutate }) {
+function AgendaList({ agendas, busy, mode = "choose", mutate }) {
   const [expanded, setExpanded] = useState(false);
+  const discardMode = mode === "discard";
 
   if (!agendas.length) {
     return null;
@@ -2326,14 +3438,14 @@ function AgendaList({ agendas, busy, mutate }) {
     <section className="agenda-section" aria-labelledby="agenda-title">
       <div className="agenda-section-heading">
         <div>
-          <p className="section-label">드래프트</p>
-          <h2 id="agenda-title">선택 가능한 비밀 의제</h2>
+          <p className="section-label">{discardMode ? "폐기" : "드래프트"}</p>
+          <h2 id="agenda-title">{discardMode ? "폐기할 비밀 의제 선택" : "선택 가능한 비밀 의제"}</h2>
         </div>
         <span>{agendas.length}장 남음</span>
       </div>
       <div className="agenda-list" id="agenda-list">
         {agendas.map((agenda) => (
-          <AgendaCard key={agenda.id} agenda={agenda} busy={busy} expanded={expanded} mutate={mutate} />
+          <AgendaCard key={agenda.id} agenda={agenda} busy={busy} expanded={expanded} mode={mode} mutate={mutate} />
         ))}
       </div>
       <div className="agenda-section-controls">
@@ -2352,13 +3464,18 @@ function AgendaList({ agendas, busy, mutate }) {
   );
 }
 
-function AgendaCard({ agenda, busy, expanded, mutate }) {
+function AgendaCard({ agenda, busy, expanded, mode = "choose", mutate }) {
   const detailId = `agenda-detail-${agenda.id}`;
+  const discardMode = mode === "discard";
   const choose = () => {
-    const confirmed = window.confirm("이 비밀 의제를 채택할까요? 채택 후에는 되돌릴 수 없습니다.");
+    const confirmed = window.confirm(
+      discardMode
+        ? "이 비밀 의제를 폐기할까요? 폐기 후에는 되돌릴 수 없습니다."
+        : "이 비밀 의제를 채택할까요? 채택 후에는 되돌릴 수 없습니다.",
+    );
 
     if (confirmed) {
-      mutate({ action: "choose", agendaId: agenda.id });
+      mutate({ action: discardMode ? "discard" : "choose", agendaId: agenda.id });
     }
   };
 
@@ -2372,8 +3489,8 @@ function AgendaCard({ agenda, busy, expanded, mutate }) {
           <div className="agenda-card-label-row">
             <p className="section-label">비밀 의제</p>
             <button className="primary-button" type="button" onClick={choose} disabled={busy}>
-              <TokenIcon type="key" />
-              채택
+              <TokenIcon type={discardMode ? "flame" : "key"} />
+              {discardMode ? "폐기" : "채택"}
             </button>
           </div>
           <h3>
@@ -2486,7 +3603,6 @@ function TokenIcon({ type }) {
     plus: AddOutlinedIcon,
     power: ShieldOutlinedIcon,
     prestige: EmojiEventsOutlinedIcon,
-    refresh: RefreshOutlinedIcon,
     reset: RestartAltOutlinedIcon,
     save: SaveOutlinedIcon,
     scroll: ArticleOutlinedIcon,
@@ -2494,6 +3610,7 @@ function TokenIcon({ type }) {
     sheet: TableChartOutlinedIcon,
     soundOff: VolumeOffOutlinedIcon,
     soundOn: VolumeUpOutlinedIcon,
+    tip: MenuBookOutlinedIcon,
     turn: AutorenewOutlinedIcon,
     undo: UndoOutlinedIcon,
     warning: WarningAmberOutlinedIcon,
@@ -2523,7 +3640,11 @@ function HouseIcon({ motif }) {
   return <Icon aria-hidden="true" focusable="false" />;
 }
 
-createRoot(document.querySelector("#root")).render(
+const rootElement = document.querySelector("#root");
+const root = globalThis.__KINGS_DILEMMA_ROOT__ ?? createRoot(rootElement);
+globalThis.__KINGS_DILEMMA_ROOT__ = root;
+
+root.render(
   <React.StrictMode>
     <App />
   </React.StrictMode>,

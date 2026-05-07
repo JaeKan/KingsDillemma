@@ -70,7 +70,7 @@ export const HOUSE_CATALOG = [
     id: "allwed",
     number: 6,
     title: "Marquises of Allwed",
-    koreanTitle: "알웨드 후작가",
+    koreanTitle: "올류드 후작가",
     motto: "Life is to be enjoyed",
     crest: "Two chained keys",
     goal: "왕국 안의 사회적 평등 촉진",

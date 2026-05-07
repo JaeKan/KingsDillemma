@@ -5,6 +5,7 @@ dist/
 .env.*
 !.env.example
 !.env.docker.example
+!.env.development.example
 *.log
 .playwright-cli/
 output/

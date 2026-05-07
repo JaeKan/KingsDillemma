@@ -43,6 +43,46 @@ export type HouseProgress = {
   updatedAt: string;
 };
 
+export type DilemmaVoteSide = "" | "aye" | "nay";
+
+export type DilemmaOutcome = {
+  preview: string;
+  result: string;
+};
+
+export type DilemmaEditLock = {
+  houseId: HouseId;
+  houseName: string;
+  token: string;
+  acquiredAt: string;
+  updatedAt: string;
+  expiresAt: string;
+};
+
+export type RedactedDilemmaEditLock = Omit<DilemmaEditLock, "token">;
+
+export type DilemmaRecord = {
+  cardCode: string;
+  title: string;
+  timeCounterSlot: string;
+  context: string;
+  question: string;
+  councilNotes: string;
+  aye: DilemmaOutcome;
+  nay: DilemmaOutcome;
+  selectedOutcome: DilemmaVoteSide;
+  voteNotes: string;
+  resolutionNotes: string;
+  updatedAt: string;
+  updatedBy: HouseId | null;
+  updatedByName: string;
+  editLock: DilemmaEditLock | null;
+};
+
+export type RedactedDilemmaRecord = Omit<DilemmaRecord, "editLock"> & {
+  editLock: RedactedDilemmaEditLock | null;
+};
+
 export type GameState = {
   version: number;
   phase: Phase;
@@ -50,12 +90,14 @@ export type GameState = {
   draftOrder: HouseId[];
   pool: string[];
   discarded: string | null;
+  randomDiscardEnabled: boolean;
   choices: Record<string, string>;
   sessions: Record<string, { token: string; createdAt: string }>;
   credentials: Record<string, SeatCredential>;
   playerNames: Record<string, string>;
   inventories: Record<string, PlayerInventory>;
   progress: Record<string, HouseProgress>;
+  dilemma: DilemmaRecord;
   createdAt: string;
   updatedAt: string;
 };
@@ -101,6 +143,7 @@ export type RedactedState = {
   requiredHouseCount: number;
   remainingHiddenCount: number;
   discardedHiddenCount: number;
+  randomDiscardEnabled: boolean;
   currentPlayer: HouseId | null;
   currentHouseId: HouseId | null;
   isCurrentTurn: boolean;
@@ -109,6 +152,7 @@ export type RedactedState = {
   ownChoice: Agenda | null;
   ownInventory: PlayerInventory | null;
   ownHouseProgress: HouseProgress | null;
+  dilemma: RedactedDilemmaRecord;
   availableAgendas?: Agenda[];
 };
 
@@ -271,6 +315,7 @@ export const PERSONAL_RESOURCE_TRACKS = [
 ] as const;
 
 const AGENDA_BY_ID = new Map(AGENDAS.map((agenda) => [agenda.id, agenda]));
+const STATE_VERSION = 4;
 const PERSONAL_COUNTER_LIMITS = {
   coins: 99,
   powerTokens: 99,
@@ -282,6 +327,12 @@ const OPEN_AGENDA_TOKEN_LIMIT = 2;
 const HOUSE_ACHIEVEMENT_COUNT = 3;
 const HOUSE_ACHIEVEMENT_MARK_MAX = 5;
 const HOUSE_ALIGNMENT_MARK_MAX = 4;
+const DILEMMA_EDIT_LOCK_TTL_MS = 15 * 60 * 1000;
+const DILEMMA_CODE_LIMIT = 32;
+const DILEMMA_TITLE_LIMIT = 80;
+const DILEMMA_SLOT_LIMIT = 24;
+const DILEMMA_HOUSE_NAME_LIMIT = 32;
+const DILEMMA_LONG_TEXT_LIMIT = 4_000;
 const RESOURCE_LABEL_BY_ID = Object.fromEntries(PERSONAL_RESOURCE_TRACKS.map((resource) => [resource.id, resource.label]));
 
 export function parseHouseId(value: unknown): HouseId {
@@ -300,20 +351,42 @@ export function isPlayerNumber(value: unknown): value is HouseId {
   return isHouseId(value);
 }
 
+export function createDefaultDilemmaRecord(now = new Date().toISOString()): DilemmaRecord {
+  return {
+    cardCode: "",
+    title: "",
+    timeCounterSlot: "",
+    context: "",
+    question: "",
+    councilNotes: "",
+    aye: createDefaultDilemmaOutcome(),
+    nay: createDefaultDilemmaOutcome(),
+    selectedOutcome: "",
+    voteNotes: "",
+    resolutionNotes: "",
+    updatedAt: now,
+    updatedBy: null,
+    updatedByName: "",
+    editLock: null,
+  };
+}
+
 export function createInitialState(now = new Date().toISOString()): GameState {
   return {
-    version: 2,
+    version: STATE_VERSION,
     phase: "house-select",
     turn: null,
     draftOrder: [],
     pool: AGENDAS.map((agenda) => agenda.id),
     discarded: null,
+    randomDiscardEnabled: true,
     choices: {},
     sessions: {},
     credentials: {},
     playerNames: {},
     inventories: {},
     progress: {},
+    dilemma: createDefaultDilemmaRecord(now),
     createdAt: now,
     updatedAt: now,
   };
@@ -330,29 +403,38 @@ export function normalizeState(value: unknown, now = new Date().toISOString()): 
   const progress = sanitizeProgress(candidate.progress, now);
   const activeHouseIds = getActiveHouseIds(credentials);
   const draftReady = activeHouseIds.length >= REQUIRED_HOUSE_COUNT;
-  const draftOrder = draftReady ? sanitizeDraftOrder(candidate.draftOrder, activeHouseIds, inventories) : [];
+  const candidateVersion = Number.isInteger(candidate.version) ? Number(candidate.version) : 0;
+  const migrateUnpickedDraftOrder = shouldMigrateUnpickedDraftOrder(candidateVersion, candidate.choices);
+  const draftOrder = draftReady
+    ? sanitizeDraftOrder(candidate.draftOrder, activeHouseIds, inventories, migrateUnpickedDraftOrder)
+    : [];
   const choices = draftReady ? sanitizeChoices(candidate.choices, draftOrder) : {};
   const discarded =
     draftReady && typeof candidate.discarded === "string" && AGENDA_BY_ID.has(candidate.discarded)
       ? candidate.discarded
       : null;
+  const randomDiscardEnabled =
+    typeof candidate.randomDiscardEnabled === "boolean" ? candidate.randomDiscardEnabled : true;
   const pool = draftReady ? sanitizePool(candidate.pool, discarded, choices) : AGENDAS.map((agenda) => agenda.id);
   const phase = derivePhase(draftReady, discarded, choices, draftOrder);
-  const turn = deriveTurn(candidate.turn, phase, draftOrder, choices);
+  const turn = deriveTurn(migrateUnpickedDraftOrder ? null : candidate.turn, phase, draftOrder, choices);
+  const dilemma = phase === "complete" ? sanitizeDilemmaRecord(candidate.dilemma, now) : createDefaultDilemmaRecord(now);
 
   return {
-    version: Number.isInteger(candidate.version) ? Math.max(2, Number(candidate.version)) : 2,
+    version: Math.max(STATE_VERSION, candidateVersion),
     phase,
     turn,
     draftOrder,
     pool,
     discarded,
+    randomDiscardEnabled,
     choices,
     sessions: sanitizeSessions(candidate.sessions, credentials),
     credentials,
     playerNames: sanitizePlayerNames(candidate.playerNames),
     inventories,
     progress,
+    dilemma,
     createdAt: typeof candidate.createdAt === "string" ? candidate.createdAt : now,
     updatedAt: typeof candidate.updatedAt === "string" ? candidate.updatedAt : now,
   };
@@ -462,7 +544,9 @@ export function clearSession(
   houseId: HouseId,
   now = new Date().toISOString(),
 ): GameState {
-  if (!state.sessions[houseId]) {
+  const shouldClearDilemmaLock = state.dilemma.editLock?.houseId === houseId;
+
+  if (!state.sessions[houseId] && !shouldClearDilemmaLock) {
     return state;
   }
 
@@ -472,6 +556,7 @@ export function clearSession(
   return {
     ...state,
     sessions,
+    dilemma: shouldClearDilemmaLock ? { ...state.dilemma, editLock: null } : state.dilemma,
     version: state.version + 1,
     updatedAt: now,
   };
@@ -524,6 +609,7 @@ export function endSession(state: GameState, now = new Date().toISOString()): Ga
     sessions: {},
     inventories: resetSessionInventories(state.inventories, now),
     progress: resetSessionProgress(state.progress, now),
+    dilemma: createDefaultDilemmaRecord(now),
     updatedAt: now,
   };
 }
@@ -566,6 +652,119 @@ export function saveHouseProgress(
     version: state.version + 1,
     updatedAt: now,
   };
+}
+
+export function beginDilemmaEdit(
+  state: GameState,
+  houseId: HouseId,
+  token: string,
+  now = new Date().toISOString(),
+): GameState {
+  assertCanEditDilemma(state);
+
+  if (!token) {
+    throw new AgendaStateError("딜레마 편집 토큰을 만들 수 없습니다.");
+  }
+
+  const currentDilemma = sanitizeDilemmaRecord(state.dilemma, now);
+  const activeLock = currentDilemma.editLock;
+
+  if (activeLock && activeLock.houseId !== houseId) {
+    throw new AgendaStateError(`${activeLock.houseName} 가문이 딜레마를 수정 중입니다.`, 409);
+  }
+
+  return {
+    ...state,
+    dilemma: {
+      ...currentDilemma,
+      editLock: createDilemmaEditLock(state, houseId, token, now, activeLock?.acquiredAt),
+    },
+    version: state.version + 1,
+    updatedAt: now,
+  };
+}
+
+export function cancelDilemmaEdit(
+  state: GameState,
+  houseId: HouseId,
+  token: unknown,
+  now = new Date().toISOString(),
+): GameState {
+  assertCanEditDilemma(state);
+
+  const currentDilemma = sanitizeDilemmaRecord(state.dilemma, now);
+
+  if (!currentDilemma.editLock) {
+    return state;
+  }
+
+  assertDilemmaLockOwner(currentDilemma, houseId, token);
+
+  return {
+    ...state,
+    dilemma: {
+      ...currentDilemma,
+      editLock: null,
+    },
+    version: state.version + 1,
+    updatedAt: now,
+  };
+}
+
+export function saveDilemmaRecord(
+  state: GameState,
+  houseId: HouseId,
+  token: unknown,
+  draft: unknown,
+  now = new Date().toISOString(),
+): GameState {
+  assertCanEditDilemma(state);
+
+  const currentDilemma = sanitizeDilemmaRecord(state.dilemma, now);
+  assertDilemmaLockOwner(currentDilemma, houseId, token);
+  const sanitizedDraft = sanitizeDilemmaRecord(draft, now);
+
+  return {
+    ...state,
+    dilemma: {
+      ...sanitizedDraft,
+      updatedAt: now,
+      updatedBy: houseId,
+      updatedByName: getHouseLabel(state, houseId),
+      editLock: null,
+    },
+    version: state.version + 1,
+    updatedAt: now,
+  };
+}
+
+export function setRandomDiscardEnabled(
+  state: GameState,
+  enabled: unknown,
+  now = new Date().toISOString(),
+): GameState {
+  if (typeof enabled !== "boolean") {
+    throw new AgendaStateError("무작위 폐기 설정값이 올바르지 않습니다.");
+  }
+
+  if (!canChangeRandomDiscardSetting(state)) {
+    throw new AgendaStateError("비밀 의제 폐기 설정은 폐기 절차가 시작되기 전까지만 바꿀 수 있습니다.", 409);
+  }
+
+  if (state.randomDiscardEnabled === enabled) {
+    return state;
+  }
+
+  return {
+    ...state,
+    randomDiscardEnabled: enabled,
+    version: state.version + 1,
+    updatedAt: now,
+  };
+}
+
+function canChangeRandomDiscardSetting(state: GameState) {
+  return state.phase === "house-select" || (state.phase === "discard" && !state.discarded && Object.keys(state.choices).length === 0);
 }
 
 export function calculateFinalScores(
@@ -633,6 +832,7 @@ export function calculateFinalScores(
 export function applyDiscard(
   state: GameState,
   houseId: HouseId,
+  agendaId: string | null = null,
   now = new Date().toISOString(),
   rng: () => number = Math.random,
 ): GameState {
@@ -657,7 +857,7 @@ export function applyDiscard(
   }
 
   const nextPool = [...state.pool];
-  const discardIndex = Math.min(Math.floor(rng() * nextPool.length), nextPool.length - 1);
+  const discardIndex = getDiscardIndex(state, agendaId, rng);
   const [discarded] = nextPool.splice(discardIndex, 1);
 
   return {
@@ -668,6 +868,24 @@ export function applyDiscard(
     discarded,
     updatedAt: now,
   };
+}
+
+function getDiscardIndex(state: GameState, agendaId: string | null, rng: () => number) {
+  if (state.randomDiscardEnabled) {
+    return Math.min(Math.floor(rng() * state.pool.length), state.pool.length - 1);
+  }
+
+  if (!agendaId) {
+    throw new AgendaStateError("폐기할 비밀 의제를 선택하세요.");
+  }
+
+  const discardIndex = state.pool.indexOf(agendaId);
+
+  if (discardIndex < 0) {
+    throw new AgendaStateError("선택한 비밀 의제를 폐기할 수 없습니다.");
+  }
+
+  return discardIndex;
 }
 
 export function applyChoose(
@@ -761,6 +979,7 @@ export function redactState(state: GameState, houseId: HouseId | null): Redacted
     requiredHouseCount: REQUIRED_HOUSE_COUNT,
     remainingHiddenCount: state.pool.length,
     discardedHiddenCount: state.discarded ? 1 : 0,
+    randomDiscardEnabled: state.randomDiscardEnabled,
     currentPlayer: houseId,
     currentHouseId: houseId,
     isCurrentTurn,
@@ -769,9 +988,10 @@ export function redactState(state: GameState, houseId: HouseId | null): Redacted
     ownChoice: ownChoiceId ? getAgenda(ownChoiceId) : null,
     ownInventory: houseId ? getPlayerInventory(state, houseId) : null,
     ownHouseProgress: houseId ? getHouseProgress(state, houseId) : null,
+    dilemma: redactDilemmaRecord(state.dilemma),
   };
 
-  if (canChoose) {
+  if (canChoose || (canDiscard && !state.randomDiscardEnabled)) {
     redacted.availableAgendas = state.pool.map(getAgenda);
   }
 
@@ -796,10 +1016,11 @@ function sanitizeDraftOrder(
   value: unknown,
   activeHouseIds: HouseId[],
   inventories: Record<string, PlayerInventory>,
+  recomputeStoredOrder = false,
 ): HouseId[] {
   const activeHouseSet = new Set(activeHouseIds);
 
-  if (Array.isArray(value) && value.length === activeHouseIds.length) {
+  if (!recomputeStoredOrder && Array.isArray(value) && value.length === activeHouseIds.length) {
     const seen = new Set<string>();
     const draftOrder = value.filter((id): id is HouseId => {
       if (typeof id !== "string" || !activeHouseSet.has(id) || seen.has(id)) {
@@ -818,6 +1039,10 @@ function sanitizeDraftOrder(
   return sortHouseIdsForDraft(activeHouseIds, inventories);
 }
 
+function shouldMigrateUnpickedDraftOrder(version: number, choices: unknown) {
+  return version < STATE_VERSION && (!choices || typeof choices !== "object" || Object.keys(choices).length === 0);
+}
+
 function sortHouseIdsForDraft(
   houseIds: HouseId[],
   inventories: Record<string, PlayerInventory>,
@@ -826,15 +1051,77 @@ function sortHouseIdsForDraft(
     const leftPrestige = inventories[left]?.prestige ?? 0;
     const rightPrestige = inventories[right]?.prestige ?? 0;
 
-    return leftPrestige - rightPrestige || compareHouseIdsByNumber(left, right);
+    return leftPrestige - rightPrestige || compareHouseIdsByNumberDescending(left, right);
   });
 }
 
-function compareHouseIdsByNumber(left: HouseId, right: HouseId) {
-  const leftNumber = getHouseById(left)?.number ?? Number.MAX_SAFE_INTEGER;
-  const rightNumber = getHouseById(right)?.number ?? Number.MAX_SAFE_INTEGER;
+function compareHouseIdsByNumberDescending(left: HouseId, right: HouseId) {
+  const leftNumber = getHouseById(left)?.number ?? Number.MIN_SAFE_INTEGER;
+  const rightNumber = getHouseById(right)?.number ?? Number.MIN_SAFE_INTEGER;
 
-  return leftNumber - rightNumber || left.localeCompare(right);
+  return rightNumber - leftNumber || left.localeCompare(right);
+}
+
+function createDefaultDilemmaOutcome(): DilemmaOutcome {
+  return {
+    preview: "",
+    result: "",
+  };
+}
+
+function createDilemmaEditLock(
+  state: GameState,
+  houseId: HouseId,
+  token: string,
+  now: string,
+  acquiredAt = now,
+): DilemmaEditLock {
+  return {
+    houseId,
+    houseName: getHouseLabel(state, houseId),
+    token,
+    acquiredAt,
+    updatedAt: now,
+    expiresAt: addMilliseconds(now, DILEMMA_EDIT_LOCK_TTL_MS),
+  };
+}
+
+function assertCanEditDilemma(state: GameState) {
+  if (state.phase !== "complete") {
+    throw new AgendaStateError("의제 배정이 완료된 뒤 딜레마를 수정할 수 있습니다.", 409);
+  }
+}
+
+function assertDilemmaLockOwner(dilemma: DilemmaRecord, houseId: HouseId, token: unknown) {
+  if (!dilemma.editLock) {
+    throw new AgendaStateError("딜레마 편집 권한이 만료되었습니다. 다시 편집을 시작하세요.", 409);
+  }
+
+  if (dilemma.editLock.houseId !== houseId || typeof token !== "string" || dilemma.editLock.token !== token) {
+    throw new AgendaStateError(`${dilemma.editLock.houseName} 가문이 딜레마를 수정 중입니다.`, 409);
+  }
+}
+
+function redactDilemmaRecord(record: DilemmaRecord): RedactedDilemmaRecord {
+  const { editLock, ...rest } = record;
+
+  return {
+    ...rest,
+    editLock: editLock
+      ? {
+          houseId: editLock.houseId,
+          houseName: editLock.houseName,
+          acquiredAt: editLock.acquiredAt,
+          updatedAt: editLock.updatedAt,
+          expiresAt: editLock.expiresAt,
+        }
+      : null,
+  };
+}
+
+function addMilliseconds(value: string, milliseconds: number) {
+  const timestamp = Number.isFinite(Date.parse(value)) ? Date.parse(value) : Date.now();
+  return new Date(timestamp + milliseconds).toISOString();
 }
 
 function resetSessionInventories(
@@ -1008,6 +1295,100 @@ function sanitizePlayerNames(value: unknown): Record<string, string> {
 
 function isUsablePlayerName(value: unknown): value is string {
   return typeof value === "string" && value.trim().length >= 1 && value.trim().length <= 32;
+}
+
+function sanitizeDilemmaRecord(value: unknown, now: string): DilemmaRecord {
+  if (!value || typeof value !== "object") {
+    return createDefaultDilemmaRecord(now);
+  }
+
+  const candidate = value as Partial<DilemmaRecord>;
+
+  return {
+    cardCode: sanitizeSingleLineText(candidate.cardCode, DILEMMA_CODE_LIMIT),
+    title: sanitizeSingleLineText(candidate.title, DILEMMA_TITLE_LIMIT),
+    timeCounterSlot: sanitizeSingleLineText(candidate.timeCounterSlot, DILEMMA_SLOT_LIMIT),
+    context: sanitizeMultilineText(candidate.context, DILEMMA_LONG_TEXT_LIMIT),
+    question: sanitizeMultilineText(candidate.question, DILEMMA_LONG_TEXT_LIMIT),
+    councilNotes: sanitizeMultilineText(candidate.councilNotes, DILEMMA_LONG_TEXT_LIMIT),
+    aye: sanitizeDilemmaOutcome(candidate.aye),
+    nay: sanitizeDilemmaOutcome(candidate.nay),
+    selectedOutcome: sanitizeDilemmaVoteSide(candidate.selectedOutcome),
+    voteNotes: sanitizeMultilineText(candidate.voteNotes, DILEMMA_LONG_TEXT_LIMIT),
+    resolutionNotes: sanitizeMultilineText(candidate.resolutionNotes, DILEMMA_LONG_TEXT_LIMIT),
+    updatedAt: typeof candidate.updatedAt === "string" ? candidate.updatedAt : now,
+    updatedBy: isHouseId(candidate.updatedBy) ? candidate.updatedBy : null,
+    updatedByName: sanitizeSingleLineText(candidate.updatedByName, DILEMMA_HOUSE_NAME_LIMIT),
+    editLock: sanitizeDilemmaEditLock(candidate.editLock, now),
+  };
+}
+
+function sanitizeDilemmaOutcome(value: unknown): DilemmaOutcome {
+  if (!value || typeof value !== "object") {
+    return createDefaultDilemmaOutcome();
+  }
+
+  const candidate = value as Partial<DilemmaOutcome>;
+
+  return {
+    preview: sanitizeMultilineText(candidate.preview, DILEMMA_LONG_TEXT_LIMIT),
+    result: sanitizeMultilineText(candidate.result, DILEMMA_LONG_TEXT_LIMIT),
+  };
+}
+
+function sanitizeDilemmaEditLock(value: unknown, now: string): DilemmaEditLock | null {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+
+  const candidate = value as Partial<DilemmaEditLock>;
+
+  if (
+    !isHouseId(candidate.houseId) ||
+    typeof candidate.houseName !== "string" ||
+    typeof candidate.token !== "string" ||
+    typeof candidate.acquiredAt !== "string" ||
+    typeof candidate.updatedAt !== "string" ||
+    typeof candidate.expiresAt !== "string"
+  ) {
+    return null;
+  }
+
+  const expiresAt = Date.parse(candidate.expiresAt);
+  const currentTime = Date.parse(now);
+
+  if (!Number.isFinite(expiresAt) || (Number.isFinite(currentTime) && expiresAt <= currentTime)) {
+    return null;
+  }
+
+  return {
+    houseId: candidate.houseId,
+    houseName: sanitizeSingleLineText(candidate.houseName, DILEMMA_HOUSE_NAME_LIMIT),
+    token: candidate.token,
+    acquiredAt: candidate.acquiredAt,
+    updatedAt: candidate.updatedAt,
+    expiresAt: candidate.expiresAt,
+  };
+}
+
+function sanitizeDilemmaVoteSide(value: unknown): DilemmaVoteSide {
+  return value === "aye" || value === "nay" ? value : "";
+}
+
+function sanitizeSingleLineText(value: unknown, limit: number) {
+  if (typeof value !== "string") {
+    return "";
+  }
+
+  return value.trim().replace(/\s+/g, " ").slice(0, limit);
+}
+
+function sanitizeMultilineText(value: unknown, limit: number) {
+  if (typeof value !== "string") {
+    return "";
+  }
+
+  return value.replace(/\r\n?/g, "\n").trim().slice(0, limit);
 }
 
 function sanitizeInventories(value: unknown, now: string): Record<string, PlayerInventory> {

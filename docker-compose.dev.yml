@@ -1,0 +1,25 @@
+services:
+  mysql-dev:
+    image: mysql:8.4
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-kings_dilemma_dev}
+      MYSQL_USER: ${MYSQL_USER:-kings_dilemma_dev}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-kings_dilemma_dev_password}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-kings_dilemma_dev_root_password}
+    command:
+      - "--character-set-server=utf8mb4"
+      - "--collation-server=utf8mb4_0900_ai_ci"
+    ports:
+      - "${MYSQL_HOST_PORT:-127.0.0.1:3307}:3306"
+    volumes:
+      - mysql-dev-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u$${MYSQL_USER} -p$${MYSQL_PASSWORD} --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+
+volumes:
+  mysql-dev-data:

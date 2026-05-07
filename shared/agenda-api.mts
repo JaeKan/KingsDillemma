@@ -3,7 +3,9 @@ import {
   PLAYER_COUNT,
   applyChoose,
   applyDiscard,
+  beginDilemmaEdit,
   calculateFinalScores,
+  cancelDilemmaEdit,
   clearSession,
   createInitialState,
   endSession,
@@ -12,8 +14,10 @@ import {
   parseHouseId,
   redactState,
   registerSession,
+  saveDilemmaRecord,
   saveHouseProgress,
   savePlayerInventory,
+  setRandomDiscardEnabled,
   setHouseCredential,
   setHouseName,
   startDraftIfReady,
@@ -49,6 +53,7 @@ export type AgendaRequestContext = {
   cookies?: { get: (name: string) => string | undefined };
   deployContext?: string;
   loginCode?: string;
+  realtimeUpdatesEnabled?: boolean;
 };
 
 export async function handleAgendaRequest(
@@ -61,7 +66,12 @@ export async function handleAgendaRequest(
       const state = await loadState(store);
       const houseId = getAuthenticatedHouse(req, context, state);
       return json(
-        { ok: true, authenticated: Boolean(houseId), state: redactState(state, houseId) },
+        {
+          ok: true,
+          authenticated: Boolean(houseId),
+          realtimeEnabled: Boolean(context.realtimeUpdatesEnabled),
+          state: redactState(state, houseId),
+        },
         200,
         houseId ? NO_STORE_HEADERS : ANONYMOUS_GET_CACHE_HEADERS,
       );
@@ -99,7 +109,8 @@ export async function handleAgendaRequest(
     }
 
     if (action === "discard") {
-      const nextState = applyDiscard(state, houseId);
+      const agendaId = typeof body.agendaId === "string" ? body.agendaId : null;
+      const nextState = applyDiscard(state, houseId, agendaId);
       await saveState(store, nextState);
       return json({ ok: true, state: redactState(nextState, houseId) }, 200, NO_STORE_HEADERS);
     }
@@ -119,6 +130,35 @@ export async function handleAgendaRequest(
 
     if (action === "saveHouseProgress") {
       const nextState = saveHouseProgress(state, houseId, body.progress);
+      await saveState(store, nextState);
+      return json({ ok: true, state: redactState(nextState, houseId) }, 200, NO_STORE_HEADERS);
+    }
+
+    if (action === "beginDilemmaEdit") {
+      const dilemmaEditToken = crypto.randomUUID();
+      const nextState = beginDilemmaEdit(state, houseId, dilemmaEditToken);
+      await saveState(store, nextState);
+      return json(
+        { ok: true, dilemmaEditToken, state: redactState(nextState, houseId) },
+        200,
+        NO_STORE_HEADERS,
+      );
+    }
+
+    if (action === "cancelDilemmaEdit") {
+      const nextState = cancelDilemmaEdit(state, houseId, body.dilemmaEditToken);
+      await saveState(store, nextState);
+      return json({ ok: true, state: redactState(nextState, houseId) }, 200, NO_STORE_HEADERS);
+    }
+
+    if (action === "saveDilemma") {
+      const nextState = saveDilemmaRecord(state, houseId, body.dilemmaEditToken, body.dilemma);
+      await saveState(store, nextState);
+      return json({ ok: true, state: redactState(nextState, houseId) }, 200, NO_STORE_HEADERS);
+    }
+
+    if (action === "setRandomDiscardEnabled") {
+      const nextState = setRandomDiscardEnabled(state, body.enabled);
       await saveState(store, nextState);
       return json({ ok: true, state: redactState(nextState, houseId) }, 200, NO_STORE_HEADERS);
     }
@@ -156,6 +196,10 @@ function isKnownStateAction(action: string) {
     action === "choose" ||
     action === "saveInventory" ||
     action === "saveHouseProgress" ||
+    action === "beginDilemmaEdit" ||
+    action === "cancelDilemmaEdit" ||
+    action === "saveDilemma" ||
+    action === "setRandomDiscardEnabled" ||
     action === "calculateFinalScores" ||
     action === "endSession"
   );
@@ -386,7 +430,7 @@ function getLoginCode(context: AgendaRequestContext) {
   return context.deployContext === "production" ? "" : DEFAULT_LOGIN_CODE;
 }
 
-function getAuthenticatedHouse(
+export function getAuthenticatedHouse(
   req: Request,
   context: AgendaRequestContext,
   state: GameState,

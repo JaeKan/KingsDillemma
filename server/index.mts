@@ -1,7 +1,10 @@
 import express from "express";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { handleAgendaRequest } from "../shared/agenda-api.mts";
+import { getAuthenticatedHouse, handleAgendaRequest } from "../shared/agenda-api.mts";
+import { normalizeState } from "../netlify/functions/_shared/agenda-state.mts";
+import type { GameState } from "../netlify/functions/_shared/agenda-state.mts";
+import type { AgendaStateStore } from "../shared/agenda-api.mts";
 import { createMysqlAgendaStore } from "./mysql-agenda-store.mts";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -14,10 +17,35 @@ const host = process.env.HOST || "0.0.0.0";
 const bodyLimitBytes = parsePositiveInteger(process.env.REQUEST_BODY_LIMIT_BYTES, 1_048_576);
 
 const app = express();
-const store = createMysqlAgendaStore();
+const mysqlStore = createMysqlAgendaStore();
+const agendaEvents = createAgendaEventHub();
+const store: AgendaStateStore = {
+  get: () => mysqlStore.get(),
+  set: async (state) => {
+    await mysqlStore.set(state);
+    agendaEvents.broadcast(state);
+  },
+};
 
 app.disable("x-powered-by");
 app.set("trust proxy", true);
+
+app.get("/api/agenda/events", async (req, res) => {
+  try {
+    const state = normalizeState(await store.get());
+    const houseId = getAuthenticatedHouse(await toWebRequest(req), {}, state);
+
+    if (!houseId) {
+      res.status(401).json({ ok: false, error: "Login required." });
+      return;
+    }
+
+    agendaEvents.connect(req, res);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ ok: false, error: "Unexpected server error." });
+  }
+});
 
 app.all("/api/agenda", async (req, res) => {
   try {
@@ -26,6 +54,7 @@ app.all("/api/agenda", async (req, res) => {
       {
         deployContext: process.env.APP_ENV || process.env.NODE_ENV,
         loginCode: process.env.LOGIN_CODE,
+        realtimeUpdatesEnabled: true,
       },
       store,
     );
@@ -94,9 +123,74 @@ const server = app.listen(port, host, () => {
 for (const signal of ["SIGINT", "SIGTERM"] as const) {
   process.on(signal, async () => {
     server.close();
-    await store.close();
+    agendaEvents.closeAll();
+    await mysqlStore.close();
     process.exit(0);
   });
+}
+
+function createAgendaEventHub() {
+  type SseClient = {
+    id: number;
+    res: express.Response;
+    heartbeat: ReturnType<typeof setInterval>;
+  };
+
+  const clients = new Set<SseClient>();
+  let nextClientId = 1;
+
+  const sendEvent = (client: SseClient, event: string, data: unknown) => {
+    try {
+      client.res.write(`event: ${event}\n`);
+      client.res.write(`data: ${JSON.stringify(data)}\n\n`);
+    } catch {
+      removeClient(client);
+    }
+  };
+
+  const removeClient = (client: SseClient) => {
+    clearInterval(client.heartbeat);
+    clients.delete(client);
+  };
+
+  return {
+    connect(req: express.Request, res: express.Response) {
+      res.status(200);
+      res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
+      res.setHeader("Cache-Control", "no-store, no-transform");
+      res.setHeader("Connection", "keep-alive");
+      res.setHeader("X-Accel-Buffering", "no");
+      res.flushHeaders?.();
+
+      const client: SseClient = {
+        id: nextClientId,
+        res,
+        heartbeat: setInterval(() => {
+          res.write(`: heartbeat ${Date.now()}\n\n`);
+        }, 25_000),
+      };
+      nextClientId += 1;
+      clients.add(client);
+      sendEvent(client, "connected", { ok: true });
+
+      req.on("close", () => {
+        removeClient(client);
+      });
+    },
+    broadcast(state: GameState) {
+      const payload = { version: state.version, updatedAt: state.updatedAt };
+
+      for (const client of Array.from(clients)) {
+        sendEvent(client, "state", payload);
+      }
+    },
+    closeAll() {
+      for (const client of Array.from(clients)) {
+        removeClient(client);
+        client.res.end();
+      }
+    },
+  };
 }
 
 async function toWebRequest(req: express.Request) {
