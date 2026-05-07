@@ -15,7 +15,9 @@ export function createMysqlAgendaStore(): MysqlAgendaStore {
   const pool = mysql.createPool({
     ...getMysqlConfig(),
     waitForConnections: true,
-    connectionLimit: parsePositiveInteger(process.env.MYSQL_CONNECTION_LIMIT, 10),
+    connectionLimit: parsePositiveInteger(process.env.MYSQL_CONNECTION_LIMIT, 4),
+    maxIdle: parsePositiveInteger(process.env.MYSQL_MAX_IDLE_CONNECTIONS, 1),
+    idleTimeout: parsePositiveInteger(process.env.MYSQL_IDLE_TIMEOUT_MS, 30_000),
     namedPlaceholders: false,
   });
   const ready = ensureSchema(pool);

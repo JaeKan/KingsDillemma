@@ -3,18 +3,24 @@ import {
   PLAYER_COUNT,
   applyChoose,
   applyDiscard,
+  applyDilemmaVotes,
   beginDilemmaEdit,
   calculateFinalScores,
   cancelDilemmaEdit,
   clearSession,
   createInitialState,
+  deleteDilemmaHistoryEntry,
   endSession,
   getClaimedHouseIds,
   normalizeState,
   parseHouseId,
+  publishDilemmaRecord,
   redactState,
   registerSession,
   saveDilemmaRecord,
+  saveDilemmaVote,
+  saveDilemmaVoteOrder,
+  saveAlignmentReward,
   saveHouseProgress,
   savePlayerInventory,
   setRandomDiscardEnabled,
@@ -134,6 +140,12 @@ export async function handleAgendaRequest(
       return json({ ok: true, state: redactState(nextState, houseId) }, 200, NO_STORE_HEADERS);
     }
 
+    if (action === "saveAlignmentReward") {
+      const nextState = saveAlignmentReward(state, houseId, body.agendaId, body.reward);
+      await saveState(store, nextState);
+      return json({ ok: true, state: redactState(nextState, houseId) }, 200, NO_STORE_HEADERS);
+    }
+
     if (action === "beginDilemmaEdit") {
       const dilemmaEditToken = crypto.randomUUID();
       const nextState = beginDilemmaEdit(state, houseId, dilemmaEditToken);
@@ -152,7 +164,45 @@ export async function handleAgendaRequest(
     }
 
     if (action === "saveDilemma") {
-      const nextState = saveDilemmaRecord(state, houseId, body.dilemmaEditToken, body.dilemma);
+      const dilemmaHistoryId =
+        typeof state.dilemma.historyId === "string" && state.dilemma.historyId
+          ? state.dilemma.historyId
+          : crypto.randomUUID();
+      const nextState = saveDilemmaRecord(state, houseId, body.dilemmaEditToken, body.dilemma, dilemmaHistoryId);
+      await saveState(store, nextState);
+      return json({ ok: true, state: redactState(nextState, houseId) }, 200, NO_STORE_HEADERS);
+    }
+
+    if (action === "publishDilemma") {
+      const dilemmaHistoryId =
+        typeof state.dilemma.historyId === "string" && state.dilemma.historyId
+          ? state.dilemma.historyId
+          : crypto.randomUUID();
+      const nextState = publishDilemmaRecord(state, houseId, dilemmaHistoryId);
+      await saveState(store, nextState);
+      return json({ ok: true, state: redactState(nextState, houseId) }, 200, NO_STORE_HEADERS);
+    }
+
+    if (action === "deleteDilemmaHistory") {
+      const nextState = deleteDilemmaHistoryEntry(state, houseId, body.historyId);
+      await saveState(store, nextState);
+      return json({ ok: true, state: redactState(nextState, houseId) }, 200, NO_STORE_HEADERS);
+    }
+
+    if (action === "saveDilemmaVoteOrder") {
+      const nextState = saveDilemmaVoteOrder(state, houseId, body.voteOrder);
+      await saveState(store, nextState);
+      return json({ ok: true, state: redactState(nextState, houseId) }, 200, NO_STORE_HEADERS);
+    }
+
+    if (action === "saveDilemmaVote") {
+      const nextState = saveDilemmaVote(state, houseId, body.vote);
+      await saveState(store, nextState);
+      return json({ ok: true, state: redactState(nextState, houseId) }, 200, NO_STORE_HEADERS);
+    }
+
+    if (action === "applyDilemmaVotes") {
+      const nextState = applyDilemmaVotes(state, houseId);
       await saveState(store, nextState);
       return json({ ok: true, state: redactState(nextState, houseId) }, 200, NO_STORE_HEADERS);
     }
@@ -196,9 +246,15 @@ function isKnownStateAction(action: string) {
     action === "choose" ||
     action === "saveInventory" ||
     action === "saveHouseProgress" ||
+    action === "saveAlignmentReward" ||
     action === "beginDilemmaEdit" ||
     action === "cancelDilemmaEdit" ||
     action === "saveDilemma" ||
+    action === "publishDilemma" ||
+    action === "deleteDilemmaHistory" ||
+    action === "saveDilemmaVoteOrder" ||
+    action === "saveDilemmaVote" ||
+    action === "applyDilemmaVotes" ||
     action === "setRandomDiscardEnabled" ||
     action === "calculateFinalScores" ||
     action === "endSession"

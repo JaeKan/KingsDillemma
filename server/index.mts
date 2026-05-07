@@ -14,7 +14,7 @@ const assetsDir = path.join(distDir, "assets");
 const indexHtmlPath = path.join(distDir, "index.html");
 const port = parsePositiveInteger(process.env.PORT, 3000);
 const host = process.env.HOST || "0.0.0.0";
-const bodyLimitBytes = parsePositiveInteger(process.env.REQUEST_BODY_LIMIT_BYTES, 1_048_576);
+const bodyLimitBytes = parsePositiveInteger(process.env.REQUEST_BODY_LIMIT_BYTES, 5 * 1024 * 1024);
 
 const app = express();
 const mysqlStore = createMysqlAgendaStore();

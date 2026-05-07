@@ -1,5 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
+import { closestCenter, DndContext, KeyboardSensor, PointerSensor, useSensor, useSensors } from "@dnd-kit/core";
+import { arrayMove, SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import AddOutlinedIcon from "@mui/icons-material/AddOutlined";
 import AgricultureOutlinedIcon from "@mui/icons-material/AgricultureOutlined";
 import AnchorOutlinedIcon from "@mui/icons-material/AnchorOutlined";
@@ -9,9 +12,11 @@ import BalanceOutlinedIcon from "@mui/icons-material/BalanceOutlined";
 import CastleOutlinedIcon from "@mui/icons-material/CastleOutlined";
 import CoronavirusOutlinedIcon from "@mui/icons-material/CoronavirusOutlined";
 import CrueltyFreeOutlinedIcon from "@mui/icons-material/CrueltyFreeOutlined";
-import EmojiEventsOutlinedIcon from "@mui/icons-material/EmojiEventsOutlined";
+import EditOutlinedIcon from "@mui/icons-material/EditOutlined";
 import FavoriteBorderOutlinedIcon from "@mui/icons-material/FavoriteBorderOutlined";
 import ForestOutlinedIcon from "@mui/icons-material/ForestOutlined";
+import HelpOutlineOutlinedIcon from "@mui/icons-material/HelpOutlineOutlined";
+import HistoryOutlinedIcon from "@mui/icons-material/HistoryOutlined";
 import HomeWorkOutlinedIcon from "@mui/icons-material/HomeWorkOutlined";
 import KeyOutlinedIcon from "@mui/icons-material/KeyOutlined";
 import LocalFireDepartmentOutlinedIcon from "@mui/icons-material/LocalFireDepartmentOutlined";
@@ -22,7 +27,9 @@ import MilitaryTechOutlinedIcon from "@mui/icons-material/MilitaryTechOutlined";
 import PaidOutlinedIcon from "@mui/icons-material/PaidOutlined";
 import PetsOutlinedIcon from "@mui/icons-material/PetsOutlined";
 import PestControlRodentOutlinedIcon from "@mui/icons-material/PestControlRodentOutlined";
+import PhotoCameraOutlinedIcon from "@mui/icons-material/PhotoCameraOutlined";
 import RemoveOutlinedIcon from "@mui/icons-material/RemoveOutlined";
+import DeleteOutlineOutlinedIcon from "@mui/icons-material/DeleteOutlineOutlined";
 import RestartAltOutlinedIcon from "@mui/icons-material/RestartAltOutlined";
 import SailingOutlinedIcon from "@mui/icons-material/SailingOutlined";
 import ScienceOutlinedIcon from "@mui/icons-material/ScienceOutlined";
@@ -53,34 +60,53 @@ const phaseCopy = {
   "house-select": "이번 의회에 참여할 5개 가문을 정합니다.",
   discard: "첫 차례 가문이 봉인 의제 1장을 폐기하고 드래프트를 시작합니다.",
   choose: "차례가 온 가문만 남은 비밀 의제를 확인합니다.",
-  complete: "게임이 끝나면 장부를 저장하고 설정 메뉴에서 이번 회기를 마감합니다.",
+  complete: "게임이 끝나면 최종 점수를 확인하고 설정 메뉴에서 이번 회기를 마감합니다.",
 };
 
 const defaultNamePattern = /^player\s*[1-5]$/i;
-const unsavedExitMessage = "저장하지 않은 변경사항이 있습니다. 정말 창을 종료하겠습니까?";
 const gameStartDefaultsConfirmMessage =
   "장부를 게임 시작 기본값(토큰·승리 점수·공개 의제·업적)으로 맞출까요?";
 const sessionEndUnavailableMessage = "비밀 의제 배정이 끝난 뒤 회기를 종료할 수 있습니다.";
 const sessionEndChecklistItems = [
-  { id: "inventories", label: "모든 가문이 개인 장부를 저장함" },
+  { id: "inventories", label: "모든 가문 장부가 자동 저장됨" },
   { id: "scores", label: "최종 점수와 명망/갈망 반영을 확인함" },
   { id: "progress", label: "공개 의제와 업적/성향 업적 표시를 확인함" },
   { id: "board", label: "공용 보드와 물리/외부 저장 정리를 완료함" },
 ];
-const inventoryDraftPrefix = "kd-personal-inventory-draft:";
-const progressDraftPrefix = "kd-house-progress-draft:";
+const ledgerAutosaveDelayMs = 500;
+const ledgerAutosaveRetryDelayMs = 1800;
 const sharedBoardSheetUrl =
   "https://docs.google.com/spreadsheets/d/1hJw0gYAeIafIFUJOBTDaC_2QR87CXyXABrOKvu3QG2M/edit?usp=sharing";
 const rulebookPdfUrl = "/king_dilemma_rulebook.pdf";
+const specialAbilityLegendImageUrl = "/rulebook-special-ability-legend.png";
+const specialAbilityIconUrls = {
+  instant: "/rulebook-special-ability-instant.png",
+  start: "/rulebook-special-ability-start.png",
+  condition: "/rulebook-special-ability-condition.png",
+  charges: "/rulebook-special-ability-charges.png",
+  prestige: "/rulebook-special-ability-prestige.png",
+  crave: "/rulebook-special-ability-crave.png",
+  coin: "/rulebook-special-ability-coin.png",
+  power: "/rulebook-special-ability-power.png",
+  harmony: "/rulebook-special-ability-harmony.png",
+  discord: "/rulebook-special-ability-discord.png",
+};
 const bgmSource = "/Morrowind.mp3";
 const bgmMutedStorageKey = "kd-bgm-muted";
 const bgmVolumeStorageKey = "kd-bgm-volume";
 const defaultBgmVolume = 0.34;
+const dilemmaPhotoLimit = 3;
+const dilemmaPhotoMaxInputBytes = 8 * 1024 * 1024;
+const dilemmaPhotoMaxDataUrlLength = 1_200_000;
+const dilemmaPhotoMaxDimension = 1280;
+const dilemmaPhotoQuality = 0.78;
+const dilemmaPhotoAllowedTypes = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
 const dilemmaOutcomeLabels = {
   "": "미정",
   aye: "찬성",
   nay: "반대",
 };
+const dilemmaResourceDeltaLimit = 9;
 const tokenCounters = [
   { id: "coins", label: "재화", max: 99, icon: "coin", tone: "coin" },
   { id: "powerTokens", label: "권력", max: 99, icon: "power", tone: "power" },
@@ -99,6 +125,11 @@ const houseAlignmentRows = [
   { id: "Opportunist", agendaId: "opportunist", label: "Opportunist", koreanLabel: "기회주의자" },
   { id: "Greedy", agendaId: "greedy", label: "Greedy", koreanLabel: "탐욕가" },
 ];
+const alignmentRewardTypes = [
+  { id: "prestige", label: "명망", icon: "prestige", tone: "prestige" },
+  { id: "crave", label: "갈망", icon: "crave", tone: "crave" },
+];
+const alignmentRewardTypeLabels = Object.fromEntries(alignmentRewardTypes.map((reward) => [reward.id, reward.label]));
 const houseAlignmentLabelById = Object.fromEntries(
   houseAlignmentRows.map((alignment) => [alignment.id, alignment.koreanLabel]),
 );
@@ -120,7 +151,84 @@ const houseAchievementRows = [
   { id: 2, label: "도전 과제 3" },
 ];
 const houseAchievementMarkMax = 5;
+const achievementDetailTextMaxLength = 300;
 const houseAlignmentMarkMax = 4;
+const specialAbilityLegendRows = [
+  {
+    id: "instant",
+    icon: "instant",
+    label: "즉시",
+    timing: "도전과제를 달성했거나 이야기 카드가 보드에 배치되었을 때",
+    effect: "즉시 활성화합니다.",
+  },
+  {
+    id: "start",
+    icon: "start",
+    label: "각 게임 시작",
+    timing: "각 게임 시작 시",
+    effect: "이야기 카드 더미 맨 위에 놓이지 않은 이야기 카드 능력은 무시합니다.",
+  },
+  {
+    id: "condition",
+    icon: "condition",
+    label: "조건/종료",
+    timing: "게임 중 특정 조건을 만족했거나 게임이 종료될 때",
+    effect: "조건이 맞으면 활성화합니다. 맨 위에 없는 이야기 카드 능력은 무시합니다.",
+  },
+  {
+    id: "charges",
+    icon: "charges",
+    label: "칸 표시",
+    timing: "표시할 수 있는 칸이 있는 이야기 카드 능력",
+    effect: "사용하거나 효과가 발휘될 때마다 칸 1개를 색칠하고, 모든 칸이 표시되면 더 이상 사용할 수 없습니다.",
+  },
+  {
+    id: "prestige-crave",
+    icon: "prestigeCrave",
+    label: "명망/갈망",
+    timing: "+X 명망 또는 갈망",
+    effect: "표시된 수치만큼 해당 점수를 얻습니다. 이야기 카드라면 서명인만 받습니다.",
+  },
+  {
+    id: "coins",
+    icon: "coins",
+    label: "코인",
+    timing: "+X 코인",
+    effect: "공용 저장소에서 표시된 수만큼 코인을 가져와 개인 저장소에 더합니다.",
+  },
+  {
+    id: "power",
+    icon: "power",
+    label: "권력",
+    timing: "+X 권력 토큰",
+    effect: "공용 저장소에서 표시된 수만큼 권력 토큰을 가져와 개인 저장소에 더합니다.",
+  },
+  {
+    id: "finale",
+    icon: "finale",
+    label: "화합/불화",
+    timing: "결말 카드 전용",
+    effect: "표시된 화합/불화 값은 캠페인의 대단원 때 영향을 줍니다.",
+  },
+];
+const achievementEffectAmountMax = 99;
+const achievementEffectOptions = [
+  { id: "", label: "없음", icon: "seal", memo: "효과 아이콘 없음" },
+  { id: "instant", label: "즉시", legendIcon: "instant", memo: "달성 시 즉시 처리" },
+  { id: "start", label: "각 게임 시작", legendIcon: "start", memo: "각 게임 시작 시 처리" },
+  { id: "condition", label: "조건/종료", legendIcon: "condition", memo: "조건 충족 또는 종료 시 처리" },
+  { id: "charges", label: "칸 표시", legendIcon: "charges", memo: "사용할 때마다 칸 표시" },
+  { id: "prestige", label: "명망", icon: "prestige", memo: "달성 시 명망 반영", amount: true },
+  { id: "crave", label: "갈망", icon: "crave", memo: "달성 시 갈망 반영", amount: true },
+  { id: "coins", label: "코인", legendIcon: "coins", memo: "달성 시 코인 반영", amount: true },
+  { id: "power", label: "권력", legendIcon: "power", memo: "달성 시 권력 토큰 반영", amount: true },
+  { id: "finale", label: "화합/불화", legendIcon: "finale", memo: "대단원 점수 반영", amount: true },
+];
+const achievementEffectOptionById = Object.fromEntries(achievementEffectOptions.map((option) => [option.id, option]));
+const achievementEffectAmountOptionIds = new Set(
+  achievementEffectOptions.filter((option) => option.amount).map((option) => option.id),
+);
+const alignmentRewardCountMax = 3;
 const boardRows = Array.from({ length: 17 }, (_, index) => index + 1);
 const agendaScoringZones = {
   extremist: [{ from: 1, to: 17, mode: "distance" }],
@@ -211,7 +319,6 @@ function App() {
   const [busy, setBusy] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [tipsOpen, setTipsOpen] = useState(false);
-  const [hasUnsavedInventoryChanges, setHasUnsavedInventoryChanges] = useState(false);
   const [sessionEndDialogOpen, setSessionEndDialogOpen] = useState(false);
   const [sessionEndChecklist, setSessionEndChecklist] = useState(createSessionEndChecklistState);
   const [finalBoardDraft, setFinalBoardDraft] = useState(createFinalBoardDraft);
@@ -219,6 +326,8 @@ function App() {
   const [finalScoringBusy, setFinalScoringBusy] = useState(false);
   const [scoreGuideOpen, setScoreGuideOpen] = useState(false);
   const [secretAgendaGuideOpen, setSecretAgendaGuideOpen] = useState(false);
+  const [dilemmaHistoryOpen, setDilemmaHistoryOpen] = useState(false);
+  const [voteOrderDialogOpen, setVoteOrderDialogOpen] = useState(false);
   const [realtimeEnabled, setRealtimeEnabled] = useState(false);
   const [bgmMuted, setBgmMuted] = useState(readStoredBgmMuted);
   const [bgmVolume, setBgmVolume] = useState(readStoredBgmVolume);
@@ -228,6 +337,9 @@ function App() {
   const bgmAudioRef = useRef(null);
   const settingsToggleRef = useRef(null);
   const tipsToggleRef = useRef(null);
+  const dilemmaHistoryToggleRef = useRef(null);
+  const voteOrderToggleRef = useRef(null);
+  const secretAgendaGuideToggleRef = useRef(null);
   const finalBoardComplete = useMemo(() => isFinalBoardDraftComplete(finalBoardDraft), [finalBoardDraft]);
   const sessionEndChecklistComplete = useMemo(
     () => sessionEndChecklistItems.every((item) => sessionEndChecklist[item.id]),
@@ -320,7 +432,6 @@ function App() {
       !realtimeEnabled ||
       !authenticated ||
       sessionStatus === "checking" ||
-      hasUnsavedInventoryChanges ||
       sessionEndDialogOpen
     ) {
       return undefined;
@@ -347,7 +458,7 @@ function App() {
       window.removeEventListener("focus", refreshIfVisible);
       document.removeEventListener("visibilitychange", refreshIfVisible);
     };
-  }, [authenticated, hasUnsavedInventoryChanges, realtimeEnabled, refresh, sessionEndDialogOpen, sessionStatus]);
+  }, [authenticated, realtimeEnabled, refresh, sessionEndDialogOpen, sessionStatus]);
 
   useEffect(() => {
     const audio = bgmAudioRef.current;
@@ -444,25 +555,6 @@ function App() {
     return () => window.clearTimeout(timer);
   }, [apiRequest, finalBoardComplete, finalBoardDraft, sessionEndDialogOpen]);
 
-  useEffect(() => {
-    if (!hasUnsavedInventoryChanges) {
-      return undefined;
-    }
-
-    const warnBeforeUnload = (event) => {
-      event.preventDefault();
-      event.returnValue = unsavedExitMessage;
-      return unsavedExitMessage;
-    };
-
-    window.addEventListener("beforeunload", warnBeforeUnload);
-    return () => window.removeEventListener("beforeunload", warnBeforeUnload);
-  }, [hasUnsavedInventoryChanges]);
-
-  const confirmUnsavedExit = useCallback(() => {
-    return !hasUnsavedInventoryChanges || window.confirm(unsavedExitMessage);
-  }, [hasUnsavedInventoryChanges]);
-
   const handleLogin = async (event) => {
     event.preventDefault();
     const selectedHouse = getHouses(state).find((house) => house.id === houseInput);
@@ -494,14 +586,9 @@ function App() {
   };
 
   const handleLogout = async () => {
-    if (!confirmUnsavedExit()) {
-      return;
-    }
-
     const result = await mutate({ action: "logout" });
 
     if (result) {
-      setHasUnsavedInventoryChanges(false);
       setHouseInput("");
       setDisplayName("");
       setSeatPassword("");
@@ -510,10 +597,6 @@ function App() {
   };
 
   const handleReset = async () => {
-    if (!confirmUnsavedExit()) {
-      return;
-    }
-
     const code = window.prompt("초기화 코드를 입력하세요.");
 
     if (!code) {
@@ -526,7 +609,6 @@ function App() {
       return;
     }
 
-    setHasUnsavedInventoryChanges(false);
     setAuthenticated(false);
     setHouseInput("");
     setDisplayName("");
@@ -537,11 +619,6 @@ function App() {
   const handleEndSession = () => {
     if (state?.phase !== "complete") {
       setError(sessionEndUnavailableMessage);
-      return;
-    }
-
-    if (hasUnsavedInventoryChanges) {
-      setError("장부 변경사항을 저장한 뒤 회기를 종료하세요.");
       return;
     }
 
@@ -582,19 +659,12 @@ function App() {
       return;
     }
 
-    if (hasUnsavedInventoryChanges) {
-      setSessionEndDialogOpen(false);
-      setError("장부 변경사항을 저장한 뒤 회기를 종료하세요.");
-      return;
-    }
-
     const result = await mutate({ action: "endSession" });
 
     if (!result) {
       return;
     }
 
-    setHasUnsavedInventoryChanges(false);
     setAuthenticated(false);
     setHouseInput("");
     setDisplayName("");
@@ -628,6 +698,45 @@ function App() {
     setTipsOpen((current) => !current);
   }, []);
 
+  const handleOpenDilemmaHistory = useCallback(() => {
+    setSettingsOpen(false);
+    setTipsOpen(false);
+    setDilemmaHistoryOpen(true);
+  }, []);
+
+  const handleCloseDilemmaHistory = useCallback(() => {
+    setDilemmaHistoryOpen(false);
+  }, []);
+
+  const handleOpenVoteOrderDialog = useCallback((event) => {
+    setSettingsOpen(false);
+    setTipsOpen(false);
+    if (event?.currentTarget) {
+      voteOrderToggleRef.current = event.currentTarget;
+    }
+    setVoteOrderDialogOpen(true);
+  }, []);
+
+  const handleCloseVoteOrderDialog = useCallback(() => {
+    setVoteOrderDialogOpen(false);
+  }, []);
+
+  const handleSaveVoteOrder = useCallback(
+    async (voteOrder) => await mutate({ action: "saveDilemmaVoteOrder", voteOrder }),
+    [mutate],
+  );
+
+  const handleDeleteDilemmaHistory = useCallback(
+    async (historyId) => {
+      if (!historyId) {
+        return null;
+      }
+
+      return await mutate({ action: "deleteDilemmaHistory", historyId });
+    },
+    [mutate],
+  );
+
   const handleOpenScoreGuide = useCallback(() => {
     setSettingsOpen(false);
     setTipsOpen(false);
@@ -638,9 +747,12 @@ function App() {
     setScoreGuideOpen(false);
   }, []);
 
-  const handleOpenSecretAgendaGuide = useCallback(() => {
+  const handleOpenSecretAgendaGuide = useCallback((event) => {
     setSettingsOpen(false);
     setTipsOpen(false);
+    if (event?.currentTarget) {
+      secretAgendaGuideToggleRef.current = event.currentTarget;
+    }
     setSecretAgendaGuideOpen(true);
   }, []);
 
@@ -707,6 +819,8 @@ function App() {
 
   const sessionChecking = sessionStatus === "checking";
   const isCouncilRoute = Boolean(authenticated && state);
+  const voteOrderLocked = Boolean(state && isVoteOrderSettingLocked(state));
+  const canEditVoteOrder = Boolean(authenticated && state && getVoteOrderHouses(state).length === REQUIRED_HOUSE_COUNT && !voteOrderLocked);
   const routeClass = sessionChecking ? "is-session-checking" : isCouncilRoute ? "is-council" : "is-entry";
 
   return (
@@ -723,6 +837,7 @@ function App() {
           bgmVolume={bgmVolume}
           busy={busy}
           canEndSession={Boolean(authenticated && state?.phase === "complete")}
+          canEditVoteOrder={canEditVoteOrder}
           canToggleRandomDiscard={Boolean(
             authenticated &&
               state &&
@@ -730,20 +845,25 @@ function App() {
                 (state.phase === "discard" && !state.discardedHiddenCount && !state.selectedCount)),
           )}
           open={settingsOpen}
+          historyCount={state?.dilemmaHistory?.length || 0}
           randomDiscardEnabled={state?.randomDiscardEnabled ?? true}
           tipsOpen={tipsOpen}
           onEndSession={handleSettingsEndSession}
           onLogout={handleSettingsLogout}
+          onOpenDilemmaHistory={handleOpenDilemmaHistory}
+          onOpenVoteOrderDialog={handleOpenVoteOrderDialog}
           onOpenScoreGuide={handleOpenScoreGuide}
-          onOpenSecretAgendaGuide={handleOpenSecretAgendaGuide}
           onReset={handleSettingsReset}
           onBgmVolumeChange={handleBgmVolumeChange}
           onToggleRandomDiscard={handleToggleRandomDiscard}
           onToggleBgmMuted={handleToggleBgmMuted}
           onToggle={handleToggleSettings}
           onToggleTips={handleToggleTips}
+          historyToggleRef={dilemmaHistoryToggleRef}
+          voteOrderToggleRef={voteOrderToggleRef}
           tipsToggleRef={tipsToggleRef}
           toggleRef={settingsToggleRef}
+          voteOrderLocked={voteOrderLocked}
         />
       ) : null}
 
@@ -775,7 +895,7 @@ function App() {
           state={state}
           busy={busy}
           mutate={mutate}
-          onDirtyChange={setHasUnsavedInventoryChanges}
+          onOpenSecretAgendaGuide={handleOpenSecretAgendaGuide}
         />
       )}
       <SessionEndDialog
@@ -796,7 +916,24 @@ function App() {
       <SecretAgendaScoreDialog
         open={secretAgendaGuideOpen}
         onClose={handleCloseSecretAgendaGuide}
-        restoreFocusRef={tipsToggleRef}
+        restoreFocusRef={secretAgendaGuideToggleRef}
+      />
+      <DilemmaHistoryDialog
+        busy={busy}
+        currentHouseId={state?.currentHouseId || null}
+        history={state?.dilemmaHistory || []}
+        open={dilemmaHistoryOpen}
+        onClose={handleCloseDilemmaHistory}
+        onDelete={handleDeleteDilemmaHistory}
+        restoreFocusRef={dilemmaHistoryToggleRef}
+      />
+      <VoteOrderDialog
+        busy={busy}
+        open={voteOrderDialogOpen}
+        state={state}
+        onClose={handleCloseVoteOrderDialog}
+        onSave={handleSaveVoteOrder}
+        restoreFocusRef={voteOrderToggleRef}
       />
     </main>
   );
@@ -978,22 +1115,28 @@ function FloatingSettings({
   bgmVolume,
   busy,
   canEndSession,
+  canEditVoteOrder,
   canToggleRandomDiscard,
+  historyCount,
   open,
   randomDiscardEnabled,
   tipsOpen,
   onEndSession,
   onLogout,
+  onOpenDilemmaHistory,
+  onOpenVoteOrderDialog,
   onOpenScoreGuide,
-  onOpenSecretAgendaGuide,
   onReset,
   onBgmVolumeChange,
   onToggle,
   onToggleBgmMuted,
   onToggleRandomDiscard,
   onToggleTips,
+  historyToggleRef,
+  voteOrderToggleRef,
   tipsToggleRef,
   toggleRef,
+  voteOrderLocked,
 }) {
   const bgmVolumePercent = Math.round(bgmVolume * 100);
 
@@ -1010,6 +1153,16 @@ function FloatingSettings({
           onClick={onToggleTips}
         >
           <TokenIcon type="tip" />
+        </button>
+        <button
+          ref={historyToggleRef}
+          className="settings-toggle"
+          type="button"
+          aria-haspopup="dialog"
+          aria-label={`딜레마 이력 ${historyCount}건`}
+          onClick={onOpenDilemmaHistory}
+        >
+          <TokenIcon type="history" />
         </button>
         <button
           ref={toggleRef}
@@ -1034,15 +1187,6 @@ function FloatingSettings({
             룰북 PDF 보기
             <TokenIcon type="external" />
           </a>
-          <button
-            className="tips-menu-note tips-menu-note-button"
-            type="button"
-            aria-label="비밀 의제 점수 산정방식 자세히 보기"
-            onClick={onOpenSecretAgendaGuide}
-          >
-            <strong>비밀 의제</strong>
-            <span>자원 목표 점수와 재화 순위 점수를 더해 산정합니다.</span>
-          </button>
         </div>
       ) : null}
       {open ? (
@@ -1071,19 +1215,23 @@ function FloatingSettings({
               onChange={onBgmVolumeChange}
             />
           </div>
-          <label className={`settings-switch-control${!canToggleRandomDiscard ? " disabled" : ""}`}>
+          <button
+            className={`settings-switch-control${!canToggleRandomDiscard ? " disabled" : ""}`}
+            type="button"
+            aria-pressed={randomDiscardEnabled}
+            aria-label={`무작위 의제 폐기 ${randomDiscardEnabled ? "ON" : "OFF"}`}
+            onClick={onToggleRandomDiscard}
+            disabled={busy || !canToggleRandomDiscard}
+          >
             <span>
               <strong>무작위 의제 폐기</strong>
               <small>{randomDiscardEnabled ? "ON" : "OFF"}</small>
             </span>
-            <input
-              checked={randomDiscardEnabled}
-              disabled={busy || !canToggleRandomDiscard}
-              onChange={onToggleRandomDiscard}
-              role="switch"
-              type="checkbox"
-            />
-          </label>
+            <span className="settings-state-segment" aria-hidden="true">
+              <span className={randomDiscardEnabled ? "active" : ""}>ON</span>
+              <span className={!randomDiscardEnabled ? "active" : ""}>OFF</span>
+            </span>
+          </button>
           <a className="settings-link" href={sharedBoardSheetUrl} target="_blank" rel="noreferrer">
             <TokenIcon type="sheet" />
             공용 보드 시트
@@ -1091,6 +1239,23 @@ function FloatingSettings({
           </a>
           {authenticated ? (
             <>
+              <button
+                ref={voteOrderToggleRef}
+                className="ghost-button wide"
+                type="button"
+                onClick={onOpenVoteOrderDialog}
+                disabled={busy || !canEditVoteOrder}
+                title={
+                  voteOrderLocked
+                    ? "딜레마 투표가 진행 중일 때는 순서를 바꿀 수 없습니다."
+                    : canEditVoteOrder
+                      ? "딜레마 투표 순서를 미리 지정합니다."
+                      : "참여 가문 5개가 정해진 뒤 설정할 수 있습니다."
+                }
+              >
+                <TokenIcon type="turn" />
+                투표 순서 설정
+              </button>
               <button
                 className="ghost-button wide session-end-button"
                 type="button"
@@ -1114,6 +1279,191 @@ function FloatingSettings({
         </div>
       ) : null}
     </div>
+  );
+}
+
+function VoteOrderDialog({ busy, open, state, onClose, onSave, restoreFocusRef }) {
+  const dialogRef = useRef(null);
+  const houses = useMemo(() => getVoteOrderHouses(state), [state]);
+  const initialOrder = useMemo(() => houses.map((house) => house.id), [houses]);
+  const [draftOrder, setDraftOrder] = useState(initialOrder);
+  const [saveStatus, setSaveStatus] = useState("");
+  const locked = Boolean(state && isVoteOrderSettingLocked(state));
+  const canSave = !busy && !locked && draftOrder.length === REQUIRED_HOUSE_COUNT;
+  const houseById = useMemo(() => new Map(houses.map((house) => [house.id, house])), [houses]);
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
+
+  useEffect(() => {
+    if (open) {
+      setDraftOrder(initialOrder);
+      setSaveStatus("");
+    }
+  }, [initialOrder, open]);
+
+  useEffect(() => {
+    if (!open) {
+      return undefined;
+    }
+
+    const handleKeyDown = (event) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        onClose();
+      }
+    };
+
+    document.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+      window.setTimeout(() => {
+        restoreFocusRef?.current?.focus();
+      }, 0);
+    };
+  }, [onClose, open, restoreFocusRef]);
+
+  if (!open) {
+    return null;
+  }
+
+  const handleDragEnd = (event) => {
+    const { active, over } = event;
+
+    if (!over || active.id === over.id || locked) {
+      return;
+    }
+
+    setDraftOrder((current) => {
+      const oldIndex = current.indexOf(active.id);
+      const newIndex = current.indexOf(over.id);
+
+      if (oldIndex < 0 || newIndex < 0) {
+        return current;
+      }
+
+      return arrayMove(current, oldIndex, newIndex);
+    });
+  };
+
+  const submit = async (event) => {
+    event.preventDefault();
+
+    if (!canSave) {
+      return;
+    }
+
+    setSaveStatus("");
+    const result = await onSave(draftOrder);
+
+    if (result) {
+      setSaveStatus("투표 순서를 저장했습니다.");
+      onClose();
+      return;
+    }
+
+    setSaveStatus("투표 순서를 저장하지 못했습니다.");
+  };
+
+  return (
+    <div className="session-end-overlay" role="presentation">
+      <section
+        ref={dialogRef}
+        className="vote-order-dialog"
+        aria-labelledby="vote-order-title"
+        aria-modal="true"
+        role="dialog"
+      >
+        <div className="session-end-heading">
+          <span className="session-end-seal" aria-hidden="true">
+            <TokenIcon type="turn" />
+          </span>
+          <div>
+            <p className="section-label">의회 절차</p>
+            <h2 id="vote-order-title">투표 순서 설정</h2>
+          </div>
+        </div>
+        <form className="vote-order-form" onSubmit={submit}>
+          <div className="vote-order-copy">
+            <p>
+              룰북의 투표는 리더 토큰 보유자부터 시계 방향으로 진행됩니다. 이 앱은 실제 좌석과 리더 토큰 이동을
+              추적하지 않으므로, 여기서 이번 투표의 순서를 직접 지정합니다.
+            </p>
+            <p>딜레마 투표가 시작되면 순서를 바꿀 수 없습니다. 새 딜레마를 등록하기 전에 미리 저장하세요.</p>
+          </div>
+          {locked ? (
+            <p className="vote-order-warning" role="status">
+              현재 딜레마 투표가 진행 중이라 순서를 수정할 수 없습니다.
+            </p>
+          ) : null}
+          {draftOrder.length === REQUIRED_HOUSE_COUNT ? (
+            <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+              <SortableContext items={draftOrder} strategy={verticalListSortingStrategy}>
+                <ol className="vote-order-list" aria-label="투표 순서">
+                  {draftOrder.map((houseId, index) => (
+                    <SortableVoteOrderItem
+                      disabled={busy || locked}
+                      house={houseById.get(houseId)}
+                      id={houseId}
+                      index={index}
+                      key={houseId}
+                    />
+                  ))}
+                </ol>
+              </SortableContext>
+            </DndContext>
+          ) : (
+            <p className="vote-order-warning">참여 가문 5개가 정해진 뒤 순서를 설정할 수 있습니다.</p>
+          )}
+          {saveStatus ? <p className="vote-order-status">{saveStatus}</p> : null}
+          <div className="session-end-actions">
+            <button className="ghost-button" type="button" onClick={onClose} disabled={busy}>
+              닫기
+            </button>
+            <button className="primary-button" type="submit" disabled={!canSave}>
+              <TokenIcon type="save" />
+              저장
+            </button>
+          </div>
+        </form>
+      </section>
+    </div>
+  );
+}
+
+function SortableVoteOrderItem({ disabled, house, id, index }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id, disabled });
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+  };
+  const houseName = getHouseKoreanName(house);
+  const displayName = house?.hasCustomName && house.name ? house.name : houseName;
+
+  return (
+    <li
+      ref={setNodeRef}
+      className={`vote-order-item${isDragging ? " dragging" : ""}${disabled ? " disabled" : ""}`}
+      style={style}
+    >
+      <span className="vote-order-rank">{index + 1}</span>
+      <span className="vote-order-house">
+        <strong>{displayName}</strong>
+        <small>{houseName}</small>
+      </span>
+      <button
+        className="vote-order-handle"
+        type="button"
+        disabled={disabled}
+        aria-label={`${displayName} 순서 이동`}
+        {...attributes}
+        {...listeners}
+      >
+        <TokenIcon type="menu" />
+      </button>
+    </li>
   );
 }
 
@@ -1236,15 +1586,201 @@ function SecretAgendaScoreDialog({ open, onClose, restoreFocusRef }) {
           </section>
         </div>
         <div className="score-guide-actions">
-          <a className="secondary-button" href={rulebookPdfUrl} target="_blank" rel="noreferrer">
-            룰북 PDF
-          </a>
           <button ref={closeButtonRef} className="primary-button" type="button" onClick={onClose}>
             확인
           </button>
         </div>
       </section>
     </div>
+  );
+}
+
+function DilemmaHistoryDialog({ busy, currentHouseId, history, open, onClose, onDelete, restoreFocusRef }) {
+  const dialogRef = useRef(null);
+  const closeButtonRef = useRef(null);
+  const normalizedHistory = useMemo(() => history.map(normalizeDilemmaHistoryEntry), [history]);
+  const [selectedId, setSelectedId] = useState("");
+  const selectedEntry =
+    normalizedHistory.find((entry) => entry.historyId === selectedId) || normalizedHistory[0] || null;
+  const canDeleteSelected = Boolean(currentHouseId && selectedEntry?.savedBy === currentHouseId);
+
+  const handleDeleteSelected = useCallback(async () => {
+    if (!selectedEntry || !canDeleteSelected) {
+      return;
+    }
+
+    if (!window.confirm("선택한 딜레마 이력을 삭제할까요?")) {
+      return;
+    }
+
+    await onDelete?.(selectedEntry.historyId);
+  }, [canDeleteSelected, onDelete, selectedEntry]);
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+
+    setSelectedId((current) =>
+      normalizedHistory.some((entry) => entry.historyId === current) ? current : normalizedHistory[0]?.historyId || "",
+    );
+  }, [normalizedHistory, open]);
+
+  useEffect(() => {
+    if (!open) {
+      return undefined;
+    }
+
+    const focusCloseButton = window.setTimeout(() => {
+      closeButtonRef.current?.focus();
+    }, 0);
+
+    const handleKeyDown = (event) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        onClose();
+        return;
+      }
+
+      if (event.key !== "Tab" || !dialogRef.current) {
+        return;
+      }
+
+      const focusable = Array.from(
+        dialogRef.current.querySelectorAll(
+          'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        ),
+      ).filter((element) => element instanceof HTMLElement && element.getClientRects().length > 0);
+
+      if (!focusable.length) {
+        event.preventDefault();
+        return;
+      }
+
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+
+    document.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      window.clearTimeout(focusCloseButton);
+      document.removeEventListener("keydown", handleKeyDown);
+      window.setTimeout(() => {
+        restoreFocusRef?.current?.focus();
+      }, 0);
+    };
+  }, [onClose, open, restoreFocusRef]);
+
+  if (!open) {
+    return null;
+  }
+
+  return (
+    <div className="session-end-overlay" role="presentation">
+      <section
+        ref={dialogRef}
+        className="dilemma-history-dialog"
+        aria-labelledby="dilemma-history-title"
+        aria-modal="true"
+        role="dialog"
+      >
+        <div className="session-end-heading">
+          <span className="session-end-seal" aria-hidden="true">
+            <TokenIcon type="history" />
+          </span>
+          <div>
+            <p className="section-label">의회 기록</p>
+            <h2 id="dilemma-history-title">딜레마 이력</h2>
+          </div>
+        </div>
+        {normalizedHistory.length ? (
+          <div className="dilemma-history-layout">
+            <div className="dilemma-history-list" aria-label="저장된 딜레마 목록">
+              {normalizedHistory.map((entry) => (
+                <button
+                  key={entry.historyId}
+                  className={`dilemma-history-item${entry.historyId === selectedEntry?.historyId ? " selected" : ""}`}
+                  type="button"
+                  onClick={() => setSelectedId(entry.historyId)}
+                >
+                  <strong>{formatDilemmaCardLabel(entry) || "제목 없음"}</strong>
+                  <span>{dilemmaOutcomeLabels[entry.selectedOutcome] || "미정"}</span>
+                  <small>{formatLocalDateTime(entry.savedAt || entry.updatedAt)}</small>
+                </button>
+              ))}
+            </div>
+            <DilemmaHistoryDetail
+              canDelete={canDeleteSelected}
+              deleteBusy={busy}
+              entry={selectedEntry}
+              onDelete={handleDeleteSelected}
+            />
+          </div>
+        ) : (
+          <p className="dilemma-history-empty">저장된 딜레마 이력이 없습니다.</p>
+        )}
+        <div className="score-guide-actions">
+          <button ref={closeButtonRef} className="primary-button" type="button" onClick={onClose}>
+            확인
+          </button>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function DilemmaHistoryDetail({ canDelete, deleteBusy, entry, onDelete }) {
+  if (!entry) {
+    return null;
+  }
+
+  return (
+    <article className="dilemma-history-detail">
+      <header className="dilemma-history-detail-head">
+        <div>
+          <p className="section-label">상세 기록</p>
+          <h3>{formatDilemmaCardLabel(entry) || "제목 없음"}</h3>
+        </div>
+        {canDelete ? (
+          <button
+            className="ghost-button danger-button dilemma-history-delete"
+            type="button"
+            onClick={onDelete}
+            disabled={deleteBusy}
+          >
+            <TokenIcon type="trash" />
+            삭제
+          </button>
+        ) : null}
+      </header>
+      <div className="dilemma-facts">
+        <DilemmaFact label="카드" value={formatDilemmaCardLabel(entry)} />
+        <DilemmaFact label="배치 위치" value={entry.timeCounterSlot} />
+        <DilemmaFact label="결과" value={dilemmaOutcomeLabels[entry.selectedOutcome] || "미정"} />
+      </div>
+      <DilemmaTextPreview label="상황" value={entry.context} />
+      <DilemmaTextPreview label="질문" value={entry.question} />
+      <DilemmaTextPreview label="메모" value={entry.councilNotes} />
+      <div className="dilemma-outcome-grid">
+        <DilemmaOutcomePreview label="찬성" selected={entry.selectedOutcome === "aye"} outcome={entry.aye} />
+        <DilemmaOutcomePreview label="반대" selected={entry.selectedOutcome === "nay"} outcome={entry.nay} />
+      </div>
+      <DilemmaTextPreview label="투표" value={entry.voteNotes} />
+      <DilemmaTextPreview label="해결" value={entry.resolutionNotes} />
+      <DilemmaPhotoStrip photos={entry.photos} />
+      <p className="dilemma-updated">
+        {(entry.savedByName || entry.updatedByName || "의회")} 저장 · {formatLocalDateTime(entry.savedAt || entry.updatedAt)}
+      </p>
+    </article>
   );
 }
 
@@ -1745,18 +2281,26 @@ function getHouseTone(house, selectionClosed = false) {
   return "idle";
 }
 
-function GamePanel({ state, busy, mutate, onDirtyChange }) {
+function GamePanel({ state, busy, mutate, onOpenSecretAgendaGuide }) {
   const currentHouseName = getHouseDisplayName(state, state.currentHouseId);
-  const draftTurnName = state.turn ? getHouseDisplayName(state, state.turn) : "시작 전";
+  const activeTurnId = state.dilemmaVoteTurn || state.turn;
+  const draftTurnName = activeTurnId ? getHouseDisplayName(state, activeTurnId) : "시작 전";
   const currentHouse = getCurrentHouse(state);
   const currentHouseChosenName =
     currentHouse?.hasCustomName && typeof currentHouse.name === "string"
       ? currentHouse.name.trim()
       : "";
   const availableAgendas = state.availableAgendas || [];
-  const hasAgendaDraft = availableAgendas.length > 0;
+  const showAgendaList = state.phase !== "complete" && availableAgendas.length > 0;
   const discardSelectionMode = Boolean(state.canDiscard && !state.randomDiscardEnabled);
   const hasCouncilContext = state.canDiscard;
+  const councilStageLabel = getCouncilStageLabel(state);
+  const councilStageCopy = getCouncilStageCopy(state);
+  const councilProcedureTitle = getCouncilProcedureTitle(state);
+  const handleSaveAlignmentReward = useCallback(
+    (agendaId, reward) => mutate({ action: "saveAlignmentReward", agendaId, reward }),
+    [mutate],
+  );
 
   return (
     <section className="council-layout">
@@ -1768,18 +2312,26 @@ function GamePanel({ state, busy, mutate, onDirtyChange }) {
             </div>
             <div className="sidebar-heading-copy">
               <p className="section-label">의회 현황</p>
-              <h2>{phaseLabels[state.phase] || state.phase}</h2>
+              <h2>{councilStageLabel}</h2>
             </div>
           </div>
-          <p>{phaseCopy[state.phase] || "의회 기록을 갱신하고 있습니다."}</p>
+          <p>{councilStageCopy}</p>
         </div>
-        <HouseProfileCard house={currentHouse} displayName={currentHouseName} />
+        <HouseProfileCard
+          busy={busy}
+          house={currentHouse}
+          progress={state.ownHouseProgress}
+          onSaveAlignmentReward={handleSaveAlignmentReward}
+        />
         <section className={`dilemma-stage phase-${state.phase}`} aria-labelledby="stage-title">
           <div className="stage-copy">
             <p className="section-label">의회 절차</p>
-            <h2 id="stage-title">드래프트 상태</h2>
+            <h2 id="stage-title">{councilProcedureTitle}</h2>
             <GameMessage state={state} />
             {isWaitingForDraft(state) ? <CarrotWaitAction /> : null}
+            {state.phase === "complete" && !isDilemmaBlank(state.dilemma) ? (
+              <DilemmaVotingPanel state={state} busy={busy} mutate={mutate} />
+            ) : null}
           </div>
           <div className="stage-tableau" aria-hidden="true">
             <div className="balance-rail">
@@ -1800,14 +2352,16 @@ function GamePanel({ state, busy, mutate, onDirtyChange }) {
         </section>
         <div className="status-stack">
           <StatusItem icon="house" label="내 가문" value={currentHouseChosenName || "-"} />
-          <StatusItem icon="turn" label="차례" value={draftTurnName} />
-          <StatusItem icon="scroll" label="현재 단계" value={phaseLabels[state.phase] || state.phase} />
+          <StatusItem icon="turn" label="차례" value={draftTurnName} splitParenthetical />
+          <StatusItem icon="scroll" label="현재 단계" value={councilStageLabel} />
           <StatusItem
             icon="seal"
-            label={state.phase === "house-select" ? "가문 선택" : "의제 선택"}
+            label={state.phase === "house-select" ? "가문 선택" : state.phase === "complete" ? "의제 배정" : "의제 선택"}
             value={
               state.phase === "house-select"
                 ? `${state.claimedHouseCount} / ${state.requiredHouseCount}`
+                : state.phase === "complete"
+                  ? "완료"
                 : `${state.selectedCount} / ${state.draftOrder.length || REQUIRED_HOUSE_COUNT}`
             }
           />
@@ -1816,22 +2370,36 @@ function GamePanel({ state, busy, mutate, onDirtyChange }) {
         <p className="privacy-note">남은 의제는 자기 차례가 오기 전까지 봉인됩니다.</p>
       </aside>
 
-      <section className={`council-main${hasAgendaDraft ? " has-agenda" : ""}${hasCouncilContext ? " has-context" : " no-context"}`}>
+      <section
+        className={`council-main${showAgendaList ? " has-agenda" : ""}${
+          hasCouncilContext ? " has-context" : " no-context"
+        }${state.phase === "complete" ? " has-dilemma" : ""}`}
+      >
         {hasCouncilContext ? (
           <aside className="council-context" aria-label="드래프트 보조 정보">
             <ActionPanel state={state} busy={busy} mutate={mutate} />
           </aside>
         ) : null}
-        <AgendaList agendas={availableAgendas} busy={busy} mode={discardSelectionMode ? "discard" : "choose"} mutate={mutate} />
+        {showAgendaList ? (
+          <AgendaList
+            agendas={availableAgendas}
+            busy={busy}
+            mode={discardSelectionMode ? "discard" : "choose"}
+            mutate={mutate}
+            onOpenSecretAgendaGuide={onOpenSecretAgendaGuide}
+          />
+        ) : null}
         <PersonalInventoryPanel
           inventory={state.ownInventory}
           progress={state.ownHouseProgress}
           ownChoice={state.ownChoice}
           dilemma={state.phase === "complete" ? state.dilemma : null}
+          dilemmaHistory={state.dilemmaHistory || []}
+          houses={state.houses || []}
           houseId={state.currentHouseId}
           busy={busy}
           mutate={mutate}
-          onDirtyChange={onDirtyChange}
+          onOpenSecretAgendaGuide={onOpenSecretAgendaGuide}
         />
       </section>
     </section>
@@ -1868,7 +2436,115 @@ function getHouseDisplayName(state, houseId) {
   return `${houseName} (${customName})`;
 }
 
-function HouseProfileCard({ house, displayName }) {
+function getCouncilStageLabel(state) {
+  if (state.phase === "complete" && !isDilemmaBlank(state.dilemma)) {
+    const dilemma = normalizeDilemmaRecord(state.dilemma);
+
+    return dilemma.selectedOutcome ? "투표 적용 완료" : "투표 진행 중";
+  }
+
+  return phaseLabels[state.phase] || state.phase;
+}
+
+function getCouncilStageCopy(state) {
+  if (state.phase === "complete" && !isDilemmaBlank(state.dilemma)) {
+    const dilemma = normalizeDilemmaRecord(state.dilemma);
+    const voteTurnName = getDilemmaVoteTurnName(state);
+
+    return dilemma.selectedOutcome
+      ? "딜레마 투표 결과가 적용되었습니다. 후속 처리를 기록하고 게시하세요."
+      : voteTurnName
+        ? `${voteTurnName} 가문의 투표 차례입니다.`
+        : "모든 가문이 투표했습니다. 결과를 적용하세요.";
+  }
+
+  return phaseCopy[state.phase] || "의회 기록을 갱신하고 있습니다.";
+}
+
+function getCouncilProcedureTitle(state) {
+  if (state.phase === "complete" && !isDilemmaBlank(state.dilemma)) {
+    const dilemma = normalizeDilemmaRecord(state.dilemma);
+
+    return dilemma.selectedOutcome ? "딜레마 결과" : "딜레마 투표";
+  }
+
+  if (state.phase === "complete") {
+    return "회기 정리";
+  }
+
+  if (state.phase === "discard") {
+    return "폐기 의식";
+  }
+
+  if (state.phase === "choose") {
+    return "비밀 의제 선택";
+  }
+
+  return "의회 준비";
+}
+
+function getDilemmaVoteTurnName(state) {
+  return state.dilemmaVoteTurn ? getHouseDisplayName(state, state.dilemmaVoteTurn) : "";
+}
+
+function isDilemmaVotingComplete(state) {
+  if (state.phase !== "complete" || isDilemmaBlank(state.dilemma)) {
+    return false;
+  }
+
+  const dilemma = normalizeDilemmaRecord(state.dilemma);
+
+  if (dilemma.selectedOutcome) {
+    return true;
+  }
+
+  return !state.dilemmaVoteTurn;
+}
+
+function getDilemmaVoteParticipants(state) {
+  if (Array.isArray(state?.dilemmaVoteOrder) && state.dilemmaVoteOrder.length) {
+    const housesById = new Map(getHouses(state).map((house) => [house.id, house]));
+    return state.dilemmaVoteOrder
+      .map((houseId) => housesById.get(houseId) || HOUSE_CATALOG.find((house) => house.id === houseId))
+      .filter(Boolean)
+      .slice(0, REQUIRED_HOUSE_COUNT);
+  }
+
+  return getVoteOrderHouses(state);
+}
+
+function getVoteOrderHouses(state) {
+  if (!state) {
+    return [];
+  }
+
+  const candidateState = state || {};
+  const houses = getHouses(state);
+  const housesById = new Map(houses.map((house) => [house.id, house]));
+  const orderedIds =
+    Array.isArray(candidateState.dilemmaVoteOrder) && candidateState.dilemmaVoteOrder.length
+      ? candidateState.dilemmaVoteOrder
+      : Array.isArray(candidateState.draftOrder) && candidateState.draftOrder.length
+        ? candidateState.draftOrder
+      : houses.filter((house) => house.hasPassword).map((house) => house.id);
+
+  return orderedIds
+    .map((houseId) => housesById.get(houseId) || HOUSE_CATALOG.find((house) => house.id === houseId))
+    .filter(Boolean)
+    .slice(0, REQUIRED_HOUSE_COUNT);
+}
+
+function isVoteOrderSettingLocked(state) {
+  if (!state || state.phase !== "complete" || isDilemmaBlank(state.dilemma)) {
+    return false;
+  }
+
+  return !normalizeDilemmaRecord(state.dilemma).selectedOutcome;
+}
+
+function HouseProfileCard({ busy, house, progress, onSaveAlignmentReward }) {
+  const normalizedProgress = useMemo(() => normalizeHouseProgress(progress), [progress]);
+
   if (!house) {
     return null;
   }
@@ -1887,31 +2563,156 @@ function HouseProfileCard({ house, displayName }) {
           <span className="house-profile-number">#{String(house.number).padStart(2, "0")}</span>
         </div>
         <div className="house-profile-grid">
-          <HouseProfileField label="선호 의제 성향" value={getAlignmentKoreanLabels(house.alignments).join(" / ")} />
           <HouseProfileField label="서사 목표" value={house.goal} />
+          <HouseProfileField label="선호 의제" value={getAlignmentKoreanLabels(house.alignments).join(" / ")} />
         </div>
-        <HouseAlignmentTrack alignments={house.alignments || []} />
+        <HouseAlignmentTrack
+          alignments={house.alignments || []}
+          busy={busy}
+          progress={normalizedProgress}
+          onSaveAlignmentReward={onSaveAlignmentReward}
+        />
       </div>
     </section>
   );
 }
 
-function HouseAlignmentTrack({ alignments }) {
+function HouseAlignmentTrack({ alignments, busy, progress, onSaveAlignmentReward }) {
   const favoriteAlignments = new Set(alignments);
 
   return (
-    <div className="house-alignment-track" aria-label="가문 선호 비밀 의제">
+    <div className="house-alignment-track" aria-label="비밀 의제 성향별 달성 보상">
       {houseAlignmentRows.map((alignment) => {
         const preferred = favoriteAlignments.has(alignment.id);
 
         return (
-          <div className={`house-alignment-row${preferred ? " preferred" : ""}`} key={alignment.id}>
-            <span>
-              {alignment.koreanLabel}
-            </span>
-          </div>
+          <HouseAlignmentRewardRow
+            alignment={alignment}
+            busy={busy}
+            key={alignment.id}
+            preferred={preferred}
+            reward={progress?.alignmentRewards?.[alignment.agendaId]}
+            onSaveAlignmentReward={onSaveAlignmentReward}
+          />
         );
       })}
+    </div>
+  );
+}
+
+function HouseAlignmentRewardRow({ alignment, busy, preferred, reward, onSaveAlignmentReward }) {
+  return (
+    <div className={`house-alignment-row${preferred ? " preferred" : ""}`}>
+      <span className="house-alignment-title">
+        {alignment.koreanLabel}
+      </span>
+      <AlignmentRewardInlineEditor
+        alignment={alignment}
+        busy={busy}
+        reward={reward}
+        onSaveAlignmentReward={onSaveAlignmentReward}
+      />
+    </div>
+  );
+}
+
+function AlignmentRewardInlineEditor({ alignment, busy, reward, onSaveAlignmentReward }) {
+  const normalizedReward = normalizeAlignmentReward(reward);
+  const [draft, setDraft] = useState(() => ({
+    crownType: normalizedReward.crownType || "prestige",
+    count: normalizedReward.count || 0,
+  }));
+
+  useEffect(() => {
+    setDraft({
+      crownType: normalizedReward.crownType || "prestige",
+      count: normalizedReward.count || 0,
+    });
+  }, [normalizedReward.count, normalizedReward.crownType]);
+
+  useEffect(() => {
+    if (busy || !onSaveAlignmentReward) {
+      return undefined;
+    }
+
+    const count = clampCounter(draft.count, alignmentRewardCountMax);
+    const nextReward = {
+      crownType: count > 0 ? draft.crownType : "",
+      count,
+    };
+    const rewardChanged =
+      nextReward.crownType !== normalizedReward.crownType || nextReward.count !== normalizedReward.count;
+
+    if (!rewardChanged || (nextReward.count === 0 && normalizedReward.count === 0)) {
+      return undefined;
+    }
+
+    const autosaveId = window.setTimeout(() => {
+      onSaveAlignmentReward?.(alignment.agendaId, nextReward);
+    }, 450);
+
+    return () => window.clearTimeout(autosaveId);
+  }, [
+    alignment.agendaId,
+    busy,
+    draft.count,
+    draft.crownType,
+    normalizedReward.count,
+    normalizedReward.crownType,
+    onSaveAlignmentReward,
+  ]);
+
+  return (
+    <HouseAlignmentRewardControls
+      alignment={alignment}
+      busy={busy}
+      draft={draft}
+      setDraft={setDraft}
+    />
+  );
+}
+
+function HouseAlignmentRewardControls({ alignment, busy, draft, setDraft }) {
+  return (
+    <div className="house-alignment-reward-controls" aria-label={`${alignment.koreanLabel} 왕관 보상`}>
+      <div className="alignment-crown-toggle" role="group" aria-label={`${alignment.koreanLabel} 왕관 종류`}>
+        {alignmentRewardTypes.map((rewardType) => (
+          <button
+            className={`alignment-crown-button tone-${rewardType.tone}${
+              draft.crownType === rewardType.id ? " selected" : ""
+            }`}
+            key={rewardType.id}
+            type="button"
+            title={rewardType.label}
+            aria-label={rewardType.label}
+            aria-pressed={draft.crownType === rewardType.id}
+            onClick={() =>
+              setDraft((current) => ({
+                ...current,
+                crownType: rewardType.id,
+              }))
+            }
+            disabled={busy}
+          >
+            <TokenIcon type={rewardType.icon} />
+          </button>
+        ))}
+      </div>
+      <input
+        className="alignment-reward-count"
+        min="0"
+        max={alignmentRewardCountMax}
+        type="number"
+        value={draft.count}
+        aria-label={`${alignment.koreanLabel} 왕관 개수`}
+        onChange={(event) =>
+          setDraft((current) => ({
+            ...current,
+            count: clampCounter(event.target.valueAsNumber, alignmentRewardCountMax),
+          }))
+        }
+        disabled={busy}
+      />
     </div>
   );
 }
@@ -1925,16 +2726,41 @@ function HouseProfileField({ label, value }) {
   );
 }
 
-function StatusItem({ icon, label, value }) {
+function StatusItem({ icon, label, value, splitParenthetical = false }) {
+  const parentheticalValue =
+    splitParenthetical && typeof value === "string" ? splitParentheticalStatusValue(value) : null;
+
   return (
     <div className="status-item">
       <span className="status-icon" aria-hidden="true">
         <TokenIcon type={icon} />
       </span>
       <span>{label}</span>
-      <strong>{value}</strong>
+      <strong>
+        {parentheticalValue ? (
+          <>
+            <span className="status-value-main">{parentheticalValue.main}</span>
+            <span className="status-value-detail">({parentheticalValue.detail})</span>
+          </>
+        ) : (
+          value
+        )}
+      </strong>
     </div>
   );
+}
+
+function splitParentheticalStatusValue(value) {
+  const match = value.match(/^(.+?)\s+\(([^)]+)\)$/);
+
+  if (!match) {
+    return null;
+  }
+
+  return {
+    main: match[1],
+    detail: match[2],
+  };
 }
 
 function TurnTrack({ houses, draftOrder, turn, phase }) {
@@ -1978,6 +2804,23 @@ function GameMessage({ state }) {
     }
 
     if (state.phase === "complete") {
+      if (!isDilemmaBlank(state.dilemma)) {
+        const dilemma = normalizeDilemmaRecord(state.dilemma);
+        const voteTurnName = getDilemmaVoteTurnName(state);
+
+        if (dilemma.selectedOutcome) {
+          return `${dilemmaOutcomeLabels[dilemma.selectedOutcome]} 결과가 적용되었습니다. 딜레마 후속 처리를 기록하세요.`;
+        }
+
+        if (state.canVoteDilemma) {
+          return "내 투표 차례입니다. 찬성, 반대, 기권 중 하나를 선택하세요.";
+        }
+
+        return voteTurnName
+          ? `${voteTurnName} 가문의 투표 차례입니다.`
+          : "모든 가문이 투표했습니다. 결과를 적용하세요.";
+      }
+
       return "비밀 의제 배정 완료. 게임 종료 후 명망과 갈망까지 저장한 뒤 이번 회기를 마감하세요.";
     }
 
@@ -1999,6 +2842,156 @@ function GameMessage({ state }) {
   }, [state]);
 
   return <p className="message">{text}</p>;
+}
+
+function DilemmaVotingPanel({ state, busy, mutate }) {
+  const dilemma = useMemo(() => normalizeDilemmaRecord(state.dilemma), [state.dilemma]);
+  const votes = useMemo(() => normalizeDilemmaVotes(dilemma.votes), [dilemma.votes]);
+  const participants = useMemo(() => getDilemmaVoteParticipants(state), [state]);
+  const ownVote = normalizeDilemmaVote(votes[state.currentHouseId]);
+  const ownPowerTokens = normalizeCounter(state.ownInventory?.powerTokens, inventoryCounterMax.powerTokens, 0);
+  const [side, setSide] = useState(ownVote.side || "aye");
+  const [powerTokens, setPowerTokens] = useState(Math.min(ownVote.powerTokens || 1, ownPowerTokens));
+  const [statusText, setStatusText] = useState("");
+  const selectedOutcome = dilemma.selectedOutcome;
+  const votedCount = participants.filter((house) => votes[house.id]?.side).length;
+  const allVoted =
+    participants.length === REQUIRED_HOUSE_COUNT && participants.every((house) => Boolean(votes[house.id]?.side));
+  const voteTurnName = getDilemmaVoteTurnName(state);
+  const votingComplete = !selectedOutcome && !state.dilemmaVoteTurn && allVoted;
+  const ayePower = sumDilemmaVotes(votes, participants, "aye");
+  const nayPower = sumDilemmaVotes(votes, participants, "nay");
+  const passCount = participants.filter((house) => votes[house.id]?.side === "pass").length;
+  const activePower = side === "pass" ? 0 : Math.min(powerTokens, ownPowerTokens);
+  const hasValidWager = side === "pass" || activePower >= 1;
+  const canSaveVote = Boolean(state.currentHouseId) && state.canVoteDilemma && !busy && !selectedOutcome && side && hasValidWager;
+  const canApply = !busy && votingComplete;
+
+  useEffect(() => {
+    const nextVote = normalizeDilemmaVote(votes[state.currentHouseId]);
+    setSide(nextVote.side || "aye");
+    setPowerTokens(Math.min(nextVote.powerTokens || 1, ownPowerTokens));
+  }, [ownPowerTokens, state.currentHouseId, votes]);
+
+  const updateSide = (nextSide) => {
+    setSide(nextSide);
+
+    if (nextSide === "pass") {
+      setPowerTokens(0);
+    } else if (powerTokens < 1) {
+      setPowerTokens(Math.min(1, ownPowerTokens));
+    }
+  };
+
+  const adjustPower = (amount) => {
+    setPowerTokens((current) => Math.max(0, Math.min(ownPowerTokens, current + amount)));
+  };
+
+  const saveVote = async () => {
+    setStatusText("");
+    const result = await mutate({
+      action: "saveDilemmaVote",
+      vote: {
+        side,
+        powerTokens: activePower,
+      },
+    });
+
+    setStatusText(result ? "투표를 저장했습니다." : "투표를 저장하지 못했습니다.");
+  };
+
+  const applyVotes = async () => {
+    setStatusText("");
+    const result = await mutate({ action: "applyDilemmaVotes" });
+    setStatusText(result ? "투표 결과를 적용했습니다." : "투표 결과를 적용하지 못했습니다.");
+  };
+
+  return (
+    <div className={`dilemma-vote-panel${selectedOutcome ? " applied" : ""}`}>
+      <div className="dilemma-vote-summary">
+        <span>{selectedOutcome ? `${dilemmaOutcomeLabels[selectedOutcome]} 적용됨` : votingComplete ? "투표 완료" : "투표 진행"}</span>
+        <strong>
+          {selectedOutcome
+            ? `찬성 ${ayePower} · 반대 ${nayPower} · 기권 ${passCount}`
+            : votingComplete
+              ? "모든 가문이 투표했습니다."
+              : voteTurnName
+                ? `${voteTurnName} 차례`
+                : `${votedCount}/${REQUIRED_HOUSE_COUNT} 투표`}
+        </strong>
+      </div>
+      {!selectedOutcome && !state.canVoteDilemma && !votingComplete ? (
+        <p className="dilemma-vote-turn-note">내 차례가 오면 투표 선택지가 표시됩니다.</p>
+      ) : null}
+      {!selectedOutcome && state.canVoteDilemma ? (
+        <>
+          <div className="dilemma-vote-options" role="group" aria-label="딜레마 투표 선택">
+            {[
+              { id: "aye", label: "찬성", tone: "aye" },
+              { id: "nay", label: "반대", tone: "nay" },
+              { id: "pass", label: "기권", tone: "pass" },
+            ].map((option) => (
+              <button
+                className={`dilemma-vote-option tone-${option.tone}${side === option.id ? " selected" : ""}`}
+                type="button"
+                key={option.id}
+                onClick={() => updateSide(option.id)}
+                disabled={busy}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+          <div className="dilemma-vote-wager">
+            <span className="counter-icon" aria-hidden="true">
+              <TokenIcon type="power" />
+            </span>
+            <span className="counter-label">권력 토큰</span>
+            <div className="counter-controls">
+              <button
+                className="stepper-button compact"
+                type="button"
+                aria-label="권력 토큰 줄이기"
+                onClick={() => adjustPower(-1)}
+                disabled={busy || side === "pass" || activePower <= 0}
+              >
+                <TokenIcon type="minus" />
+              </button>
+              <output aria-label="투표에 거는 권력 토큰">
+                {side === "pass" ? 0 : activePower}
+                <span>/{ownPowerTokens}</span>
+              </output>
+              <button
+                className="stepper-button compact"
+                type="button"
+                aria-label="권력 토큰 늘리기"
+                onClick={() => adjustPower(1)}
+                disabled={busy || side === "pass" || activePower >= ownPowerTokens}
+              >
+                <TokenIcon type="plus" />
+              </button>
+            </div>
+          </div>
+        </>
+      ) : null}
+      {votingComplete ? <p className="dilemma-vote-turn-note">찬성/반대 권력 합계를 확인하고 결과를 적용하세요.</p> : null}
+      {!selectedOutcome && (state.canVoteDilemma || votingComplete) ? (
+        <div className="dilemma-vote-actions">
+          {state.canVoteDilemma ? (
+            <button className="secondary-button compact" type="button" onClick={saveVote} disabled={!canSaveVote}>
+              투표 저장
+            </button>
+          ) : null}
+          {votingComplete ? (
+            <button className="primary-button compact" type="button" onClick={applyVotes} disabled={!canApply}>
+              적용
+            </button>
+          ) : null}
+        </div>
+      ) : null}
+      {statusText ? <p className="dilemma-vote-status">{statusText}</p> : null}
+    </div>
+  );
 }
 
 function isWaitingForDraft(state) {
@@ -2046,31 +3039,52 @@ function AgendaTitle({ agenda }) {
   );
 }
 
-function PersonalInventoryPanel({ inventory, progress, ownChoice, dilemma, houseId, busy, mutate, onDirtyChange }) {
-  const storageKey = houseId ? `${inventoryDraftPrefix}${houseId}` : "";
-  const progressStorageKey = houseId ? `${progressDraftPrefix}${houseId}` : "";
+function PersonalInventoryPanel({
+  inventory,
+  progress,
+  ownChoice,
+  dilemma,
+  dilemmaHistory,
+  houses,
+  houseId,
+  busy,
+  mutate,
+  onOpenSecretAgendaGuide,
+}) {
   const serverInventory = useMemo(() => normalizeInventory(inventory), [inventory]);
   const serverProgress = useMemo(() => normalizeHouseProgress(progress), [progress]);
   const serverDilemma = useMemo(() => normalizeDilemmaRecord(dilemma), [dilemma]);
   const [draft, setDraft] = useState(serverInventory);
   const [progressDraft, setProgressDraft] = useState(serverProgress);
+  const [ledgerSaveStatus, setLedgerSaveStatus] = useState("saved");
   const [dilemmaDialogOpen, setDilemmaDialogOpen] = useState(false);
   const [dilemmaDraft, setDilemmaDraft] = useState(() => createDilemmaDraft(serverDilemma));
   const [dilemmaEditToken, setDilemmaEditToken] = useState("");
+  const [dilemmaPhotoError, setDilemmaPhotoError] = useState("");
+  const [dilemmaPhotoBusy, setDilemmaPhotoBusy] = useState(false);
+  const dilemmaVotingComplete = useMemo(
+    () => isDilemmaVoteCompleteForPublish(serverDilemma, houses),
+    [houses, serverDilemma],
+  );
+  const dilemmaIsBlank = useMemo(() => isDilemmaBlank(serverDilemma), [serverDilemma]);
+  const [achievementEditor, setAchievementEditor] = useState(null);
+  const [achievementLegendOpen, setAchievementLegendOpen] = useState(false);
   const dilemmaEditButtonRef = useRef(null);
+  const achievementEditButtonRef = useRef(null);
+  const achievementLegendButtonRef = useRef(null);
+  const ledgerAutosaveTimerRef = useRef(null);
+  const ledgerAutosaveInFlightRef = useRef(false);
+  const ledgerAutosaveQueuedRef = useRef(false);
+  const latestLedgerDraftRef = useRef({
+    draft: serverInventory,
+    progressDraft: serverProgress,
+    serverProgress,
+    inventoryDirty: false,
+    progressDirty: false,
+  });
   const inventoryDirty = useMemo(() => !inventoriesMatch(draft, serverInventory), [draft, serverInventory]);
   const progressDirty = useMemo(() => !progressMatches(progressDraft, serverProgress), [progressDraft, serverProgress]);
   const isDirty = inventoryDirty || progressDirty;
-
-  useEffect(() => {
-    const storedDraft = storageKey ? readStoredInventoryDraft(storageKey) : null;
-    setDraft(storedDraft && !inventoriesMatch(storedDraft, serverInventory) ? storedDraft : serverInventory);
-  }, [storageKey]);
-
-  useEffect(() => {
-    const storedDraft = progressStorageKey ? readStoredProgressDraft(progressStorageKey) : null;
-    setProgressDraft(storedDraft && !progressMatches(storedDraft, serverProgress) ? storedDraft : serverProgress);
-  }, [progressStorageKey]);
 
   useEffect(() => {
     if (!inventoryDirty) {
@@ -2079,48 +3093,105 @@ function PersonalInventoryPanel({ inventory, progress, ownChoice, dilemma, house
   }, [inventoryDirty, serverInventory]);
 
   useEffect(() => {
-    if (!progressDirty) {
+    if (!progressDirty || progressMatchesExceptAlignmentRewards(progressDraft, serverProgress)) {
       setProgressDraft(serverProgress);
     }
-  }, [progressDirty, serverProgress]);
+  }, [progressDirty, progressDraft, serverProgress]);
 
   useEffect(() => {
     if (!dilemmaDialogOpen) {
       setDilemmaDraft(createDilemmaDraft(serverDilemma));
+      setDilemmaPhotoError("");
+      setDilemmaPhotoBusy(false);
     }
   }, [dilemmaDialogOpen, serverDilemma]);
 
   useEffect(() => {
-    onDirtyChange(isDirty);
-  }, [isDirty, onDirtyChange]);
+    latestLedgerDraftRef.current = {
+      draft,
+      progressDraft,
+      serverProgress,
+      inventoryDirty,
+      progressDirty,
+    };
+  }, [draft, inventoryDirty, progressDirty, progressDraft, serverProgress]);
 
-  useEffect(() => {
-    return () => onDirtyChange(false);
-  }, [onDirtyChange]);
-
-  useEffect(() => {
-    if (!storageKey) {
+  const runLedgerAutosave = useCallback(async () => {
+    if (!houseId) {
+      setLedgerSaveStatus("saved");
       return;
     }
 
-    if (inventoryDirty) {
-      window.sessionStorage.setItem(storageKey, JSON.stringify(draft));
-    } else {
-      window.sessionStorage.removeItem(storageKey);
-    }
-  }, [draft, inventoryDirty, storageKey]);
-
-  useEffect(() => {
-    if (!progressStorageKey) {
+    if (ledgerAutosaveInFlightRef.current) {
+      ledgerAutosaveQueuedRef.current = true;
       return;
     }
 
-    if (progressDirty) {
-      window.sessionStorage.setItem(progressStorageKey, JSON.stringify(progressDraft));
-    } else {
-      window.sessionStorage.removeItem(progressStorageKey);
+    const snapshot = latestLedgerDraftRef.current;
+
+    if (!snapshot.inventoryDirty && !snapshot.progressDirty) {
+      setLedgerSaveStatus("saved");
+      return;
     }
-  }, [progressDraft, progressDirty, progressStorageKey]);
+
+    ledgerAutosaveInFlightRef.current = true;
+    ledgerAutosaveQueuedRef.current = false;
+    setLedgerSaveStatus("saving");
+
+    let saved = true;
+
+    if (snapshot.inventoryDirty) {
+      const inventoryResult = await mutate({ action: "saveInventory", inventory: snapshot.draft });
+      saved = Boolean(inventoryResult);
+    }
+
+    if (saved && latestLedgerDraftRef.current.progressDirty) {
+      const progressPayload = {
+        ...latestLedgerDraftRef.current.progressDraft,
+        alignmentRewards: latestLedgerDraftRef.current.serverProgress.alignmentRewards,
+      };
+      const progressResult = await mutate({
+        action: "saveHouseProgress",
+        progress: progressPayload,
+      });
+      saved = Boolean(progressResult);
+    }
+
+    ledgerAutosaveInFlightRef.current = false;
+
+    if (!saved) {
+      setLedgerSaveStatus("error");
+      window.clearTimeout(ledgerAutosaveTimerRef.current);
+      ledgerAutosaveTimerRef.current = window.setTimeout(runLedgerAutosave, ledgerAutosaveRetryDelayMs);
+      return;
+    }
+
+    setLedgerSaveStatus("saved");
+
+    if (ledgerAutosaveQueuedRef.current) {
+      ledgerAutosaveQueuedRef.current = false;
+      window.clearTimeout(ledgerAutosaveTimerRef.current);
+      ledgerAutosaveTimerRef.current = window.setTimeout(runLedgerAutosave, 0);
+    }
+  }, [houseId, mutate]);
+
+  useEffect(() => {
+    window.clearTimeout(ledgerAutosaveTimerRef.current);
+
+    if (!isDirty) {
+      setLedgerSaveStatus("saved");
+      return undefined;
+    }
+
+    setLedgerSaveStatus((current) => (current === "error" ? current : "pending"));
+    ledgerAutosaveTimerRef.current = window.setTimeout(runLedgerAutosave, ledgerAutosaveDelayMs);
+
+    return () => window.clearTimeout(ledgerAutosaveTimerRef.current);
+  }, [draft, isDirty, progressDraft, runLedgerAutosave]);
+
+  useEffect(() => {
+    return () => window.clearTimeout(ledgerAutosaveTimerRef.current);
+  }, []);
 
   const adjustCounter = (counter, delta) => {
     setDraft((current) => ({
@@ -2150,17 +3221,38 @@ function PersonalInventoryPanel({ inventory, progress, ownChoice, dilemma, house
   };
 
   const toggleNarrativeAchievement = () => {
-    setProgressDraft((current) => ({
-      ...current,
-      narrativeAchievement: !current.narrativeAchievement,
-    }));
+    setProgressDraft((current) => {
+      const max = getAchievementRequiredCount(current.narrativeAchievementDetail);
+      const complete = !current.narrativeAchievement;
+
+      return {
+        ...current,
+        narrativeAchievement: complete,
+        narrativeAchievementCount: complete ? max : 0,
+      };
+    });
+  };
+
+  const adjustNarrativeAchievement = (delta) => {
+    setProgressDraft((current) => {
+      const max = getAchievementRequiredCount(current.narrativeAchievementDetail);
+      const nextCount = clampCounter((current.narrativeAchievementCount || 0) + delta, max);
+
+      return {
+        ...current,
+        narrativeAchievement: nextCount >= max,
+        narrativeAchievementCount: nextCount,
+      };
+    });
   };
 
   const adjustHouseAchievement = (index, delta) => {
     setProgressDraft((current) => ({
       ...current,
       houseAchievements: current.houseAchievements.map((value, itemIndex) =>
-        itemIndex === index ? clampCounter(value + delta, houseAchievementMarkMax) : value,
+        itemIndex === index
+          ? clampCounter(value + delta, getAchievementRequiredCount(current.houseAchievementDetails[itemIndex]))
+          : value,
       ),
     }));
   };
@@ -2184,19 +3276,66 @@ function PersonalInventoryPanel({ inventory, progress, ownChoice, dilemma, house
     }));
   };
 
-  const resetDraft = () => {
-    if (isDirty && !window.confirm("저장하지 않은 가문 장부 변경사항을 되돌릴까요?")) {
+  const openAchievementEditor = (event, kind, index = -1) => {
+    const detail =
+      kind === "narrative"
+        ? progressDraft.narrativeAchievementDetail
+        : progressDraft.houseAchievementDetails[index];
+
+    achievementEditButtonRef.current = event.currentTarget;
+    setAchievementEditor({
+      kind,
+      index,
+    title: kind === "narrative" ? "서사 도전 과제" : houseAchievementRows[index]?.label || "도전 과제",
+      draft: normalizeAchievementDetail(detail, kind === "narrative" ? 1 : houseAchievementMarkMax),
+    });
+  };
+
+  const updateAchievementEditorDraft = (field, value) => {
+    setAchievementEditor((current) =>
+      current
+        ? {
+            ...current,
+            draft: updateAchievementDetailDraft(current.draft, field, value),
+          }
+        : current,
+    );
+  };
+
+  const cancelAchievementEditor = () => {
+    setAchievementEditor(null);
+  };
+
+  const saveAchievementEditor = () => {
+    if (!achievementEditor) {
       return;
     }
 
-    setDraft(serverInventory);
-    setProgressDraft(serverProgress);
-    if (storageKey) {
-      window.sessionStorage.removeItem(storageKey);
-    }
-    if (progressStorageKey) {
-      window.sessionStorage.removeItem(progressStorageKey);
-    }
+    const nextDetail = normalizeAchievementDetail(achievementEditor.draft, achievementEditor.kind === "narrative" ? 1 : houseAchievementMarkMax);
+
+    setProgressDraft((current) => {
+      if (achievementEditor.kind === "narrative") {
+        const nextCount = clampCounter(current.narrativeAchievementCount || 0, nextDetail.requiredCount);
+
+        return {
+          ...current,
+          narrativeAchievement: nextCount >= nextDetail.requiredCount,
+          narrativeAchievementCount: nextCount,
+          narrativeAchievementDetail: nextDetail,
+        };
+      }
+
+      return {
+        ...current,
+        houseAchievements: current.houseAchievements.map((value, itemIndex) =>
+          itemIndex === achievementEditor.index ? clampCounter(value, nextDetail.requiredCount) : value,
+        ),
+        houseAchievementDetails: current.houseAchievementDetails.map((detail, itemIndex) =>
+          itemIndex === achievementEditor.index ? nextDetail : detail,
+        ),
+      };
+    });
+    setAchievementEditor(null);
   };
 
   const applyGameStartDefaults = () => {
@@ -2206,37 +3345,7 @@ function PersonalInventoryPanel({ inventory, progress, ownChoice, dilemma, house
 
     setDraft(normalizeInventory(createDefaultInventory()));
     setProgressDraft(normalizeHouseProgress(createDefaultHouseProgress()));
-    if (storageKey) {
-      window.sessionStorage.removeItem(storageKey);
-    }
-    if (progressStorageKey) {
-      window.sessionStorage.removeItem(progressStorageKey);
-    }
-  };
-
-  const saveDraft = async () => {
-    if (inventoryDirty) {
-      const inventoryResult = await mutate({ action: "saveInventory", inventory: draft });
-
-      if (!inventoryResult) {
-        return;
-      }
-    }
-
-    if (progressDirty) {
-      const progressResult = await mutate({ action: "saveHouseProgress", progress: progressDraft });
-
-      if (!progressResult) {
-        return;
-      }
-    }
-
-    if (storageKey) {
-      window.sessionStorage.removeItem(storageKey);
-    }
-    if (progressStorageKey) {
-      window.sessionStorage.removeItem(progressStorageKey);
-    }
+    setLedgerSaveStatus("pending");
   };
 
   const beginDilemmaEdit = useCallback(async () => {
@@ -2252,6 +3361,7 @@ function PersonalInventoryPanel({ inventory, progress, ownChoice, dilemma, house
 
     setDilemmaEditToken(result.dilemmaEditToken);
     setDilemmaDraft(createDilemmaDraft(result.state?.dilemma || serverDilemma));
+    setDilemmaPhotoError("");
     setDilemmaDialogOpen(true);
   }, [dilemma, houseId, mutate, serverDilemma]);
 
@@ -2277,14 +3387,63 @@ function PersonalInventoryPanel({ inventory, progress, ownChoice, dilemma, house
     setDilemmaDialogOpen(false);
     setDilemmaEditToken("");
     setDilemmaDraft(createDilemmaDraft(serverDilemma));
+    setDilemmaPhotoError("");
 
     if (token) {
       await mutate({ action: "cancelDilemmaEdit", dilemmaEditToken: token });
     }
   }, [dilemmaEditToken, mutate, serverDilemma]);
 
+  const addDilemmaPhotos = useCallback(async (files) => {
+    const fileList = Array.from(files || []);
+
+    if (!fileList.length) {
+      return;
+    }
+
+    const remainingSlots = Math.max(dilemmaPhotoLimit - dilemmaDraft.photos.length, 0);
+
+    if (remainingSlots <= 0) {
+      setDilemmaPhotoError(`사진은 최대 ${dilemmaPhotoLimit}장까지 첨부할 수 있습니다.`);
+      return;
+    }
+
+    setDilemmaPhotoBusy(true);
+    setDilemmaPhotoError("");
+
+    try {
+      const nextPhotos = [];
+
+      for (const file of fileList.slice(0, remainingSlots)) {
+        nextPhotos.push(await createDilemmaPhotoAttachment(file));
+      }
+
+      setDilemmaDraft((current) => ({
+        ...current,
+        photos: [...current.photos, ...nextPhotos].slice(0, dilemmaPhotoLimit),
+      }));
+    } catch (photoError) {
+      setDilemmaPhotoError(photoError.message || "사진을 첨부하지 못했습니다.");
+    } finally {
+      setDilemmaPhotoBusy(false);
+    }
+  }, [dilemmaDraft.photos.length]);
+
+  const removeDilemmaPhoto = useCallback((photoId) => {
+    setDilemmaDraft((current) => ({
+      ...current,
+      photos: current.photos.filter((photo) => photo.id !== photoId),
+    }));
+    setDilemmaPhotoError("");
+  }, []);
+
   const saveDilemma = useCallback(async () => {
     if (!dilemmaEditToken) {
+      return;
+    }
+
+    if (dilemmaPhotoBusy) {
+      setDilemmaPhotoError("사진 처리 중입니다. 잠시 후 저장하세요.");
       return;
     }
 
@@ -2300,25 +3459,57 @@ function PersonalInventoryPanel({ inventory, progress, ownChoice, dilemma, house
     }
   }, [dilemmaDraft, dilemmaEditToken, mutate]);
 
-  return (
-    <section className="inventory-panel" aria-labelledby="inventory-title">
-      <div className="inventory-header">
-        <div>
-          <p className="section-label">가문 기록</p>
-          <h2 id="inventory-title">가문 장부</h2>
-        </div>
-        {isDirty ? <span className="dirty-pill">저장 필요</span> : <span className="saved-pill">저장 완료</span>}
-      </div>
+  const publishDilemma = useCallback(async () => {
+    if (!houseId || !serverDilemma || isDilemmaBlank(serverDilemma)) {
+      return;
+    }
 
+    await mutate({ action: "publishDilemma" });
+  }, [houseId, mutate, serverDilemma]);
+
+  const ledgerStatusText =
+    ledgerSaveStatus === "error"
+      ? "저장 실패"
+      : ledgerSaveStatus === "saving" || ledgerSaveStatus === "pending" || isDirty
+        ? "자동 저장 중"
+        : "저장 완료";
+  const ledgerStatusClassName = ledgerSaveStatus === "error" ? "dirty-pill" : isDirty ? "dirty-pill" : "saved-pill";
+  const ledgerStatusDescription =
+    ledgerSaveStatus === "error"
+      ? "자동 저장에 실패했습니다. 연결이 복구되면 다시 시도합니다."
+      : ledgerSaveStatus === "saving" || ledgerSaveStatus === "pending" || isDirty
+        ? "변경사항을 의회 기록에 자동 저장하고 있습니다."
+        : "의회 기록에 자동 저장된 값입니다.";
+  const narrativeAchievementMax = getAchievementRequiredCount(progressDraft.narrativeAchievementDetail);
+  const narrativeAchievementCount = clampCounter(
+    progressDraft.narrativeAchievementCount || 0,
+    narrativeAchievementMax,
+  );
+  const narrativeAchievementComplete = progressDraft.narrativeAchievement || narrativeAchievementCount >= narrativeAchievementMax;
+
+  return (
+    <>
       {dilemma ? (
         <DilemmaSummaryCard
           busy={busy}
           currentHouseId={houseId}
           dilemma={serverDilemma}
+          history={dilemmaHistory || []}
+          houses={houses || []}
           editButtonRef={dilemmaEditButtonRef}
           onEdit={beginDilemmaEdit}
+          onPublish={publishDilemma}
         />
       ) : null}
+
+      <section className="inventory-panel" aria-labelledby="inventory-title">
+      <div className="inventory-header">
+        <div>
+          <p className="section-label">가문 기록</p>
+          <h2 id="inventory-title">가문 장부</h2>
+        </div>
+        <span className={ledgerStatusClassName}>{ledgerStatusText}</span>
+      </div>
 
       <div className="inventory-section resource-section">
         <div className="inventory-counter-group">
@@ -2391,7 +3582,7 @@ function PersonalInventoryPanel({ inventory, progress, ownChoice, dilemma, house
           </div>
           {ownChoice ? (
             <div className="agenda-progress-group inventory-secret-agenda" aria-label="비밀 의제">
-              <OwnChoice agenda={ownChoice} />
+              <OwnChoice agenda={ownChoice} onOpenSecretAgendaGuide={onOpenSecretAgendaGuide} />
             </div>
           ) : null}
         </div>
@@ -2399,34 +3590,34 @@ function PersonalInventoryPanel({ inventory, progress, ownChoice, dilemma, house
 
       <div className="inventory-section progress-section">
         <div className="achievement-progress-panel">
-          <h3>업적</h3>
+          <div className="achievement-panel-heading">
+            <h3>업적</h3>
+          </div>
           <div className="achievement-ledger">
             <div className="achievement-primary-list">
-              <button
-                className={`achievement-toggle${progressDraft.narrativeAchievement ? " complete" : ""}`}
-                type="button"
-                aria-pressed={progressDraft.narrativeAchievement}
-                onClick={toggleNarrativeAchievement}
+              <NarrativeAchievementRow
+                complete={narrativeAchievementComplete}
+                count={narrativeAchievementCount}
+                detail={progressDraft.narrativeAchievementDetail}
                 disabled={busy}
-              >
-                <span className="achievement-toggle-icon" aria-hidden="true">
-                  <TokenIcon type="seal" />
-                </span>
-                <span>
-                  <strong>서사 목표</strong>
-                  <small>{progressDraft.narrativeAchievement ? "달성" : "미달성"}</small>
-                </span>
-              </button>
+                max={narrativeAchievementMax}
+                onDecrease={() => adjustNarrativeAchievement(-1)}
+                onEdit={(event) => openAchievementEditor(event, "narrative")}
+                onIncrease={() => adjustNarrativeAchievement(1)}
+                onToggle={toggleNarrativeAchievement}
+              />
               <div className="achievement-track-list">
                 {houseAchievementRows.map((row) => (
                   <AchievementProgressRow
                     key={row.id}
                     label={row.label}
                     value={progressDraft.houseAchievements[row.id] || 0}
-                    max={houseAchievementMarkMax}
+                    max={getAchievementRequiredCount(progressDraft.houseAchievementDetails[row.id])}
                     challengeComplete={progressDraft.houseAchievementComplete[row.id] === true}
+                    detail={progressDraft.houseAchievementDetails[row.id]}
                     disabled={busy}
                     onDecrease={() => adjustHouseAchievement(row.id, -1)}
+                    onEdit={(event) => openAchievementEditor(event, "challenge", row.id)}
                     onIncrease={() => adjustHouseAchievement(row.id, 1)}
                     onToggleChallengeComplete={() => toggleHouseAchievementComplete(row.id)}
                   />
@@ -2440,6 +3631,7 @@ function PersonalInventoryPanel({ inventory, progress, ownChoice, dilemma, house
                   alignment={alignment}
                   value={progressDraft.alignmentAchievements[alignment.agendaId] || 0}
                   max={houseAlignmentMarkMax}
+                  reward={progressDraft.alignmentRewards[alignment.agendaId]}
                   disabled={busy}
                   onDecrease={() => adjustAlignmentAchievement(alignment.agendaId, -1)}
                   onIncrease={() => adjustAlignmentAchievement(alignment.agendaId, 1)}
@@ -2451,45 +3643,459 @@ function PersonalInventoryPanel({ inventory, progress, ownChoice, dilemma, house
       </div>
 
       <div className="inventory-actions">
-        <span>{isDirty ? "변경사항은 아직 이 브라우저에만 저장되어 있습니다." : "의회 기록에 반영된 값입니다."}</span>
+        <span>{ledgerStatusDescription}</span>
         <div>
-          <button className="ghost-button" type="button" onClick={resetDraft} disabled={busy || !isDirty}>
-            <TokenIcon type="undo" />
-            초안 폐기
-          </button>
           <button className="ghost-button" type="button" onClick={applyGameStartDefaults} disabled={busy}>
             <TokenIcon type="reset" />
             기본값
-          </button>
-          <button className="primary-button" type="button" onClick={saveDraft} disabled={busy || !isDirty}>
-            <TokenIcon type="save" />
-            {busy ? "저장 중" : "장부 저장"}
           </button>
         </div>
       </div>
       <DilemmaEditDialog
         busy={busy}
         draft={dilemmaDraft}
+        isNewDilemma={dilemmaIsBlank}
         open={dilemmaDialogOpen}
+        resolutionDisabled={!dilemmaVotingComplete}
         restoreFocusRef={dilemmaEditButtonRef}
         onCancel={cancelDilemmaEdit}
+        onAddPhotos={addDilemmaPhotos}
         onFieldChange={updateDilemmaField}
         onOutcomeChange={updateDilemmaOutcome}
+        onRemovePhoto={removeDilemmaPhoto}
         onSave={saveDilemma}
+        photoBusy={dilemmaPhotoBusy}
+        photoError={dilemmaPhotoError}
       />
-    </section>
+      <AchievementEditDialog
+        busy={busy}
+        editor={achievementEditor}
+        legendButtonRef={achievementLegendButtonRef}
+        legendOpen={achievementLegendOpen}
+        open={Boolean(achievementEditor)}
+        restoreFocusRef={achievementEditButtonRef}
+        onCancel={cancelAchievementEditor}
+        onChange={updateAchievementEditorDraft}
+        onOpenLegend={() => setAchievementLegendOpen(true)}
+        onSave={saveAchievementEditor}
+      />
+      <SpecialAbilityLegendDialog
+        open={achievementLegendOpen}
+        restoreFocusRef={achievementLegendButtonRef}
+        onClose={() => setAchievementLegendOpen(false)}
+      />
+      </section>
+    </>
   );
 }
 
-function DilemmaSummaryCard({ busy, currentHouseId, dilemma, editButtonRef, onEdit }) {
+function AchievementEditDialog({
+  busy,
+  editor,
+  legendButtonRef,
+  legendOpen,
+  open,
+  restoreFocusRef,
+  onCancel,
+  onChange,
+  onOpenLegend,
+  onSave,
+}) {
+  const dialogRef = useRef(null);
+  const firstFieldRef = useRef(null);
+
+  useEffect(() => {
+    if (!open) {
+      return undefined;
+    }
+
+    const focusFirstField = window.setTimeout(() => {
+      firstFieldRef.current?.focus();
+    }, 0);
+
+    return () => {
+      window.clearTimeout(focusFirstField);
+      window.setTimeout(() => {
+        restoreFocusRef?.current?.focus();
+      }, 0);
+    };
+  }, [open, restoreFocusRef]);
+
+  useEffect(() => {
+    if (!open || legendOpen) {
+      return undefined;
+    }
+
+    const handleKeyDown = (event) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        onCancel();
+        return;
+      }
+
+      if (event.key !== "Tab" || !dialogRef.current) {
+        return;
+      }
+
+      const focusable = Array.from(
+        dialogRef.current.querySelectorAll(
+          'a[href], button:not([disabled]), input:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        ),
+      ).filter((element) => element instanceof HTMLElement && element.getClientRects().length > 0);
+
+      if (!focusable.length) {
+        event.preventDefault();
+        return;
+      }
+
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+
+    document.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [legendOpen, onCancel, open]);
+
+  if (!open || !editor) {
+    return null;
+  }
+
+  const submit = (event) => {
+    event.preventDefault();
+    onSave();
+  };
+
+  return (
+    <div className="session-end-overlay" role="presentation">
+      <section
+        ref={dialogRef}
+        className="achievement-dialog"
+        aria-labelledby="achievement-dialog-title"
+        aria-modal="true"
+        role="dialog"
+      >
+        <div className="session-end-heading">
+          <span className="session-end-seal" aria-hidden="true">
+            <TokenIcon type="seal" />
+          </span>
+          <div>
+            <p className="section-label">가문 업적</p>
+            <div className="achievement-dialog-title-row">
+              <h2 id="achievement-dialog-title">{editor.title} 수정</h2>
+              {onOpenLegend ? (
+                <button
+                  ref={legendButtonRef}
+                  className="achievement-help-button"
+                  type="button"
+                  aria-haspopup="dialog"
+                  aria-label="특수 능력 범례"
+                  onClick={onOpenLegend}
+                >
+                  <TokenIcon type="help" />
+                </button>
+              ) : null}
+            </div>
+          </div>
+        </div>
+        <form className="achievement-edit-form" onSubmit={submit}>
+          <label className="dilemma-field">
+            <span>조건 텍스트</span>
+            <textarea
+              ref={firstFieldRef}
+              value={editor.draft.conditionText}
+              maxLength={achievementDetailTextMaxLength}
+              onChange={(event) => onChange("conditionText", event.target.value)}
+              placeholder="실제 가문 화면에 적힌 달성 조건을 적습니다."
+            />
+          </label>
+          <label className="dilemma-field achievement-required-field">
+            <span>달성에 필요한 카운트 수</span>
+            <input
+              type="number"
+              inputMode="numeric"
+              min="1"
+              max={houseAchievementMarkMax}
+              value={editor.draft.requiredCount}
+              onChange={(event) => onChange("requiredCount", event.target.valueAsNumber)}
+            />
+          </label>
+          <fieldset className="achievement-effect-fieldset">
+            <legend>효과 아이콘</legend>
+            <div className="achievement-effect-options">
+              {achievementEffectOptions.map((option) => {
+                const selected = editor.draft.effectIcon === option.id;
+
+                return (
+                  <button
+                    className={`achievement-effect-option${selected ? " selected" : ""}`}
+                    type="button"
+                    aria-pressed={selected}
+                    key={option.id}
+                    onClick={() => onChange("effectIcon", option.id)}
+                  >
+                    <span className="achievement-effect-option-icon">
+                      <AchievementEffectOptionIcon option={option} />
+                    </span>
+                    <span>{option.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </fieldset>
+          {achievementEffectAmountOptionIds.has(editor.draft.effectIcon) ? (
+            <label className="dilemma-field achievement-required-field">
+              <span>효과 수치</span>
+              <input
+                type="number"
+                inputMode="numeric"
+                min="0"
+                max={achievementEffectAmountMax}
+                value={editor.draft.effectAmount}
+                onChange={(event) => onChange("effectAmount", event.target.valueAsNumber)}
+              />
+            </label>
+          ) : null}
+          <label className="dilemma-field">
+            <span>효과 메모</span>
+            <textarea
+              value={editor.draft.effectText}
+              maxLength={achievementDetailTextMaxLength}
+              onChange={(event) => onChange("effectText", event.target.value)}
+              placeholder="해금되는 특수 능력이나 즉시 보상을 적습니다."
+            />
+            <AchievementEffectMemo detail={editor.draft} />
+          </label>
+          <div className="session-end-actions">
+            <button className="ghost-button" type="button" onClick={onCancel} disabled={busy}>
+              취소
+            </button>
+            <button className="primary-button" type="submit" disabled={busy}>
+              <TokenIcon type="save" />
+              저장
+            </button>
+          </div>
+        </form>
+      </section>
+    </div>
+  );
+}
+
+function AchievementEffectOptionIcon({ option }) {
+  if (option.legendIcon) {
+    return <SpecialAbilityLegendIcon type={option.legendIcon} />;
+  }
+
+  return <TokenIcon type={option.icon || "seal"} />;
+}
+
+function AchievementEffectMemo({ detail }) {
+  const memoText = formatAchievementEffectMemo(detail);
+
+  if (!memoText) {
+    return <span className="achievement-effect-memo muted">효과 아이콘을 선택하지 않았습니다.</span>;
+  }
+
+  return (
+    <span className="achievement-effect-memo">
+      <AchievementEffectBadge detail={detail} />
+      <span>{memoText}</span>
+    </span>
+  );
+}
+
+function AchievementEffectBadge({ detail }) {
+  const effectIcon = normalizeAchievementEffectIcon(detail?.effectIcon);
+  const option = getAchievementEffectOption(effectIcon);
+
+  if (!option.id) {
+    return null;
+  }
+
+  return (
+    <span className={`achievement-effect-badge tone-${option.id}`} aria-hidden="true">
+      <AchievementEffectOptionIcon option={option} />
+    </span>
+  );
+}
+
+function SpecialAbilityLegendIcon({ type }) {
+  if (type === "prestigeCrave") {
+    return (
+      <span className="legend-icon-group" aria-hidden="true">
+        <span className="legend-prefix">+X</span>
+        <RulebookAbilityImage className="legend-crown light" type="prestige" />
+        <span className="legend-divider">/</span>
+        <RulebookAbilityImage className="legend-crown dark" type="crave" />
+      </span>
+    );
+  }
+
+  if (type === "coins") {
+    return (
+      <span className="legend-icon-group" aria-hidden="true">
+        <span className="legend-prefix">+X</span>
+        <RulebookAbilityImage className="legend-token coin" type="coin" />
+      </span>
+    );
+  }
+
+  if (type === "power") {
+    return (
+      <span className="legend-icon-group" aria-hidden="true">
+        <span className="legend-prefix">+X</span>
+        <RulebookAbilityImage className="legend-token power" type="power" />
+      </span>
+    );
+  }
+
+  if (type === "finale") {
+    return (
+      <span className="legend-icon-group" aria-hidden="true">
+        <span className="legend-prefix">+X</span>
+        <RulebookAbilityImage className="legend-finale harmony" type="harmony" />
+        <span className="legend-divider">/</span>
+        <RulebookAbilityImage className="legend-finale discord" type="discord" />
+      </span>
+    );
+  }
+
+  return <RulebookAbilityImage className={`legend-rule-icon ${type}`} type={type} />;
+}
+
+function RulebookAbilityImage({ className, type }) {
+  const src = specialAbilityIconUrls[type];
+
+  if (!src) {
+    return null;
+  }
+
+  return (
+    <span className={className} aria-hidden="true">
+      <img src={src} alt="" draggable="false" />
+    </span>
+  );
+}
+
+function SpecialAbilityLegendDialog({ open, restoreFocusRef, onClose }) {
+  const dialogRef = useRef(null);
+  const closeButtonRef = useRef(null);
+
+  useEffect(() => {
+    if (!open) {
+      return undefined;
+    }
+
+    const focusCloseButton = window.setTimeout(() => {
+      closeButtonRef.current?.focus();
+    }, 0);
+
+    const handleKeyDown = (event) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        onClose();
+      }
+    };
+
+    document.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      window.clearTimeout(focusCloseButton);
+      document.removeEventListener("keydown", handleKeyDown);
+      window.setTimeout(() => {
+        restoreFocusRef?.current?.focus();
+      }, 0);
+    };
+  }, [onClose, open, restoreFocusRef]);
+
+  if (!open) {
+    return null;
+  }
+
+  return (
+    <div className="session-end-overlay" role="presentation">
+      <section
+        ref={dialogRef}
+        className="score-guide-dialog achievement-legend-dialog"
+        aria-labelledby="achievement-legend-title"
+        aria-modal="true"
+        role="dialog"
+      >
+        <div className="session-end-heading">
+          <span className="session-end-seal" aria-hidden="true">
+            <TokenIcon type="help" />
+          </span>
+          <div>
+            <p className="section-label">업적 도움말</p>
+            <h2 id="achievement-legend-title">특수 능력 범례</h2>
+          </div>
+        </div>
+        <figure className="rulebook-legend-figure">
+          <img src={specialAbilityLegendImageUrl} alt="룰북 14쪽 특수 능력 범례 표" />
+          <figcaption>룰북 p.14 특수 능력 범례</figcaption>
+        </figure>
+        <div className="score-guide-table-wrap">
+          <table className="score-guide-table achievement-legend-table">
+            <thead>
+              <tr>
+                <th scope="col">표식</th>
+                <th scope="col">시점</th>
+                <th scope="col">처리</th>
+              </tr>
+            </thead>
+            <tbody>
+              {specialAbilityLegendRows.map((row) => (
+                <tr key={row.id}>
+                  <th scope="row">
+                    <span className="achievement-legend-label">
+                      <SpecialAbilityLegendIcon type={row.icon} />
+                      <span>{row.label}</span>
+                    </span>
+                  </th>
+                  <td>{row.timing}</td>
+                  <td>{row.effect}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <div className="score-guide-actions">
+          <button ref={closeButtonRef} className="primary-button" type="button" onClick={onClose}>
+            확인
+          </button>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function DilemmaSummaryCard({ busy, currentHouseId, dilemma, history = [], houses = [], editButtonRef, onEdit, onPublish }) {
+  const locked = Boolean(dilemma.editLock);
   const lockedByOther = Boolean(dilemma.editLock && dilemma.editLock.houseId !== currentHouseId);
   const isBlank = isDilemmaBlank(dilemma);
+  const publishBlockReason = getDilemmaPublishBlockReason(dilemma, houses);
+  const publishedEntry = dilemma.historyId ? history.find((entry) => entry.historyId === dilemma.historyId) : null;
+  const published = Boolean(publishedEntry && isPublishedDilemmaCurrent(dilemma, publishedEntry));
+  const editButtonLabel = isBlank ? "작성" : "편집";
   const statusText = dilemma.editLock
     ? `${dilemma.editLock.houseName} 수정 중`
     : isBlank
       ? "미작성"
-      : "저장됨";
+      : published
+        ? "게시됨"
+        : "저장됨";
   const canEdit = Boolean(currentHouseId) && !lockedByOther;
+  const canPublish = Boolean(currentHouseId) && !locked && !isBlank && !publishBlockReason;
 
   return (
     <section className="dilemma-ledger-card" aria-labelledby="dilemma-ledger-title">
@@ -2502,14 +4108,36 @@ function DilemmaSummaryCard({ busy, currentHouseId, dilemma, editButtonRef, onEd
           <span className={`dilemma-status-pill${dilemma.editLock ? " locked" : ""}`}>{statusText}</span>
           <button
             ref={editButtonRef}
-            className="ghost-button dilemma-edit-button"
+            className="ghost-button dilemma-summary-button dilemma-edit-button"
             type="button"
             onClick={onEdit}
             disabled={busy || !canEdit}
-            title={lockedByOther ? "다른 가문이 편집을 마칠 때까지 기다려야 합니다." : "딜레마 기록을 편집합니다."}
+            title={
+              lockedByOther
+                ? "다른 가문이 편집을 마칠 때까지 기다려야 합니다."
+                : isBlank
+                  ? "새 딜레마를 작성합니다."
+                  : "딜레마 기록을 편집합니다."
+            }
           >
             <TokenIcon type="scroll" />
-            편집
+            {editButtonLabel}
+          </button>
+          <button
+            className="ghost-button dilemma-summary-button"
+            type="button"
+            onClick={onPublish}
+            disabled={busy || !canPublish}
+            title={
+              locked
+                ? "딜레마 편집을 저장하거나 취소한 뒤 게시할 수 있습니다."
+                : isBlank
+                  ? "게시할 딜레마 기록이 없습니다."
+                  : publishBlockReason || "현재 저장된 딜레마를 지난 딜레마 이력에 게시합니다."
+            }
+          >
+            <TokenIcon type="history" />
+            게시
           </button>
         </div>
       </div>
@@ -2520,9 +4148,10 @@ function DilemmaSummaryCard({ busy, currentHouseId, dilemma, editButtonRef, onEd
         <div className="dilemma-summary-body">
           <div className="dilemma-facts">
             <DilemmaFact label="카드" value={formatDilemmaCardLabel(dilemma)} />
-            <DilemmaFact label="위치" value={dilemma.timeCounterSlot} />
+            <DilemmaFact label="배치 위치" value={dilemma.timeCounterSlot} />
             <DilemmaFact label="결과" value={dilemmaOutcomeLabels[dilemma.selectedOutcome] || "미정"} />
           </div>
+          <DilemmaVoteBreakdown dilemma={dilemma} houses={houses} />
           <DilemmaTextPreview label="질문" value={dilemma.question || dilemma.context} />
           <DilemmaTextPreview label="메모" value={dilemma.councilNotes} />
           <div className="dilemma-outcome-grid">
@@ -2530,6 +4159,7 @@ function DilemmaSummaryCard({ busy, currentHouseId, dilemma, editButtonRef, onEd
             <DilemmaOutcomePreview label="반대" selected={dilemma.selectedOutcome === "nay"} outcome={dilemma.nay} />
           </div>
           <DilemmaTextPreview label="해결" value={dilemma.resolutionNotes || dilemma.voteNotes} />
+          <DilemmaPhotoStrip photos={dilemma.photos} />
           {dilemma.updatedByName ? (
             <p className="dilemma-updated">
               {dilemma.updatedByName} 저장 · {formatLocalDateTime(dilemma.updatedAt)}
@@ -2541,12 +4171,92 @@ function DilemmaSummaryCard({ busy, currentHouseId, dilemma, editButtonRef, onEd
   );
 }
 
+function isPublishedDilemmaCurrent(dilemma, entry) {
+  const publishedAt = Date.parse(entry.savedAt || entry.updatedAt || "");
+  const updatedAt = Date.parse(dilemma.updatedAt || "");
+
+  if (!Number.isFinite(publishedAt) || !Number.isFinite(updatedAt)) {
+    return true;
+  }
+
+  return publishedAt >= updatedAt;
+}
+
+function getDilemmaPublishBlockReason(dilemma, houses = []) {
+  const normalizedDilemma = normalizeDilemmaRecord(dilemma);
+
+  if (isDilemmaBlank(normalizedDilemma)) {
+    return "게시할 딜레마 기록이 없습니다.";
+  }
+
+  if (!isDilemmaVoteCompleteForPublish(normalizedDilemma, houses)) {
+    return "다섯 가문이 모두 투표한 뒤 게시할 수 있습니다.";
+  }
+
+  if (!normalizedDilemma.selectedOutcome) {
+    return "딜레마 투표 결과를 적용하거나 선택한 뒤 게시할 수 있습니다.";
+  }
+
+  if (!normalizedDilemma.resolutionNotes.trim()) {
+    return "해결 후속을 입력한 뒤 게시할 수 있습니다.";
+  }
+
+  return "";
+}
+
+function isDilemmaVoteCompleteForPublish(dilemma, houses = []) {
+  const participants = getActiveDilemmaVoteHouses(houses);
+  const votes = normalizeDilemmaVotes(dilemma?.votes);
+
+  return participants.length === REQUIRED_HOUSE_COUNT && participants.every((house) => Boolean(votes[house.id]?.side));
+}
+
+function getActiveDilemmaVoteHouses(houses = []) {
+  return (houses || []).filter((house) => house?.hasPassword).slice(0, REQUIRED_HOUSE_COUNT);
+}
+
 function DilemmaFact({ label, value }) {
   return (
     <div className="dilemma-fact">
       <span>{label}</span>
       <strong>{value || "-"}</strong>
     </div>
+  );
+}
+
+function DilemmaVoteBreakdown({ dilemma, houses = [] }) {
+  const votes = normalizeDilemmaVotes(dilemma.votes);
+  const groups = createDilemmaVoteGroups(votes, houses);
+  const hasVotes = groups.some((group) => group.items.length > 0);
+
+  if (!hasVotes) {
+    return null;
+  }
+
+  return (
+    <section className="dilemma-vote-breakdown" aria-label="딜레마 투표 결과 상세">
+      {groups.map((group) => (
+        <div className={`dilemma-vote-breakdown-group tone-${group.side}`} key={group.side}>
+          <header>
+            <span>{group.label}</span>
+            <strong>{group.items.length}</strong>
+          </header>
+          <div className="dilemma-vote-breakdown-list">
+            {group.items.length ? (
+              group.items.map((item) => (
+                <span className="dilemma-vote-breakdown-chip" key={item.houseId}>
+                  <strong>{item.name}</strong>
+                  <small>{item.houseName}</small>
+                  {item.powerTokens > 0 ? <em>{item.powerTokens}권력</em> : null}
+                </span>
+              ))
+            ) : (
+              <span className="dilemma-vote-breakdown-empty">없음</span>
+            )}
+          </div>
+        </div>
+      ))}
+    </section>
   );
 }
 
@@ -2560,7 +4270,10 @@ function DilemmaTextPreview({ label, value }) {
 }
 
 function DilemmaOutcomePreview({ label, outcome, selected }) {
-  const hasContent = outcome.preview || outcome.result;
+  const normalizedOutcome = normalizeDilemmaOutcome(outcome);
+  const hasResourceDeltas = resourceCounters.some(
+    (resource) => (normalizedOutcome.resourceDeltas[resource.id] || 0) !== 0,
+  );
 
   return (
     <article className={`dilemma-outcome-preview${selected ? " selected" : ""}`}>
@@ -2568,11 +4281,8 @@ function DilemmaOutcomePreview({ label, outcome, selected }) {
         <strong>{label}</strong>
         {selected ? <span>선택</span> : null}
       </header>
-      {hasContent ? (
-        <>
-          <DilemmaTextPreview label="공개" value={outcome.preview} />
-          <DilemmaTextPreview label="결과" value={outcome.result} />
-        </>
+      {hasResourceDeltas ? (
+        <DilemmaResourceDeltaPreview deltas={normalizedOutcome.resourceDeltas} />
       ) : (
         <p className="dilemma-outcome-empty">결과 미입력</p>
       )}
@@ -2580,18 +4290,90 @@ function DilemmaOutcomePreview({ label, outcome, selected }) {
   );
 }
 
+function DilemmaResourceDeltaPreview({ deltas }) {
+  const normalizedDeltas = normalizeDilemmaResourceDeltas(deltas);
+  const entries = resourceCounters
+    .map((resource) => ({
+      ...resource,
+      value: normalizedDeltas[resource.id] || 0,
+    }))
+    .filter((resource) => resource.value !== 0);
+
+  if (!entries.length) {
+    return null;
+  }
+
+  return (
+    <div className="dilemma-resource-delta-preview" aria-label="자원 변화">
+      {entries.map((resource) => (
+        <span
+          className={`dilemma-resource-delta-chip tone-${resource.tone} ${
+            resource.value > 0 ? "positive" : "negative"
+          }`}
+          key={resource.id}
+          title={`${resource.label} ${formatDilemmaResourceDelta(resource.value)}`}
+        >
+          <TokenIcon type={resource.icon} />
+          <span>{resource.label}</span>
+          <strong>{formatDilemmaResourceDelta(resource.value)}</strong>
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function DilemmaPhotoStrip({ photos = [] }) {
+  if (!photos.length) {
+    return null;
+  }
+
+  return (
+    <div className="dilemma-photo-strip" aria-label="딜레마 사진">
+      {photos.map((photo) => (
+        <a key={photo.id} href={photo.dataUrl} target="_blank" rel="noreferrer" title={photo.name}>
+          <img src={photo.dataUrl} alt={photo.name || "딜레마 사진"} />
+        </a>
+      ))}
+    </div>
+  );
+}
+
 function DilemmaEditDialog({
   busy,
   draft,
+  isNewDilemma,
   open,
+  resolutionDisabled,
   restoreFocusRef,
+  onAddPhotos,
   onCancel,
   onFieldChange,
   onOutcomeChange,
+  onRemovePhoto,
   onSave,
+  photoBusy,
+  photoError,
 }) {
   const dialogRef = useRef(null);
   const firstInputRef = useRef(null);
+  const handlePhotoPaste = useCallback(
+    (event) => {
+      const imageFiles = getClipboardImageFiles(event.clipboardData);
+
+      if (!imageFiles.length) {
+        return;
+      }
+
+      event.preventDefault();
+
+      if (busy || photoBusy) {
+        return;
+      }
+
+      void onAddPhotos(imageFiles);
+    },
+    [busy, onAddPhotos, photoBusy],
+  );
 
   useEffect(() => {
     if (!open) {
@@ -2647,6 +4429,16 @@ function DilemmaEditDialog({
     };
   }, [onCancel, open, restoreFocusRef]);
 
+  useEffect(() => {
+    if (!open) {
+      return undefined;
+    }
+
+    document.addEventListener("paste", handlePhotoPaste);
+
+    return () => document.removeEventListener("paste", handlePhotoPaste);
+  }, [handlePhotoPaste, open]);
+
   if (!open) {
     return null;
   }
@@ -2671,7 +4463,7 @@ function DilemmaEditDialog({
           </span>
           <div>
             <p className="section-label">공용 기록</p>
-            <h2 id="dilemma-dialog-title">딜레마 편집</h2>
+            <h2 id="dilemma-dialog-title">{isNewDilemma ? "딜레마 작성" : "딜레마 편집"}</h2>
           </div>
         </div>
         <form className="dilemma-form" onSubmit={submit}>
@@ -2690,10 +4482,10 @@ function DilemmaEditDialog({
               placeholder="딜레마 제목"
             />
             <DilemmaInput
-              label="타임 카운터"
+              label="카드 배치 위치"
               value={draft.timeCounterSlot}
               onChange={(value) => onFieldChange("timeCounterSlot", value)}
-              placeholder="라운드/위치"
+              placeholder="예: 시간 칸 3"
             />
           </div>
           <div className="dilemma-dialog-grid">
@@ -2716,51 +4508,41 @@ function DilemmaEditDialog({
             onChange={(value) => onFieldChange("councilNotes", value)}
             placeholder="논의 내용, 협상, 주의할 카드 효과"
           />
-          <fieldset className="dilemma-radio-group">
-            <legend>선택 결과</legend>
-            {[
-              ["", "미정"],
-              ["aye", "찬성"],
-              ["nay", "반대"],
-            ].map(([value, label]) => (
-              <label key={value || "pending"}>
-                <input
-                  type="radio"
-                  name="selectedOutcome"
-                  value={value}
-                  checked={draft.selectedOutcome === value}
-                  onChange={(event) => onFieldChange("selectedOutcome", event.target.value)}
-                />
-                <span>{label}</span>
-              </label>
-            ))}
-          </fieldset>
+          <DilemmaOutcomeSelector
+            value={draft.selectedOutcome}
+            aye={draft.aye}
+            nay={draft.nay}
+            onChange={(value) => onFieldChange("selectedOutcome", value)}
+          />
           <div className="dilemma-outcome-edit-grid">
             <DilemmaOutcomeEditor
               label="찬성"
               outcome={draft.aye}
+              selected={draft.selectedOutcome === "aye"}
               onChange={(field, value) => onOutcomeChange("aye", field, value)}
             />
             <DilemmaOutcomeEditor
               label="반대"
               outcome={draft.nay}
+              selected={draft.selectedOutcome === "nay"}
               onChange={(field, value) => onOutcomeChange("nay", field, value)}
             />
           </div>
-          <div className="dilemma-dialog-grid">
-            <DilemmaTextarea
-              label="투표 메모"
-              value={draft.voteNotes}
-              onChange={(value) => onFieldChange("voteNotes", value)}
-              placeholder="권력 합계, 동률, 전원 패스, 사회자 결정"
-            />
-            <DilemmaTextarea
-              label="해결 후속"
-              value={draft.resolutionNotes}
-              onChange={(value) => onFieldChange("resolutionNotes", value)}
-              placeholder="자원/안정도/모멘텀, 스티커, 봉투, 카드 처리"
-            />
-          </div>
+          <DilemmaTextarea
+            label="해결 후속"
+            value={draft.resolutionNotes}
+            onChange={(value) => onFieldChange("resolutionNotes", value)}
+            placeholder={resolutionDisabled ? "전원 투표 후 입력할 수 있습니다." : "자원/안정도/모멘텀, 스티커, 봉투, 카드 처리"}
+            disabled={resolutionDisabled}
+            hint={resolutionDisabled ? "전원 투표가 끝난 뒤 입력할 수 있습니다." : ""}
+          />
+          <DilemmaPhotoEditor
+            busy={busy || photoBusy}
+            error={photoError}
+            photos={draft.photos}
+            onAddPhotos={onAddPhotos}
+            onRemovePhoto={onRemovePhoto}
+          />
           <div className="session-end-actions">
             <button className="ghost-button" type="button" onClick={onCancel} disabled={busy}>
               취소
@@ -2776,6 +4558,125 @@ function DilemmaEditDialog({
   );
 }
 
+function DilemmaOutcomeSelector({ value, aye, nay, onChange }) {
+  const options = [
+    {
+      value: "",
+      title: "미정",
+      meta: "결의 전",
+      icon: "turn",
+      deltas: {},
+    },
+    {
+      value: "aye",
+      title: "찬성 통과",
+      meta: "찬성 결과",
+      icon: "plus",
+      deltas: normalizeDilemmaOutcome(aye).resourceDeltas,
+    },
+    {
+      value: "nay",
+      title: "반대 통과",
+      meta: "반대 결과",
+      icon: "minus",
+      deltas: normalizeDilemmaOutcome(nay).resourceDeltas,
+    },
+  ];
+
+  return (
+    <fieldset className="dilemma-outcome-selector">
+      <legend>선택 결과</legend>
+      <div className="dilemma-outcome-selector-grid">
+        {options.map((option) => {
+          const checked = value === option.value;
+          const hasDeltas = dilemmaResourceDeltasHaveValues(option.deltas);
+
+          return (
+            <label className={`dilemma-outcome-choice${checked ? " selected" : ""}`} key={option.value || "pending"}>
+              <input
+                type="radio"
+                name="selectedOutcome"
+                value={option.value}
+                checked={checked}
+                onChange={(event) => onChange(event.target.value)}
+              />
+              <span className="dilemma-outcome-choice-mark" aria-hidden="true">
+                <TokenIcon type={option.icon} />
+              </span>
+              <span className="dilemma-outcome-choice-copy">
+                <strong>{option.title}</strong>
+                <small>{option.meta}</small>
+              </span>
+              {hasDeltas ? (
+                <DilemmaResourceDeltaPreview deltas={option.deltas} />
+              ) : (
+                <span className="dilemma-outcome-choice-empty">{option.value ? "변화 없음" : "대기"}</span>
+              )}
+              {checked ? <span className="dilemma-outcome-choice-badge">선택됨</span> : null}
+            </label>
+          );
+        })}
+      </div>
+    </fieldset>
+  );
+}
+
+function DilemmaPhotoEditor({ busy, error, photos, onAddPhotos, onRemovePhoto }) {
+  const fileInputRef = useRef(null);
+  const remaining = Math.max(dilemmaPhotoLimit - photos.length, 0);
+
+  const handleFileChange = (event) => {
+    const { files } = event.target;
+    void onAddPhotos(files).finally(() => {
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
+    });
+  };
+
+  return (
+    <section className="dilemma-photo-editor" aria-labelledby="dilemma-photo-title">
+      <div className="dilemma-photo-editor-head">
+        <div>
+          <h3 id="dilemma-photo-title">사진</h3>
+          <p>결과에 한정하지 않고 보드게임 사진을 선택하거나 Ctrl+V로 붙여넣을 수 있습니다.</p>
+        </div>
+        <label className={`ghost-button dilemma-photo-add${remaining <= 0 ? " disabled" : ""}`}>
+          <TokenIcon type="photo" />
+          <span>사진 첨부</span>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            multiple
+            onChange={handleFileChange}
+            disabled={busy || remaining <= 0}
+          />
+        </label>
+      </div>
+      {photos.length ? (
+        <div className="dilemma-photo-editor-grid">
+          {photos.map((photo) => (
+            <figure key={photo.id} className="dilemma-photo-editor-item">
+              <img src={photo.dataUrl} alt={photo.name || "딜레마 사진"} />
+              <figcaption>{photo.name || "딜레마 사진"}</figcaption>
+              <button type="button" className="stepper-button" onClick={() => onRemovePhoto(photo.id)} disabled={busy}>
+                <TokenIcon type="trash" />
+              </button>
+            </figure>
+          ))}
+        </div>
+      ) : (
+        <p className="dilemma-photo-empty">첨부된 사진이 없습니다.</p>
+      )}
+      <p className="dilemma-photo-limit">
+        {photos.length}/{dilemmaPhotoLimit} · 파일당 최대 8MB, 저장용 이미지는 자동 압축
+      </p>
+      {error ? <p className="dilemma-photo-error" role="alert">{error}</p> : null}
+    </section>
+  );
+}
+
 const DilemmaInput = React.forwardRef(function DilemmaInput({ label, value, onChange, placeholder }, ref) {
   return (
     <label className="dilemma-field">
@@ -2785,32 +4686,107 @@ const DilemmaInput = React.forwardRef(function DilemmaInput({ label, value, onCh
   );
 });
 
-function DilemmaTextarea({ label, value, onChange, placeholder }) {
+function DilemmaTextarea({ label, value, onChange, placeholder, disabled = false, hint = "" }) {
   return (
     <label className="dilemma-field">
       <span>{label}</span>
-      <textarea value={value} onChange={(event) => onChange(event.target.value)} placeholder={placeholder} />
+      <textarea
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        placeholder={placeholder}
+        disabled={disabled}
+      />
+      {hint ? <small>{hint}</small> : null}
     </label>
   );
 }
 
-function DilemmaOutcomeEditor({ label, outcome, onChange }) {
+function DilemmaOutcomeEditor({ label, outcome, selected, onChange }) {
+  const normalizedOutcome = normalizeDilemmaOutcome(outcome);
+
   return (
-    <fieldset className="dilemma-outcome-editor">
+    <fieldset className={`dilemma-outcome-editor${selected ? " selected" : ""}`}>
       <legend>{label}</legend>
-      <DilemmaTextarea
-        label="공개 결과"
-        value={outcome.preview}
-        onChange={(value) => onChange("preview", value)}
-        placeholder="카드 앞면의 공개 기호/보이는 결과"
-      />
-      <DilemmaTextarea
-        label="적용 결과"
-        value={outcome.result}
-        onChange={(value) => onChange("result", value)}
-        placeholder="결정 후 실제 처리할 내용"
+      <DilemmaResourceDeltaEditor
+        label={`${label} 적용 변화`}
+        deltas={normalizedOutcome.resourceDeltas}
+        onChange={(value) => onChange("resourceDeltas", value)}
       />
     </fieldset>
+  );
+}
+
+function DilemmaResourceDeltaEditor({ label, deltas, onChange }) {
+  const normalizedDeltas = normalizeDilemmaResourceDeltas(deltas);
+  const hasValues = dilemmaResourceDeltasHaveValues(normalizedDeltas);
+
+  const updateDelta = (resourceId, amount) => {
+    const nextDeltas = compactDilemmaResourceDeltas({
+      ...normalizedDeltas,
+      [resourceId]: clampDilemmaResourceDelta((normalizedDeltas[resourceId] || 0) + amount),
+    });
+
+    onChange(nextDeltas);
+  };
+
+  const clearDeltas = () => onChange({});
+
+  return (
+    <div className="dilemma-resource-delta-editor" role="group" aria-label={label}>
+      <div className="dilemma-resource-delta-heading">
+        <span>적용 변화</span>
+        <button
+          className="stepper-button compact"
+          type="button"
+          aria-label={`${label} 초기화`}
+          title="초기화"
+          onClick={clearDeltas}
+          disabled={!hasValues}
+        >
+          <TokenIcon type="reset" />
+        </button>
+      </div>
+      <div className="dilemma-resource-delta-list">
+        {resourceCounters.map((resource) => {
+          const value = normalizedDeltas[resource.id] || 0;
+
+          return (
+            <div className={`dilemma-resource-delta-row tone-${resource.tone}`} key={resource.id}>
+              <span className="counter-icon" aria-hidden="true">
+                <TokenIcon type={resource.icon} />
+              </span>
+              <span className="counter-label">{resource.label}</span>
+              <div className="counter-controls">
+                <button
+                  className="stepper-button compact"
+                  type="button"
+                  aria-label={`${label} ${resource.label} 감소`}
+                  onClick={() => updateDelta(resource.id, -1)}
+                  disabled={value <= -dilemmaResourceDeltaLimit}
+                >
+                  <TokenIcon type="minus" />
+                </button>
+                <output
+                  className={`dilemma-resource-delta-value${value > 0 ? " positive" : value < 0 ? " negative" : ""}`}
+                  aria-label={`${resource.label} 변화`}
+                >
+                  {formatDilemmaResourceDelta(value)}
+                </output>
+                <button
+                  className="stepper-button compact"
+                  type="button"
+                  aria-label={`${label} ${resource.label} 증가`}
+                  onClick={() => updateDelta(resource.id, 1)}
+                  disabled={value >= dilemmaResourceDeltaLimit}
+                >
+                  <TokenIcon type="plus" />
+                </button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 
@@ -2947,16 +4923,118 @@ function OpenAgendaTokenRow({ type, selectedTokens, disabled, onToggle }) {
   );
 }
 
+function NarrativeAchievementRow({
+  complete,
+  count,
+  detail,
+  disabled,
+  max,
+  onDecrease,
+  onEdit,
+  onIncrease,
+  onToggle,
+}) {
+  const normalizedDetail = normalizeAchievementDetail(detail, 1);
+  const requiredCount = max || normalizedDetail.requiredCount;
+
+  if (requiredCount > 1) {
+    return (
+      <AchievementProgressRow
+        label="서사 도전 과제"
+        value={count}
+        max={requiredCount}
+        challengeComplete={complete}
+        detail={normalizedDetail}
+        disabled={disabled}
+        onDecrease={onDecrease}
+        onEdit={onEdit}
+        onIncrease={onIncrease}
+        onToggleChallengeComplete={onToggle}
+      />
+    );
+  }
+
+  return (
+    <div className={`achievement-toggle achievement-toggle-row${complete ? " complete" : ""}`}>
+      <button
+        className="achievement-toggle-main"
+        type="button"
+        aria-pressed={complete}
+        onClick={onToggle}
+        disabled={disabled}
+      >
+        <span className="achievement-toggle-icon" aria-hidden="true">
+          <TokenIcon type="seal" />
+        </span>
+        <span className="achievement-item-copy">
+          <span className="achievement-item-title-line">
+            <strong>서사 도전 과제</strong>
+          </span>
+          <AchievementDetailPreview detail={normalizedDetail} />
+        </span>
+      </button>
+      <button
+        className={`achievement-challenge-status${complete ? " complete" : ""}`}
+        type="button"
+        tabIndex={-1}
+        aria-hidden="true"
+        disabled={disabled}
+        onClick={onToggle}
+      >
+        <small>{complete ? "달성" : "미달성"}</small>
+      </button>
+      <button
+        className="achievement-edit-button"
+        type="button"
+        onClick={onEdit}
+        disabled={disabled}
+        title="수정"
+        aria-label="서사 도전 과제 조건과 효과 수정"
+      >
+        <TokenIcon type="edit" />
+      </button>
+    </div>
+  );
+}
+
+function AchievementDetailPreview({ detail }) {
+  const hasCondition = Boolean(detail.conditionText);
+  const hasEffect = Boolean(detail.effectText);
+  const effectMemo = formatAchievementEffectMemo(detail);
+
+  if (!hasCondition && !hasEffect && !effectMemo) {
+    return <span className="achievement-detail-preview muted">조건/효과 미입력</span>;
+  }
+
+  return (
+    <span className="achievement-detail-preview">
+      {hasCondition ? <span>조건: {detail.conditionText}</span> : <span>조건 미입력</span>}
+      {effectMemo ? (
+        <span className="achievement-detail-segment">
+          {" · "}
+          <AchievementEffectBadge detail={detail} />
+          <span>{effectMemo}</span>
+        </span>
+      ) : null}
+      {hasEffect ? <span> · 메모: {detail.effectText}</span> : null}
+    </span>
+  );
+}
+
 function AchievementProgressRow({
   label,
   value,
   max,
   disabled,
   onDecrease,
+  onEdit,
   onIncrease,
+  detail,
   challengeComplete = false,
   onToggleChallengeComplete,
 }) {
+  const normalizedDetail = normalizeAchievementDetail(detail, houseAchievementMarkMax);
+
   return (
     <div
       className={`achievement-progress-row${onToggleChallengeComplete ? " achievement-progress-row--challenge" : ""}${
@@ -2975,7 +5053,10 @@ function AchievementProgressRow({
           <span className="achievement-challenge-icon" aria-hidden="true">
             <TokenIcon type="seal" />
           </span>
-          <strong className="achievement-challenge-title">{label}</strong>
+          <span className="achievement-item-copy">
+            <strong className="achievement-challenge-title">{label}</strong>
+            <AchievementDetailPreview detail={normalizedDetail} />
+          </span>
         </button>
       ) : (
         <span className="achievement-progress-label">{label}</span>
@@ -3016,18 +5097,50 @@ function AchievementProgressRow({
           <small>{challengeComplete ? "달성" : "미달성"}</small>
         </button>
       ) : null}
+      {onEdit ? (
+        <button
+          className="achievement-edit-button"
+          type="button"
+          onClick={onEdit}
+          disabled={disabled}
+          title="수정"
+          aria-label={`${label} 조건과 효과 수정`}
+        >
+          <TokenIcon type="edit" />
+        </button>
+      ) : null}
     </div>
   );
 }
 
-function AlignmentProgressRow({ alignment, value, max, disabled, onDecrease, onIncrease }) {
+function AlignmentProgressRow({
+  alignment,
+  value,
+  max,
+  reward,
+  disabled,
+  onDecrease,
+  onIncrease,
+}) {
+  const complete = value >= max;
+  const normalizedReward = normalizeAlignmentReward(reward);
+  const showReward = complete && normalizedReward.crownType && normalizedReward.count > 0;
+
   return (
-    <div className="alignment-progress-row">
+    <div className={`alignment-progress-row${complete ? " complete" : ""}`}>
       <span>
         <strong>{alignment.koreanLabel}</strong>
         <small>{alignment.label}</small>
       </span>
-      <ProgressPips value={value} max={max} label={`${alignment.koreanLabel} 성향 업적`} />
+      {showReward ? (
+        <AlignmentRewardCrowns
+          crownType={normalizedReward.crownType}
+          count={normalizedReward.count}
+          label={alignment.koreanLabel}
+        />
+      ) : (
+        <ProgressPips value={value} max={max} label={`${alignment.koreanLabel} 성향 업적`} />
+      )}
       <div className="counter-controls">
         <button
           className="stepper-button compact"
@@ -3052,6 +5165,21 @@ function AlignmentProgressRow({ alignment, value, max, disabled, onDecrease, onI
         </button>
       </div>
     </div>
+  );
+}
+
+function AlignmentRewardCrowns({ crownType, count, label }) {
+  const rewardLabel = alignmentRewardTypeLabels[crownType] || "왕관";
+
+  return (
+    <span
+      className={`alignment-reward-crowns tone-${crownType}`}
+      aria-label={`${label} 보상 ${rewardLabel} ${count}개`}
+    >
+      {Array.from({ length: count }, (_, index) => (
+        <TokenIcon type={crownType} key={index} />
+      ))}
+    </span>
   );
 }
 
@@ -3096,10 +5224,98 @@ function formatSignedScore(value) {
   return value > 0 ? `+${value}` : String(value);
 }
 
+function createClientId() {
+  return globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
+function getClipboardImageFiles(clipboardData) {
+  if (!clipboardData) {
+    return [];
+  }
+
+  const itemFiles = Array.from(clipboardData.items || [])
+    .filter((item) => item.kind === "file" && item.type.startsWith("image/"))
+    .map((item) => item.getAsFile())
+    .filter(Boolean);
+
+  if (itemFiles.length) {
+    return itemFiles;
+  }
+
+  return Array.from(clipboardData.files || []).filter((file) => file.type.startsWith("image/"));
+}
+
+async function createDilemmaPhotoAttachment(file) {
+  if (!dilemmaPhotoAllowedTypes.has(file?.type)) {
+    throw new Error("이미지 파일만 첨부할 수 있습니다.");
+  }
+
+  if (file.size > dilemmaPhotoMaxInputBytes) {
+    throw new Error("사진 파일은 8MB 이하만 첨부할 수 있습니다.");
+  }
+
+  const dataUrl = await resizeDilemmaPhoto(file);
+
+  if (dataUrl.length > dilemmaPhotoMaxDataUrlLength) {
+    throw new Error("사진 용량이 큽니다. 더 작은 사진을 선택하세요.");
+  }
+
+  const mimeType = dataUrl.startsWith("data:image/png") ? "image/png" : "image/jpeg";
+
+  return {
+    id: createClientId(),
+    name: file.name || "딜레마 사진",
+    mimeType,
+    dataUrl,
+    size: file.size,
+    addedAt: new Date().toISOString(),
+    addedBy: null,
+    addedByName: "",
+  };
+}
+
+async function resizeDilemmaPhoto(file) {
+  const inputDataUrl = await readFileAsDataUrl(file);
+  const image = await loadImage(inputDataUrl);
+  const scale = Math.min(1, dilemmaPhotoMaxDimension / Math.max(image.naturalWidth, image.naturalHeight));
+  const width = Math.max(1, Math.round(image.naturalWidth * scale));
+  const height = Math.max(1, Math.round(image.naturalHeight * scale));
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const context = canvas.getContext("2d");
+
+  if (!context) {
+    throw new Error("사진을 처리하지 못했습니다.");
+  }
+
+  context.drawImage(image, 0, 0, width, height);
+  return canvas.toDataURL("image/jpeg", dilemmaPhotoQuality);
+}
+
+function readFileAsDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(typeof reader.result === "string" ? reader.result : "");
+    reader.onerror = () => reject(new Error("사진을 읽지 못했습니다."));
+    reader.readAsDataURL(file);
+  });
+}
+
+function loadImage(src) {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => resolve(image);
+    image.onerror = () => reject(new Error("사진을 불러오지 못했습니다."));
+    image.src = src;
+  });
+}
+
 function createDilemmaDraft(value = {}) {
   const candidate = value && typeof value === "object" ? value : {};
 
   return {
+    historyId: normalizeTextField(candidate.historyId),
     cardCode: normalizeTextField(candidate.cardCode),
     title: normalizeTextField(candidate.title),
     timeCounterSlot: normalizeTextField(candidate.timeCounterSlot),
@@ -3111,6 +5327,8 @@ function createDilemmaDraft(value = {}) {
     selectedOutcome: candidate.selectedOutcome === "aye" || candidate.selectedOutcome === "nay" ? candidate.selectedOutcome : "",
     voteNotes: normalizeTextField(candidate.voteNotes),
     resolutionNotes: normalizeTextField(candidate.resolutionNotes),
+    votes: normalizeDilemmaVotes(candidate.votes),
+    photos: normalizeDilemmaPhotos(candidate.photos),
   };
 }
 
@@ -3137,13 +5355,159 @@ function normalizeDilemmaRecord(value) {
   };
 }
 
+function normalizeDilemmaHistoryEntry(value) {
+  const candidate = value && typeof value === "object" ? value : {};
+  const record = normalizeDilemmaRecord(candidate);
+
+  return {
+    ...record,
+    historyId: normalizeTextField(candidate.historyId) || record.historyId || createClientId(),
+    savedAt: typeof candidate.savedAt === "string" ? candidate.savedAt : record.updatedAt,
+    savedBy: typeof candidate.savedBy === "string" ? candidate.savedBy : record.updatedBy,
+    savedByName: normalizeTextField(candidate.savedByName) || record.updatedByName,
+  };
+}
+
 function normalizeDilemmaOutcome(value) {
   const candidate = value && typeof value === "object" ? value : {};
 
   return {
     preview: normalizeTextField(candidate.preview),
     result: normalizeTextField(candidate.result),
+    resourceDeltas: normalizeDilemmaResourceDeltas(candidate.resourceDeltas),
   };
+}
+
+function normalizeDilemmaResourceDeltas(value) {
+  const candidate = value && typeof value === "object" ? value : {};
+  const nextDeltas = {};
+
+  resourceCounters.forEach((resource) => {
+    const delta = clampDilemmaResourceDelta(candidate[resource.id]);
+
+    if (delta !== 0) {
+      nextDeltas[resource.id] = delta;
+    }
+  });
+
+  return nextDeltas;
+}
+
+function normalizeDilemmaVotes(value) {
+  if (!value || typeof value !== "object") {
+    return {};
+  }
+
+  return Object.fromEntries(
+    Object.entries(value)
+      .map(([houseId, vote]) => [houseId, normalizeDilemmaVote(vote)])
+      .filter(([, vote]) => vote.side),
+  );
+}
+
+function normalizeDilemmaVote(value) {
+  const candidate = value && typeof value === "object" ? value : {};
+  const side = candidate.side === "aye" || candidate.side === "nay" || candidate.side === "pass" ? candidate.side : "";
+
+  return {
+    side,
+    powerTokens: side === "pass" ? 0 : normalizeCounter(candidate.powerTokens, inventoryCounterMax.powerTokens, 0),
+    updatedAt: typeof candidate.updatedAt === "string" ? candidate.updatedAt : "",
+    updatedByName: normalizeTextField(candidate.updatedByName),
+  };
+}
+
+function sumDilemmaVotes(votes, participants, side) {
+  return participants.reduce((total, house) => {
+    const vote = normalizeDilemmaVote(votes[house.id]);
+    return total + (vote.side === side ? vote.powerTokens : 0);
+  }, 0);
+}
+
+function createDilemmaVoteGroups(votes, houses = []) {
+  const housesById = new Map((houses || []).map((house) => [house.id, house]));
+  const groupDefs = [
+    { side: "aye", label: "찬성" },
+    { side: "nay", label: "반대" },
+    { side: "pass", label: "기권" },
+  ];
+  const items = Object.entries(votes)
+    .map(([houseId, vote]) => {
+      const normalizedVote = normalizeDilemmaVote(vote);
+
+      if (!normalizedVote.side) {
+        return null;
+      }
+
+      const house = housesById.get(houseId) || HOUSE_CATALOG.find((candidate) => candidate.id === houseId) || null;
+      const houseName = getHouseKoreanName(house);
+      const displayName = normalizedVote.updatedByName || house?.name || houseName;
+
+      return {
+        houseId,
+        side: normalizedVote.side,
+        name: displayName,
+        houseName,
+        houseNumber: house?.number || 0,
+        powerTokens: normalizedVote.powerTokens,
+      };
+    })
+    .filter(Boolean)
+    .sort((left, right) => left.houseNumber - right.houseNumber || left.name.localeCompare(right.name));
+
+  return groupDefs.map((group) => ({
+    ...group,
+    items: items.filter((item) => item.side === group.side),
+  }));
+}
+
+function compactDilemmaResourceDeltas(value) {
+  return normalizeDilemmaResourceDeltas(value);
+}
+
+function dilemmaResourceDeltasHaveValues(value) {
+  const deltas = normalizeDilemmaResourceDeltas(value);
+
+  return resourceCounters.some((resource) => (deltas[resource.id] || 0) !== 0);
+}
+
+function clampDilemmaResourceDelta(value) {
+  const number = Number(value);
+
+  if (!Number.isFinite(number)) {
+    return 0;
+  }
+
+  return Math.max(-dilemmaResourceDeltaLimit, Math.min(dilemmaResourceDeltaLimit, Math.trunc(number)));
+}
+
+function formatDilemmaResourceDelta(value) {
+  const delta = clampDilemmaResourceDelta(value);
+
+  return delta > 0 ? `+${delta}` : String(delta);
+}
+
+function normalizeDilemmaPhotos(value) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .map((photo) => {
+      const candidate = photo && typeof photo === "object" ? photo : {};
+      return {
+        id: normalizeTextField(candidate.id) || createClientId(),
+        name: normalizeTextField(candidate.name) || "딜레마 사진",
+        mimeType: normalizeTextField(candidate.mimeType) || "image/jpeg",
+        dataUrl: normalizeTextField(candidate.dataUrl),
+        size: typeof candidate.size === "number" && Number.isFinite(candidate.size) ? Math.max(0, candidate.size) : 0,
+        addedAt: typeof candidate.addedAt === "string" ? candidate.addedAt : "",
+        addedBy: typeof candidate.addedBy === "string" ? candidate.addedBy : null,
+        addedByName: normalizeTextField(candidate.addedByName),
+      };
+    })
+    .filter((photo) => photo.dataUrl)
+    .slice(0, dilemmaPhotoLimit);
 }
 
 function normalizeDilemmaEditLock(value) {
@@ -3167,7 +5531,7 @@ function normalizeTextField(value) {
 function isDilemmaBlank(dilemma) {
   const draft = createDilemmaDraft(dilemma);
 
-  return [
+  const textFieldsBlank = [
     draft.cardCode,
     draft.title,
     draft.timeCounterSlot,
@@ -3182,6 +5546,13 @@ function isDilemmaBlank(dilemma) {
     draft.resolutionNotes,
     draft.selectedOutcome,
   ].every((value) => !String(value).trim());
+
+  return (
+    textFieldsBlank &&
+    !dilemmaResourceDeltasHaveValues(draft.aye.resourceDeltas) &&
+    !dilemmaResourceDeltasHaveValues(draft.nay.resourceDeltas) &&
+    draft.photos.length === 0
+  );
 }
 
 function formatDilemmaCardLabel(dilemma) {
@@ -3239,23 +5610,48 @@ function normalizeHouseProgress(value) {
     candidate.alignmentAchievements && typeof candidate.alignmentAchievements === "object"
       ? candidate.alignmentAchievements
       : {};
+  const alignmentRewards =
+    candidate.alignmentRewards && typeof candidate.alignmentRewards === "object" ? candidate.alignmentRewards : {};
   const houseAchievements = Array.isArray(candidate.houseAchievements) ? candidate.houseAchievements : [];
   const houseAchievementComplete = Array.isArray(candidate.houseAchievementComplete)
     ? candidate.houseAchievementComplete
     : [];
+  const narrativeAchievementDetail = normalizeAchievementDetail(candidate.narrativeAchievementDetail, 1);
+  const houseAchievementDetails = Array.isArray(candidate.houseAchievementDetails)
+    ? candidate.houseAchievementDetails.map((detail) => normalizeAchievementDetail(detail, houseAchievementMarkMax))
+    : [];
+  const normalizedHouseAchievementDetails = houseAchievementRows.map(
+    (row) => houseAchievementDetails[row.id] || defaults.houseAchievementDetails[row.id],
+  );
+  const narrativeAchievementCount = normalizeCounter(
+    candidate.narrativeAchievementCount,
+    narrativeAchievementDetail.requiredCount,
+    candidate.narrativeAchievement === true
+      ? narrativeAchievementDetail.requiredCount
+      : defaults.narrativeAchievementCount,
+  );
 
   return {
     openAgendaTokens: {
       positive: normalizeOpenAgendaTokens(openAgendaTokens.positive),
       negative: normalizeOpenAgendaTokens(openAgendaTokens.negative),
     },
-    narrativeAchievement: candidate.narrativeAchievement === true,
+    narrativeAchievement:
+      narrativeAchievementCount >= narrativeAchievementDetail.requiredCount ||
+      (narrativeAchievementDetail.requiredCount <= 1 && candidate.narrativeAchievement === true),
+    narrativeAchievementCount,
+    narrativeAchievementDetail,
     houseAchievements: houseAchievementRows.map((row) =>
-      normalizeCounter(houseAchievements[row.id], houseAchievementMarkMax, defaults.houseAchievements[row.id]),
+      normalizeCounter(
+        houseAchievements[row.id],
+        normalizedHouseAchievementDetails[row.id].requiredCount,
+        defaults.houseAchievements[row.id],
+      ),
     ),
     houseAchievementComplete: houseAchievementRows.map((row) =>
       houseAchievementComplete[row.id] === true,
     ),
+    houseAchievementDetails: normalizedHouseAchievementDetails,
     alignmentAchievements: Object.fromEntries(
       houseAlignmentRows.map((alignment) => [
         alignment.agendaId,
@@ -3263,6 +5659,15 @@ function normalizeHouseProgress(value) {
           alignmentAchievements[alignment.agendaId] ?? alignmentAchievements[alignment.id],
           houseAlignmentMarkMax,
           defaults.alignmentAchievements[alignment.agendaId],
+        ),
+      ]),
+    ),
+    alignmentRewards: Object.fromEntries(
+      houseAlignmentRows.map((alignment) => [
+        alignment.agendaId,
+        normalizeAlignmentReward(
+          alignmentRewards[alignment.agendaId] ?? alignmentRewards[alignment.id],
+          defaults.alignmentRewards[alignment.agendaId],
         ),
       ]),
     ),
@@ -3292,11 +5697,148 @@ function createDefaultHouseProgress() {
       negative: [],
     },
     narrativeAchievement: false,
+    narrativeAchievementCount: 0,
+    narrativeAchievementDetail: createDefaultAchievementDetail(1),
     houseAchievements: houseAchievementRows.map(() => 0),
     houseAchievementComplete: houseAchievementRows.map(() => false),
+    houseAchievementDetails: houseAchievementRows.map(() => createDefaultAchievementDetail(houseAchievementMarkMax)),
     alignmentAchievements: Object.fromEntries(houseAlignmentRows.map((alignment) => [alignment.agendaId, 0])),
+    alignmentRewards: Object.fromEntries(
+      houseAlignmentRows.map((alignment) => [alignment.agendaId, createDefaultAlignmentReward()]),
+    ),
     updatedAt: "",
   };
+}
+
+function createDefaultAlignmentReward() {
+  return {
+    crownType: "",
+    count: 0,
+  };
+}
+
+function normalizeAlignmentReward(value, fallback = createDefaultAlignmentReward()) {
+  const candidate = value && typeof value === "object" ? value : {};
+  const crownType = candidate.crownType === "prestige" || candidate.crownType === "crave" ? candidate.crownType : "";
+  const count = normalizeCounter(candidate.count, alignmentRewardCountMax, fallback.count);
+
+  return {
+    crownType: count > 0 ? crownType : "",
+    count: crownType ? count : 0,
+  };
+}
+
+function createDefaultAchievementDetail(requiredCount) {
+  return {
+    conditionText: "",
+    requiredCount,
+    effectIcon: "",
+    effectAmount: 0,
+    effectText: "",
+  };
+}
+
+function normalizeAchievementDetail(value, fallbackRequiredCount) {
+  const candidate = value && typeof value === "object" ? value : {};
+  const effectIcon = normalizeAchievementEffectIcon(candidate.effectIcon);
+
+  return {
+    conditionText: normalizeAchievementText(candidate.conditionText),
+    requiredCount: normalizeRequiredCount(candidate.requiredCount, fallbackRequiredCount),
+    effectIcon,
+    effectAmount: normalizeAchievementEffectAmount(candidate.effectAmount, effectIcon),
+    effectText: normalizeAchievementText(candidate.effectText),
+  };
+}
+
+function updateAchievementDetailDraft(detail, field, value) {
+  if (field === "requiredCount") {
+    return {
+      ...detail,
+      requiredCount: normalizeRequiredCount(value),
+    };
+  }
+
+  if (field === "effectIcon") {
+    const effectIcon = normalizeAchievementEffectIcon(value);
+
+    return {
+      ...detail,
+      effectIcon,
+      effectAmount: normalizeAchievementEffectAmount(detail.effectAmount, effectIcon),
+    };
+  }
+
+  if (field === "effectAmount") {
+    return {
+      ...detail,
+      effectAmount: normalizeAchievementEffectAmount(value, detail.effectIcon),
+    };
+  }
+
+  return {
+    ...detail,
+    [field]: value,
+  };
+}
+
+function getAchievementEffectOption(effectIcon) {
+  return achievementEffectOptionById[effectIcon] || achievementEffectOptionById[""];
+}
+
+function normalizeAchievementEffectIcon(value) {
+  return typeof value === "string" && achievementEffectOptionById[value] ? value : "";
+}
+
+function normalizeAchievementEffectAmount(value, effectIcon) {
+  if (!achievementEffectAmountOptionIds.has(effectIcon)) {
+    return 0;
+  }
+
+  return normalizeCounter(value, achievementEffectAmountMax, 0);
+}
+
+function formatAchievementEffectMemo(detail) {
+  const effectIcon = normalizeAchievementEffectIcon(detail?.effectIcon);
+  const option = getAchievementEffectOption(effectIcon);
+
+  if (!option.id) {
+    return "";
+  }
+
+  if (!option.amount) {
+    return option.memo;
+  }
+
+  const amount = normalizeAchievementEffectAmount(detail?.effectAmount, option.id);
+  return amount > 0 ? `${option.label} +${amount}` : `${option.label} 수치 미입력`;
+}
+
+function normalizeAchievementText(value) {
+  return typeof value === "string"
+    ? value.replace(/\r\n?/g, "\n").trim().slice(0, achievementDetailTextMaxLength)
+    : "";
+}
+
+function normalizeRequiredCount(value, fallback = houseAchievementMarkMax) {
+  const fallbackValue = getAchievementRequiredCount({ requiredCount: fallback });
+  const number = typeof value === "number" ? value : Number(value);
+
+  if (!Number.isFinite(number)) {
+    return fallbackValue;
+  }
+
+  return Math.max(1, Math.min(houseAchievementMarkMax, Math.trunc(number)));
+}
+
+function getAchievementRequiredCount(detail) {
+  const number = Number(detail?.requiredCount);
+
+  if (!Number.isFinite(number)) {
+    return houseAchievementMarkMax;
+  }
+
+  return Math.max(1, Math.min(houseAchievementMarkMax, Math.trunc(number)));
 }
 
 function normalizeCounter(value, max, fallback) {
@@ -3308,6 +5850,10 @@ function normalizeCounter(value, max, fallback) {
 }
 
 function clampCounter(value, max) {
+  if (!Number.isFinite(value)) {
+    return 0;
+  }
+
   return Math.max(0, Math.min(max, Math.trunc(value)));
 }
 
@@ -3318,14 +5864,60 @@ function inventoriesMatch(left, right) {
 function progressMatches(left, right) {
   return (
     left.narrativeAchievement === right.narrativeAchievement &&
+    left.narrativeAchievementCount === right.narrativeAchievementCount &&
+    achievementDetailsMatch(left.narrativeAchievementDetail, right.narrativeAchievementDetail) &&
     arraysMatch(left.openAgendaTokens.positive, right.openAgendaTokens.positive) &&
     arraysMatch(left.openAgendaTokens.negative, right.openAgendaTokens.negative) &&
     arraysMatch(left.houseAchievements, right.houseAchievements) &&
     arraysMatch(left.houseAchievementComplete, right.houseAchievementComplete) &&
+    houseAchievementRows.every((row) =>
+      achievementDetailsMatch(left.houseAchievementDetails[row.id], right.houseAchievementDetails[row.id]),
+    ) &&
+    houseAlignmentRows.every(
+      (alignment) => left.alignmentAchievements[alignment.agendaId] === right.alignmentAchievements[alignment.agendaId],
+    ) &&
+    houseAlignmentRows.every((alignment) =>
+      alignmentRewardsMatch(left.alignmentRewards?.[alignment.agendaId], right.alignmentRewards?.[alignment.agendaId]),
+    )
+  );
+}
+
+function progressMatchesExceptAlignmentRewards(left, right) {
+  return (
+    left.narrativeAchievement === right.narrativeAchievement &&
+    left.narrativeAchievementCount === right.narrativeAchievementCount &&
+    achievementDetailsMatch(left.narrativeAchievementDetail, right.narrativeAchievementDetail) &&
+    arraysMatch(left.openAgendaTokens.positive, right.openAgendaTokens.positive) &&
+    arraysMatch(left.openAgendaTokens.negative, right.openAgendaTokens.negative) &&
+    arraysMatch(left.houseAchievements, right.houseAchievements) &&
+    arraysMatch(left.houseAchievementComplete, right.houseAchievementComplete) &&
+    houseAchievementRows.every((row) =>
+      achievementDetailsMatch(left.houseAchievementDetails[row.id], right.houseAchievementDetails[row.id]),
+    ) &&
     houseAlignmentRows.every(
       (alignment) => left.alignmentAchievements[alignment.agendaId] === right.alignmentAchievements[alignment.agendaId],
     )
   );
+}
+
+function achievementDetailsMatch(left, right) {
+  const leftDetail = normalizeAchievementDetail(left, houseAchievementMarkMax);
+  const rightDetail = normalizeAchievementDetail(right, houseAchievementMarkMax);
+
+  return (
+    leftDetail.conditionText === rightDetail.conditionText &&
+    leftDetail.requiredCount === rightDetail.requiredCount &&
+    leftDetail.effectIcon === rightDetail.effectIcon &&
+    leftDetail.effectAmount === rightDetail.effectAmount &&
+    leftDetail.effectText === rightDetail.effectText
+  );
+}
+
+function alignmentRewardsMatch(left, right) {
+  const leftReward = normalizeAlignmentReward(left);
+  const rightReward = normalizeAlignmentReward(right);
+
+  return leftReward.crownType === rightReward.crownType && leftReward.count === rightReward.count;
 }
 
 function normalizeOpenAgendaTokens(value) {
@@ -3356,38 +5948,20 @@ function arraysMatch(left = [], right = []) {
   return left.length === right.length && left.every((value, index) => value === right[index]);
 }
 
-function readStoredInventoryDraft(storageKey) {
-  try {
-    const raw = window.sessionStorage.getItem(storageKey);
-    return raw ? normalizeInventory(JSON.parse(raw)) : null;
-  } catch {
-    return null;
-  }
-}
-
-function readStoredProgressDraft(storageKey) {
-  try {
-    const raw = window.sessionStorage.getItem(storageKey);
-    return raw ? normalizeHouseProgress(JSON.parse(raw)) : null;
-  } catch {
-    return null;
-  }
-}
-
-function OwnChoice({ agenda }) {
+function OwnChoice({ agenda, onOpenSecretAgendaGuide }) {
   if (!agenda) {
     return null;
   }
 
   return (
     <div className="own-choice">
-      <span className="choice-seal" aria-hidden="true">
-        <TokenIcon type="seal" />
-      </span>
       <div>
-        <h3>
-          <AgendaTitle agenda={agenda} />
-        </h3>
+        <div className="own-choice-heading">
+          <h3>
+            <AgendaTitle agenda={agenda} />
+          </h3>
+          <SecretAgendaScoreHelpButton onClick={onOpenSecretAgendaGuide} />
+        </div>
         <AgendaScoringBoard agenda={agenda} />
       </div>
     </div>
@@ -3426,7 +6000,7 @@ function ActionPanel({ state, busy, mutate }) {
   );
 }
 
-function AgendaList({ agendas, busy, mode = "choose", mutate }) {
+function AgendaList({ agendas, busy, mode = "choose", mutate, onOpenSecretAgendaGuide }) {
   const [expanded, setExpanded] = useState(false);
   const discardMode = mode === "discard";
 
@@ -3445,7 +6019,15 @@ function AgendaList({ agendas, busy, mode = "choose", mutate }) {
       </div>
       <div className="agenda-list" id="agenda-list">
         {agendas.map((agenda) => (
-          <AgendaCard key={agenda.id} agenda={agenda} busy={busy} expanded={expanded} mode={mode} mutate={mutate} />
+          <AgendaCard
+            key={agenda.id}
+            agenda={agenda}
+            busy={busy}
+            expanded={expanded}
+            mode={mode}
+            mutate={mutate}
+            onOpenSecretAgendaGuide={onOpenSecretAgendaGuide}
+          />
         ))}
       </div>
       <div className="agenda-section-controls">
@@ -3464,7 +6046,7 @@ function AgendaList({ agendas, busy, mode = "choose", mutate }) {
   );
 }
 
-function AgendaCard({ agenda, busy, expanded, mode = "choose", mutate }) {
+function AgendaCard({ agenda, busy, expanded, mode = "choose", mutate, onOpenSecretAgendaGuide }) {
   const detailId = `agenda-detail-${agenda.id}`;
   const discardMode = mode === "discard";
   const choose = () => {
@@ -3487,7 +6069,10 @@ function AgendaCard({ agenda, busy, expanded, mode = "choose", mutate }) {
         </span>
         <div className="agenda-card-title">
           <div className="agenda-card-label-row">
-            <p className="section-label">비밀 의제</p>
+            <div className="agenda-card-label-actions">
+              <p className="section-label">비밀 의제</p>
+              <SecretAgendaScoreHelpButton onClick={onOpenSecretAgendaGuide} />
+            </div>
             <button className="primary-button" type="button" onClick={choose} disabled={busy}>
               <TokenIcon type={discardMode ? "flame" : "key"} />
               {discardMode ? "폐기" : "채택"}
@@ -3502,6 +6087,24 @@ function AgendaCard({ agenda, busy, expanded, mode = "choose", mutate }) {
         <AgendaScoringBoard agenda={agenda} />
       </div>
     </article>
+  );
+}
+
+function SecretAgendaScoreHelpButton({ onClick }) {
+  if (!onClick) {
+    return null;
+  }
+
+  return (
+    <button
+      className="agenda-score-help-button"
+      type="button"
+      aria-label="비밀 의제 점수 산정방식 자세히 보기"
+      onClick={onClick}
+    >
+      <TokenIcon type="help" />
+      비밀 의제 점수
+    </button>
   );
 }
 
@@ -3584,15 +6187,20 @@ function AgendaScoreTrack({ title, items }) {
 }
 
 function TokenIcon({ type }) {
+  if (type === "crown" || type === "prestige" || type === "crave") {
+    return <CrownIcon tone={type} />;
+  }
+
   const Icon = {
     balance: BalanceOutlinedIcon,
     coin: PaidOutlinedIcon,
-    crown: EmojiEventsOutlinedIcon,
-    crave: LocalFireDepartmentOutlinedIcon,
+    edit: EditOutlinedIcon,
     exit: LogoutOutlinedIcon,
     external: OpenInNewOutlinedIcon,
     flame: LocalFireDepartmentOutlinedIcon,
     gear: MenuOutlinedIcon,
+    help: HelpOutlineOutlinedIcon,
+    history: HistoryOutlinedIcon,
     house: HomeWorkOutlinedIcon,
     influence: VisibilityOutlinedIcon,
     key: VpnKeyOutlinedIcon,
@@ -3601,8 +6209,8 @@ function TokenIcon({ type }) {
     minus: RemoveOutlinedIcon,
     morale: MilitaryTechOutlinedIcon,
     plus: AddOutlinedIcon,
+    photo: PhotoCameraOutlinedIcon,
     power: ShieldOutlinedIcon,
-    prestige: EmojiEventsOutlinedIcon,
     reset: RestartAltOutlinedIcon,
     save: SaveOutlinedIcon,
     scroll: ArticleOutlinedIcon,
@@ -3612,6 +6220,7 @@ function TokenIcon({ type }) {
     soundOn: VolumeUpOutlinedIcon,
     tip: MenuBookOutlinedIcon,
     turn: AutorenewOutlinedIcon,
+    trash: DeleteOutlineOutlinedIcon,
     undo: UndoOutlinedIcon,
     warning: WarningAmberOutlinedIcon,
     wealth: PaidOutlinedIcon,
@@ -3619,6 +6228,25 @@ function TokenIcon({ type }) {
   }[type] || AddOutlinedIcon;
 
   return <Icon aria-hidden="true" focusable="false" />;
+}
+
+function CrownIcon({ tone = "crown" }) {
+  const className =
+    tone === "prestige"
+      ? "crown-icon crown-icon-light"
+      : tone === "crave"
+        ? "crown-icon crown-icon-dark"
+        : "crown-icon";
+
+  return (
+    <svg className={className} viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <path
+        className="crown-fill"
+        d="M4.2 8.1 8.3 12l3.7-6.3 3.7 6.3 4.1-3.9-1.5 9.7H5.7L4.2 8.1Z"
+      />
+      <path className="crown-rim" d="M6.2 20h11.6" />
+    </svg>
+  );
 }
 
 function HouseIcon({ motif }) {
