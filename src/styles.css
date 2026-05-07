@@ -1446,8 +1446,8 @@ label {
 
 .carrot-wait-action {
   display: flex;
-  align-items: center;
-  justify-content: center;
+  align-items: flex-start;
+  justify-content: flex-start;
   width: 100%;
   min-width: 0;
   margin-top: 10px;
@@ -1455,8 +1455,8 @@ label {
 
 .carrot-button {
   display: inline-flex;
-  align-items: center;
-  justify-content: center;
+  align-items: flex-start;
+  justify-content: flex-start;
   width: 100%;
   min-width: 0;
   max-width: 100%;
@@ -1470,8 +1470,8 @@ label {
   font-size: 0.78rem;
   gap: 7px;
   line-height: 1;
-  padding: 0 10px;
-  text-align: center;
+  padding: 8px 10px;
+  text-align: left;
   white-space: nowrap;
 }
 
@@ -1483,6 +1483,9 @@ label {
 }
 
 .carrot-button-icon {
+  position: relative;
+  top: -2px;
+  left: -2px;
   display: inline-grid;
   flex: 0 0 auto;
   place-items: center;
@@ -2089,6 +2092,14 @@ label {
   background: rgba(216, 178, 90, 0.12);
 }
 
+.achievement-toggle > span:last-child {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+}
+
 .achievement-toggle-icon {
   display: grid;
   place-items: center;
@@ -2110,6 +2121,8 @@ label {
 .achievement-toggle small,
 .alignment-progress-row small {
   display: block;
+  flex: 0 0 auto;
+  text-align: right;
   color: var(--muted);
   font-size: 0.66rem;
   font-weight: 850;
@@ -2248,8 +2261,8 @@ label {
   .inventory-panel {
     grid-area: inventory;
     align-self: start;
-    justify-self: start;
-    width: min(100%, 1040px);
+    justify-self: stretch;
+    width: 100%;
     height: auto;
   }
 
@@ -2496,8 +2509,8 @@ label {
       "progress progress";
     align-content: start;
     align-self: start;
-    justify-self: start;
-    width: min(100%, 1180px);
+    justify-self: stretch;
+    width: 100%;
     height: auto;
     gap: 12px;
     padding: 14px;
