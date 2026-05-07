@@ -102,11 +102,11 @@ const openAgendaTokenTypes = [
 ];
 const openAgendaTokenLimit = 2;
 const houseAchievementRows = [
-  { id: 0, label: "업적 1" },
-  { id: 1, label: "업적 2" },
-  { id: 2, label: "업적 3" },
+  { id: 0, label: "도전 과제 1" },
+  { id: 1, label: "도전 과제 2" },
+  { id: 2, label: "도전 과제 3" },
 ];
-const houseAchievementMarkMax = 3;
+const houseAchievementMarkMax = 5;
 const houseAlignmentMarkMax = 4;
 const boardRows = Array.from({ length: 17 }, (_, index) => index + 1);
 const agendaScoringZones = {
@@ -814,6 +814,21 @@ function LoginPanel({
             이번 회의에 참여할 5개 가문을 고릅니다. 명망이 낮은 가문부터, 동률이면 가문 번호순으로 비밀 의제를 선택합니다.
           </p>
         </div>
+        {selectedHouse ? (
+          <section className="entry-house-profile" aria-live="polite">
+            <div className="entry-house-profile-heading">
+              <div>
+                <p className="section-label">가문 설명</p>
+                <h3>{getHouseKoreanName(selectedHouse)}</h3>
+              </div>
+              <span>#{String(selectedHouse.number).padStart(2, "0")}</span>
+            </div>
+            <p className="entry-house-motto">{selectedHouse.motto}</p>
+            <p>{selectedHouse.profile}</p>
+          </section>
+        ) : (
+          <p className="entry-house-placeholder">가문을 선택하면 이곳에 해당 가문의 설명이 표시됩니다.</p>
+        )}
       </div>
 
       <form className="seat-ledger" onSubmit={onSubmit} aria-busy={busy}>
@@ -1186,7 +1201,6 @@ function HouseProfileCard({ house, displayName }) {
           <HouseProfileField label="서사 목표" value={house.goal} />
         </div>
         <HouseAlignmentTrack alignments={house.alignments || []} />
-        <p title={house.profile}>{house.profile}</p>
       </div>
     </section>
   );
@@ -1205,11 +1219,6 @@ function HouseAlignmentTrack({ alignments }) {
             <span>
               {alignment.koreanLabel}
             </span>
-            <div className="house-alignment-boxes" aria-hidden="true">
-              {Array.from({ length: 5 }, (_, index) => (
-                <i key={index} className={preferred && index >= 3 ? "bonus" : ""} />
-              ))}
-            </div>
           </div>
         );
       })}
@@ -1327,6 +1336,22 @@ function CarrotWaitAction() {
 
 function formatAgendaTitle(agenda) {
   return agenda?.name || "";
+}
+
+function formatAgendaEnglishTitle(agenda) {
+  return agenda?.englishName || "";
+}
+
+function AgendaTitle({ agenda }) {
+  const title = formatAgendaTitle(agenda);
+  const englishTitle = formatAgendaEnglishTitle(agenda);
+
+  return (
+    <>
+      <span className="agenda-title-korean">{title}</span>
+      {englishTitle && englishTitle !== title ? <span className="agenda-title-english">{englishTitle}</span> : null}
+    </>
+  );
 }
 
 function PersonalInventoryPanel({ inventory, progress, ownChoice, houseId, busy, mutate, onDirtyChange }) {
@@ -1498,104 +1523,130 @@ function PersonalInventoryPanel({ inventory, progress, ownChoice, houseId, busy,
       </div>
 
       <div className="inventory-section resource-section">
-        <h3>재화 · 권력 · 명망 · 갈망</h3>
-        <div className="inventory-resource-grid">
-          {tokenCounters.map((counter) => (
-            <CounterRow
-              key={counter.id}
-              label={counter.label}
-              value={draft[counter.id]}
-              max={counter.max}
-              icon={counter.icon}
-              tone={counter.tone}
-              disabled={busy}
-              onDecrease={() => adjustCounter(counter, -1)}
-              onIncrease={() => adjustCounter(counter, 1)}
-            />
-          ))}
-          {scoreTrackCounters.map((counter) => (
-            <ScoreTrackRow
-              key={counter.id}
-              label={counter.label}
-              value={draft[counter.id]}
-              max={counter.max}
-              icon={counter.icon}
-              tone={counter.tone}
-              disabled={busy}
-              onDecrease={() => adjustCounter(counter, -1)}
-              onIncrease={() => adjustCounter(counter, 1)}
-            />
-          ))}
+        <div className="inventory-counter-group">
+          <h3>재화 · 권력</h3>
+          <div className="inventory-resource-grid">
+            {tokenCounters.map((counter) => (
+              <CounterRow
+                key={counter.id}
+                label={counter.label}
+                value={draft[counter.id]}
+                max={counter.max}
+                icon={counter.icon}
+                tone={counter.tone}
+                disabled={busy}
+                onDecrease={() => adjustCounter(counter, -1)}
+                onIncrease={() => adjustCounter(counter, 1)}
+              />
+            ))}
+          </div>
+        </div>
+        <div className="inventory-counter-group">
+          <h3>명망 · 갈망</h3>
+          <div className="inventory-resource-grid">
+            {scoreTrackCounters.map((counter) => (
+              <ScoreTrackRow
+                key={counter.id}
+                label={counter.label}
+                value={draft[counter.id]}
+                max={counter.max}
+                icon={counter.icon}
+                tone={counter.tone}
+                disabled={busy}
+                onDecrease={() => adjustCounter(counter, -1)}
+                onIncrease={() => adjustCounter(counter, 1)}
+              />
+            ))}
+          </div>
         </div>
       </div>
 
-      <div className={`inventory-section progress-section${ownChoice ? " has-own-choice" : ""}`}>
-        <div className="progress-choice-layout">
-          <div className="progress-column">
-            <h3>공개 의제와 업적</h3>
-            <div className="progress-ledger">
-              <div className="open-agenda-ledger">
-                {openAgendaTokenTypes.map((type) => (
-                  <OpenAgendaTokenRow
-                    key={type.id}
-                    type={type}
-                    selectedTokens={progressDraft.openAgendaTokens[type.id] || []}
-                    disabled={busy}
-                    onToggle={(resourceId) => toggleOpenAgendaToken(type.id, resourceId)}
-                  />
-                ))}
-              </div>
-              <div className="achievement-ledger">
-                <button
-                  className={`achievement-toggle${progressDraft.narrativeAchievement ? " complete" : ""}`}
-                  type="button"
-                  aria-pressed={progressDraft.narrativeAchievement}
-                  onClick={toggleNarrativeAchievement}
+      <div className={`inventory-section inventory-agenda-section${ownChoice ? " has-secret-agenda" : ""}`}>
+        <h3 className="agenda-section-title">
+          <span>의제</span>
+          <span className="agenda-type-legend" aria-hidden="true">
+            <span>
+              <i className="agenda-type-dot common" />
+              공통
+            </span>
+            {ownChoice ? (
+              <span>
+                <i className="agenda-type-dot secret" />
+                비밀
+              </span>
+            ) : null}
+          </span>
+        </h3>
+        <div className="agenda-progress-grid">
+          <div className="agenda-progress-group open-agenda-group" aria-label="공통 의제">
+            <div className="open-agenda-ledger">
+              {openAgendaTokenTypes.map((type) => (
+                <OpenAgendaTokenRow
+                  key={type.id}
+                  type={type}
+                  selectedTokens={progressDraft.openAgendaTokens[type.id] || []}
                   disabled={busy}
-                >
-                  <span className="achievement-toggle-icon" aria-hidden="true">
-                    <TokenIcon type="seal" />
-                  </span>
-                  <span>
-                    <strong>서사 업적</strong>
-                    <small>{progressDraft.narrativeAchievement ? "달성" : "미달성"}</small>
-                  </span>
-                </button>
-                <div className="achievement-track-list">
-                  {houseAchievementRows.map((row) => (
-                    <AchievementProgressRow
-                      key={row.id}
-                      label={row.label}
-                      value={progressDraft.houseAchievements[row.id] || 0}
-                      max={houseAchievementMarkMax}
-                      disabled={busy}
-                      onDecrease={() => adjustHouseAchievement(row.id, -1)}
-                      onIncrease={() => adjustHouseAchievement(row.id, 1)}
-                    />
-                  ))}
-                </div>
-                <div className="alignment-achievement-list" aria-label="성향 업적">
-                  {houseAlignmentRows.map((alignment) => (
-                    <AlignmentProgressRow
-                      key={alignment.agendaId}
-                      alignment={alignment}
-                      value={progressDraft.alignmentAchievements[alignment.agendaId] || 0}
-                      max={houseAlignmentMarkMax}
-                      disabled={busy}
-                      onDecrease={() => adjustAlignmentAchievement(alignment.agendaId, -1)}
-                      onIncrease={() => adjustAlignmentAchievement(alignment.agendaId, 1)}
-                    />
-                  ))}
-                </div>
-              </div>
+                  onToggle={(resourceId) => toggleOpenAgendaToken(type.id, resourceId)}
+                />
+              ))}
             </div>
           </div>
           {ownChoice ? (
-            <div className="inventory-secret-agenda">
-              <h3>비밀 의제</h3>
+            <div className="agenda-progress-group inventory-secret-agenda" aria-label="비밀 의제">
               <OwnChoice agenda={ownChoice} />
             </div>
           ) : null}
+        </div>
+      </div>
+
+      <div className="inventory-section progress-section">
+        <div className="achievement-progress-panel">
+          <h3>업적</h3>
+          <div className="achievement-ledger">
+            <div className="achievement-primary-list">
+              <button
+                className={`achievement-toggle${progressDraft.narrativeAchievement ? " complete" : ""}`}
+                type="button"
+                aria-pressed={progressDraft.narrativeAchievement}
+                onClick={toggleNarrativeAchievement}
+                disabled={busy}
+              >
+                <span className="achievement-toggle-icon" aria-hidden="true">
+                  <TokenIcon type="seal" />
+                </span>
+                <span>
+                  <strong>서사 목표</strong>
+                  <small>{progressDraft.narrativeAchievement ? "달성" : "미달성"}</small>
+                </span>
+              </button>
+              <div className="achievement-track-list">
+                {houseAchievementRows.map((row) => (
+                  <AchievementProgressRow
+                    key={row.id}
+                    label={row.label}
+                    value={progressDraft.houseAchievements[row.id] || 0}
+                    max={houseAchievementMarkMax}
+                    disabled={busy}
+                    onDecrease={() => adjustHouseAchievement(row.id, -1)}
+                    onIncrease={() => adjustHouseAchievement(row.id, 1)}
+                  />
+                ))}
+              </div>
+            </div>
+            <div className="alignment-achievement-list" aria-label="성향 업적">
+              {houseAlignmentRows.map((alignment) => (
+                <AlignmentProgressRow
+                  key={alignment.agendaId}
+                  alignment={alignment}
+                  value={progressDraft.alignmentAchievements[alignment.agendaId] || 0}
+                  max={houseAlignmentMarkMax}
+                  disabled={busy}
+                  onDecrease={() => adjustAlignmentAchievement(alignment.agendaId, -1)}
+                  onIncrease={() => adjustAlignmentAchievement(alignment.agendaId, 1)}
+                />
+              ))}
+            </div>
+          </div>
         </div>
       </div>
 
@@ -1634,6 +1685,22 @@ function ScoreTrackRow({ label, value, max, icon, tone, disabled, onDecrease, on
         </output>
       </div>
       <div className="score-track-body">
+        <div className="score-track-groups" aria-hidden="true">
+          {groups.map((groupSize, groupIndex) => {
+            const start = offset;
+            offset += groupSize;
+
+            return (
+              <div className="score-track-group" key={`${label}-${groupIndex}`}>
+                {Array.from({ length: groupSize }, (_, index) => {
+                  const checked = start + index < value;
+
+                  return <span className={checked ? "checked" : ""} key={index} />;
+                })}
+              </div>
+            );
+          })}
+        </div>
         <div className="score-track-header">
           <div className="score-track-rail" aria-hidden="true">
             <span />
@@ -1658,22 +1725,6 @@ function ScoreTrackRow({ label, value, max, icon, tone, disabled, onDecrease, on
               <TokenIcon type="plus" />
             </button>
           </div>
-        </div>
-        <div className="score-track-groups" aria-hidden="true">
-          {groups.map((groupSize, groupIndex) => {
-            const start = offset;
-            offset += groupSize;
-
-            return (
-              <div className="score-track-group" key={`${label}-${groupIndex}`}>
-                {Array.from({ length: groupSize }, (_, index) => {
-                  const checked = start + index < value;
-
-                  return <span className={checked ? "checked" : ""} key={index} />;
-                })}
-              </div>
-            );
-          })}
         </div>
       </div>
     </div>
@@ -2024,7 +2075,9 @@ function OwnChoice({ agenda }) {
         <TokenIcon type="seal" />
       </span>
       <div>
-        <h3>{formatAgendaTitle(agenda)}</h3>
+        <h3>
+          <AgendaTitle agenda={agenda} />
+        </h3>
         <AgendaScoringBoard agenda={agenda} />
       </div>
     </div>
@@ -2112,7 +2165,9 @@ function AgendaCard({ agenda, busy, expanded, mutate }) {
               채택
             </button>
           </div>
-          <h3>{formatAgendaTitle(agenda)}</h3>
+          <h3>
+            <AgendaTitle agenda={agenda} />
+          </h3>
         </div>
       </div>
       <div className="agenda-card-detail" hidden={!expanded} id={detailId}>
@@ -2159,7 +2214,7 @@ function AgendaResourceZoneStrip({ agenda }) {
 
           return (
             <span
-              className={`agenda-zone-cell${active ? " active" : ""}`}
+              className={`agenda-zone-cell${row === 9 ? " center" : ""}${active ? " active" : ""}`}
               key={row}
               aria-label={`${row}번 줄${active ? " 점수 구간" : ""}`}
             >

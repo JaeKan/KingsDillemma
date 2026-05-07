@@ -186,7 +186,7 @@ assert.deepEqual(normalizedInventoryState.progress.gamam.openAgendaTokens, {
   negative: ["knowledge", "welfare"],
 });
 assert.equal(normalizedInventoryState.progress.gamam.narrativeAchievement, true);
-assert.deepEqual(normalizedInventoryState.progress.gamam.houseAchievements, [1, 3, 0]);
+assert.deepEqual(normalizedInventoryState.progress.gamam.houseAchievements, [1, 5, 0]);
 assert.equal(normalizedInventoryState.progress.gamam.alignmentAchievements.extremist, 2);
 assert.equal(normalizedInventoryState.progress.gamam.alignmentAchievements.greedy, 4);
 
