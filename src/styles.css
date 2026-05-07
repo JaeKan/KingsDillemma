@@ -397,6 +397,55 @@ svg:not(.MuiSvgIcon-root) {
   gap: 10px;
 }
 
+.settings-float-actions {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.settings-refresh-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 54px;
+  padding: 0 16px 0 14px;
+  border: 1px solid rgba(234, 223, 189, 0.26);
+  border-radius: 999px;
+  background: rgba(17, 25, 24, 0.92);
+  color: var(--ink);
+  font-family: inherit;
+  font-size: 0.82rem;
+  font-weight: 850;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+  box-shadow: var(--shadow);
+  cursor: pointer;
+}
+
+.settings-refresh-button:hover:not(:disabled) {
+  background: rgba(36, 55, 49, 0.96);
+  border-color: rgba(216, 178, 90, 0.56);
+}
+
+.settings-refresh-button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.settings-refresh-button span {
+  white-space: nowrap;
+}
+
+.settings-refresh-button svg {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  color: var(--gold-2);
+}
+
 .settings-toggle {
   width: 54px;
   min-height: 54px;
@@ -1956,8 +2005,23 @@ label {
   min-height: 112px;
 }
 
+.inventory-resource-grid .score-track-body {
+  grid-template-rows: minmax(0, 1fr) auto;
+  height: 100%;
+  min-height: 0;
+}
+
 .inventory-resource-grid .score-track-summary {
   grid-template-columns: 30px minmax(0, 1fr) auto;
+}
+
+.inventory-resource-grid .counter-row .counter-label,
+.inventory-resource-grid .score-track-summary .counter-label {
+  font-size: 1.08rem;
+}
+
+.inventory-resource-grid .counter-row .counter-controls output {
+  font-size: 1.08rem;
 }
 
 .inventory-resource-grid .score-track-value {
@@ -1969,6 +2033,10 @@ label {
 .inventory-resource-grid .score-track-groups {
   align-self: stretch;
   justify-content: stretch;
+  align-items: stretch;
+  align-content: stretch;
+  height: 100%;
+  min-height: 0;
 }
 
 .inventory-resource-grid .score-track-header {
@@ -1976,8 +2044,25 @@ label {
 }
 
 .inventory-resource-grid .score-track-group {
-  grid-template-columns: repeat(10, minmax(6px, 1fr));
-  grid-auto-rows: minmax(6px, 1fr);
+  --score-track-cell-min: 10px;
+  height: 100%;
+  min-height: 0;
+  align-content: start;
+  align-items: start;
+  justify-content: start;
+  justify-items: stretch;
+  grid-template-columns: repeat(10, minmax(var(--score-track-cell-min), 1fr));
+  grid-auto-rows: auto;
+  gap: 1px;
+}
+
+.inventory-resource-grid .score-track-group span {
+  width: 100%;
+  height: auto;
+  aspect-ratio: 1 / 1;
+  min-width: 0;
+  min-height: 0;
+  box-sizing: border-box;
 }
 
 .score-track-summary {
@@ -2057,8 +2142,10 @@ label {
 .score-track-group {
   display: grid;
   grid-template-columns: repeat(10, minmax(5px, 1fr));
-  grid-auto-rows: minmax(5px, 1fr);
-  gap: 2px;
+  grid-auto-rows: auto;
+  align-content: start;
+  align-items: start;
+  gap: 1px;
   min-height: 0;
   padding: 5px;
   border: 1px solid rgba(234, 223, 189, 0.12);
@@ -2068,7 +2155,11 @@ label {
 
 .score-track-group span {
   width: 100%;
-  height: 100%;
+  height: auto;
+  aspect-ratio: 1 / 1;
+  min-width: 0;
+  min-height: 0;
+  box-sizing: border-box;
   border: 1px solid color-mix(in srgb, var(--tone, var(--gold-2)) 48%, rgba(255, 255, 255, 0.1));
   border-radius: 2px;
   background: rgba(234, 223, 189, 0.05);
@@ -2152,6 +2243,10 @@ label {
   min-width: 0;
 }
 
+.achievement-primary-list {
+  --achievement-row-min-height: 56px;
+}
+
 .achievement-ledger {
   grid-template-columns: minmax(240px, 0.42fr) minmax(0, 1fr);
   align-items: stretch;
@@ -2168,8 +2263,8 @@ label {
 
 .open-agenda-token-row {
   display: grid;
-  grid-template-columns: 42px max-content;
-  justify-content: start;
+  grid-template-columns: auto minmax(0, 1fr);
+  justify-content: stretch;
   align-items: center;
   gap: 5px;
   padding: 4px 5px;
@@ -2198,31 +2293,42 @@ label {
 
 .resource-token-list {
   display: grid;
-  grid-template-columns: repeat(5, 38px);
-  gap: 3px;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 4px 5px;
+  justify-self: end;
+  max-width: 100%;
 }
 
 .resource-token-chip {
   position: relative;
-  display: grid;
-  place-items: center;
-  min-height: 24px;
+  display: inline-flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-height: 28px;
+  height: auto;
+  padding: 2px 5px;
   border-color: rgba(234, 223, 189, 0.12);
   background: rgba(5, 9, 9, 0.16);
   color: var(--muted);
-  padding: 0;
 }
 
-.resource-token-chip span {
-  position: absolute;
-  width: 1px;
-  height: 1px;
+.resource-token-chip-label {
+  font-size: 0.58rem;
+  font-weight: 850;
+  line-height: 1;
+  text-align: left;
+  color: inherit;
+  min-width: 0;
+  max-width: 100%;
   overflow: hidden;
-  clip: rect(0 0 0 0);
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .resource-token-chip svg {
+  flex-shrink: 0;
   width: 14px;
   height: 14px;
 }
@@ -2239,7 +2345,7 @@ label {
   grid-template-columns: 28px minmax(0, 1fr);
   align-items: center;
   gap: 7px;
-  min-height: 38px;
+  min-height: var(--achievement-row-min-height, 56px);
   color: var(--ink-strong);
   text-align: left;
   padding: 5px 6px;
@@ -2276,6 +2382,11 @@ label {
   white-space: nowrap;
 }
 
+.achievement-toggle strong {
+  font-size: 0.76rem;
+  font-weight: 900;
+}
+
 .achievement-toggle small,
 .alignment-progress-row small {
   display: block;
@@ -2302,7 +2413,112 @@ label {
   align-items: center;
   gap: 8px;
   min-width: 0;
+  min-height: var(--achievement-row-min-height, 56px);
   padding: 5px 6px;
+}
+
+.achievement-progress-row--challenge {
+  grid-template-columns: minmax(0, 1fr) max-content max-content minmax(52px, max-content);
+}
+
+.achievement-progress-row--challenge-complete {
+  border-color: color-mix(in srgb, #7d9eb8 40%, rgba(234, 223, 189, 0.2));
+  background: color-mix(in srgb, #7d9eb8 14%, rgba(234, 223, 189, 0.045));
+}
+
+.achievement-challenge-toggle {
+  --challenge-tone: #7d9eb8;
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+}
+
+.achievement-challenge-icon {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: color-mix(in srgb, var(--challenge-tone) 26%, transparent);
+  color: color-mix(in srgb, var(--challenge-tone) 92%, white);
+}
+
+.achievement-challenge-toggle.complete {
+  background: transparent;
+}
+
+.achievement-challenge-toggle.complete .achievement-challenge-icon {
+  background: color-mix(in srgb, var(--challenge-tone) 38%, transparent);
+  color: color-mix(in srgb, var(--challenge-tone) 88%, #eaf2f8);
+}
+
+.achievement-challenge-toggle:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--challenge-tone) 55%, transparent);
+  outline-offset: 1px;
+}
+
+.achievement-challenge-toggle:disabled {
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.achievement-challenge-title {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ink-strong);
+  font-size: 0.76rem;
+  font-weight: 900;
+}
+
+.achievement-challenge-status {
+  align-self: center;
+  justify-self: end;
+  margin: 0;
+  padding: 0 0 0 10px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+}
+
+.achievement-challenge-status small {
+  display: block;
+  color: var(--muted);
+  font-size: 0.66rem;
+  font-weight: 850;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.achievement-challenge-status.complete small {
+  color: color-mix(in srgb, var(--challenge-tone, #7d9eb8) 78%, var(--muted));
+}
+
+.achievement-challenge-status:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--challenge-tone, #7d9eb8) 55%, transparent);
+  outline-offset: 1px;
+}
+
+.achievement-challenge-status:disabled {
+  cursor: not-allowed;
+  opacity: 0.7;
 }
 
 .achievement-progress-label {
@@ -3344,15 +3560,28 @@ label {
   }
 }
 
+.score-track-groups {
+  align-self: start;
+  align-items: stretch;
+  align-content: stretch;
+}
+
 .score-track-group {
+  --score-track-cell-min: 10px;
   align-content: start;
   align-items: start;
+  justify-content: start;
+  justify-items: stretch;
+  grid-template-columns: repeat(10, minmax(var(--score-track-cell-min), 1fr));
   grid-auto-rows: auto;
-  gap: 3px;
+  gap: 1px;
 }
 
 .score-track-group span {
-  aspect-ratio: 1 / 1;
+  width: 100%;
   height: auto;
+  min-width: 0;
   min-height: 0;
+  aspect-ratio: 1 / 1;
+  box-sizing: border-box;
 }

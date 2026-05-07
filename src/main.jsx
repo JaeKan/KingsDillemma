@@ -57,6 +57,8 @@ const phaseCopy = {
 
 const defaultNamePattern = /^player\s*[1-5]$/i;
 const unsavedExitMessage = "저장하지 않은 변경사항이 있습니다. 정말 창을 종료하겠습니까?";
+const gameStartDefaultsConfirmMessage =
+  "장부를 게임 시작 기본값(토큰·승리 점수·공개 의제·업적)으로 맞출까요?";
 const sessionEndUnavailableMessage = "비밀 의제 배정이 끝난 뒤 회기를 종료할 수 있습니다.";
 const sessionEndChecklistItems = [
   { id: "inventories", label: "모든 가문이 개인 장부를 저장함" },
@@ -697,16 +699,26 @@ function FinalScoreSummary({ boardComplete, scoring, scoringBusy }) {
 function FloatingSettings({ authenticated, busy, canEndSession, open, onEndSession, onLogout, onRefresh, onReset, onToggle }) {
   return (
     <div className="settings-float">
-      <button
-        className="settings-toggle"
-        type="button"
-        aria-controls="settings-menu"
-        aria-expanded={open}
-        aria-label="설정 메뉴"
-        onClick={onToggle}
-      >
-        <TokenIcon type="menu" />
-      </button>
+      <div className="settings-float-actions">
+        {authenticated ? (
+          <button className="settings-refresh-button" type="button" onClick={onRefresh} disabled={busy}>
+            <span className="settings-refresh-icon" aria-hidden="true">
+              <TokenIcon type="refresh" />
+            </span>
+            <span>상태 새로고침</span>
+          </button>
+        ) : null}
+        <button
+          className="settings-toggle"
+          type="button"
+          aria-controls="settings-menu"
+          aria-expanded={open}
+          aria-label="설정 메뉴"
+          onClick={onToggle}
+        >
+          <TokenIcon type="menu" />
+        </button>
+      </div>
       {open ? (
         <div className="settings-menu" id="settings-menu">
           <a className="settings-link" href={sharedBoardSheetUrl} target="_blank" rel="noreferrer">
@@ -716,10 +728,6 @@ function FloatingSettings({ authenticated, busy, canEndSession, open, onEndSessi
           </a>
           {authenticated ? (
             <>
-              <button className="ghost-button wide" type="button" onClick={onRefresh} disabled={busy}>
-                <TokenIcon type="refresh" />
-                상태 새로고침
-              </button>
               <button
                 className="ghost-button wide session-end-button"
                 type="button"
@@ -1064,7 +1072,10 @@ function GamePanel({ state, busy, mutate, onDirtyChange }) {
   const currentHouseName = getHouseDisplayName(state, state.currentHouseId);
   const draftTurnName = state.turn ? getHouseDisplayName(state, state.turn) : "시작 전";
   const currentHouse = getCurrentHouse(state);
-  const currentHouseBaseName = currentHouse ? getHouseKoreanName(currentHouse) : "";
+  const currentHouseChosenName =
+    currentHouse?.hasCustomName && typeof currentHouse.name === "string"
+      ? currentHouse.name.trim()
+      : "";
   const availableAgendas = state.availableAgendas || [];
   const hasAgendaDraft = availableAgendas.length > 0;
   const hasCouncilContext = state.canDiscard;
@@ -1110,7 +1121,7 @@ function GamePanel({ state, busy, mutate, onDirtyChange }) {
           </div>
         </section>
         <div className="status-stack">
-          <StatusItem icon="house" label="내 가문" value={currentHouseBaseName || "-"} />
+          <StatusItem icon="house" label="내 가문" value={currentHouseChosenName || "-"} />
           <StatusItem icon="turn" label="차례" value={draftTurnName} />
           <StatusItem icon="scroll" label="현재 단계" value={phaseLabels[state.phase] || state.phase} />
           <StatusItem
@@ -1462,6 +1473,15 @@ function PersonalInventoryPanel({ inventory, progress, ownChoice, houseId, busy,
     }));
   };
 
+  const toggleHouseAchievementComplete = (index) => {
+    setProgressDraft((current) => ({
+      ...current,
+      houseAchievementComplete: current.houseAchievementComplete.map((value, itemIndex) =>
+        itemIndex === index ? !value : value,
+      ),
+    }));
+  };
+
   const adjustAlignmentAchievement = (agendaId, delta) => {
     setProgressDraft((current) => ({
       ...current,
@@ -1479,6 +1499,21 @@ function PersonalInventoryPanel({ inventory, progress, ownChoice, houseId, busy,
 
     setDraft(serverInventory);
     setProgressDraft(serverProgress);
+    if (storageKey) {
+      window.sessionStorage.removeItem(storageKey);
+    }
+    if (progressStorageKey) {
+      window.sessionStorage.removeItem(progressStorageKey);
+    }
+  };
+
+  const applyGameStartDefaults = () => {
+    if (!window.confirm(gameStartDefaultsConfirmMessage)) {
+      return;
+    }
+
+    setDraft(normalizeInventory(createDefaultInventory()));
+    setProgressDraft(normalizeHouseProgress(createDefaultHouseProgress()));
     if (storageKey) {
       window.sessionStorage.removeItem(storageKey);
     }
@@ -1626,9 +1661,11 @@ function PersonalInventoryPanel({ inventory, progress, ownChoice, houseId, busy,
                     label={row.label}
                     value={progressDraft.houseAchievements[row.id] || 0}
                     max={houseAchievementMarkMax}
+                    challengeComplete={progressDraft.houseAchievementComplete[row.id] === true}
                     disabled={busy}
                     onDecrease={() => adjustHouseAchievement(row.id, -1)}
                     onIncrease={() => adjustHouseAchievement(row.id, 1)}
+                    onToggleChallengeComplete={() => toggleHouseAchievementComplete(row.id)}
                   />
                 ))}
               </div>
@@ -1656,6 +1693,10 @@ function PersonalInventoryPanel({ inventory, progress, ownChoice, houseId, busy,
           <button className="ghost-button" type="button" onClick={resetDraft} disabled={busy || !isDirty}>
             <TokenIcon type="undo" />
             초안 폐기
+          </button>
+          <button className="ghost-button" type="button" onClick={applyGameStartDefaults} disabled={busy}>
+            <TokenIcon type="reset" />
+            기본값
           </button>
           <button className="primary-button" type="button" onClick={saveDraft} disabled={busy || !isDirty}>
             <TokenIcon type="save" />
@@ -1791,7 +1832,7 @@ function OpenAgendaTokenRow({ type, selectedTokens, disabled, onToggle }) {
               disabled={isDisabled}
             >
               <TokenIcon type={resource.icon} />
-              <span>{resource.label}</span>
+              <span className="resource-token-chip-label">{resource.label}</span>
             </button>
           );
         })}
@@ -1800,10 +1841,39 @@ function OpenAgendaTokenRow({ type, selectedTokens, disabled, onToggle }) {
   );
 }
 
-function AchievementProgressRow({ label, value, max, disabled, onDecrease, onIncrease }) {
+function AchievementProgressRow({
+  label,
+  value,
+  max,
+  disabled,
+  onDecrease,
+  onIncrease,
+  challengeComplete = false,
+  onToggleChallengeComplete,
+}) {
   return (
-    <div className="achievement-progress-row">
-      <span className="achievement-progress-label">{label}</span>
+    <div
+      className={`achievement-progress-row${onToggleChallengeComplete ? " achievement-progress-row--challenge" : ""}${
+        challengeComplete && onToggleChallengeComplete ? " achievement-progress-row--challenge-complete" : ""
+      }`}
+    >
+      {onToggleChallengeComplete ? (
+        <button
+          className={`achievement-challenge-toggle${challengeComplete ? " complete" : ""}`}
+          type="button"
+          aria-pressed={challengeComplete}
+          aria-label={`${label} 도전과제 ${challengeComplete ? "달성" : "미달성"}`}
+          disabled={disabled}
+          onClick={onToggleChallengeComplete}
+        >
+          <span className="achievement-challenge-icon" aria-hidden="true">
+            <TokenIcon type="seal" />
+          </span>
+          <strong className="achievement-challenge-title">{label}</strong>
+        </button>
+      ) : (
+        <span className="achievement-progress-label">{label}</span>
+      )}
       <ProgressPips value={value} max={max} label={label} />
       <div className="counter-controls">
         <button
@@ -1828,6 +1898,18 @@ function AchievementProgressRow({ label, value, max, disabled, onDecrease, onInc
           <TokenIcon type="plus" />
         </button>
       </div>
+      {onToggleChallengeComplete ? (
+        <button
+          className={`achievement-challenge-status${challengeComplete ? " complete" : ""}`}
+          type="button"
+          tabIndex={-1}
+          aria-hidden="true"
+          disabled={disabled}
+          onClick={onToggleChallengeComplete}
+        >
+          <small>{challengeComplete ? "달성" : "미달성"}</small>
+        </button>
+      ) : null}
     </div>
   );
 }
@@ -1938,6 +2020,9 @@ function normalizeHouseProgress(value) {
       ? candidate.alignmentAchievements
       : {};
   const houseAchievements = Array.isArray(candidate.houseAchievements) ? candidate.houseAchievements : [];
+  const houseAchievementComplete = Array.isArray(candidate.houseAchievementComplete)
+    ? candidate.houseAchievementComplete
+    : [];
 
   return {
     openAgendaTokens: {
@@ -1947,6 +2032,9 @@ function normalizeHouseProgress(value) {
     narrativeAchievement: candidate.narrativeAchievement === true,
     houseAchievements: houseAchievementRows.map((row) =>
       normalizeCounter(houseAchievements[row.id], houseAchievementMarkMax, defaults.houseAchievements[row.id]),
+    ),
+    houseAchievementComplete: houseAchievementRows.map((row) =>
+      houseAchievementComplete[row.id] === true,
     ),
     alignmentAchievements: Object.fromEntries(
       houseAlignmentRows.map((alignment) => [
@@ -1985,6 +2073,7 @@ function createDefaultHouseProgress() {
     },
     narrativeAchievement: false,
     houseAchievements: houseAchievementRows.map(() => 0),
+    houseAchievementComplete: houseAchievementRows.map(() => false),
     alignmentAchievements: Object.fromEntries(houseAlignmentRows.map((alignment) => [alignment.agendaId, 0])),
     updatedAt: "",
   };
@@ -2012,6 +2101,7 @@ function progressMatches(left, right) {
     arraysMatch(left.openAgendaTokens.positive, right.openAgendaTokens.positive) &&
     arraysMatch(left.openAgendaTokens.negative, right.openAgendaTokens.negative) &&
     arraysMatch(left.houseAchievements, right.houseAchievements) &&
+    arraysMatch(left.houseAchievementComplete, right.houseAchievementComplete) &&
     houseAlignmentRows.every(
       (alignment) => left.alignmentAchievements[alignment.agendaId] === right.alignmentAchievements[alignment.agendaId],
     )

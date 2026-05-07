@@ -45,6 +45,7 @@ assert.deepEqual(createDefaultHouseProgress(now).openAgendaTokens, {
   negative: [],
 });
 assert.deepEqual(createDefaultHouseProgress(now).houseAchievements, [0, 0, 0]);
+assert.deepEqual(createDefaultHouseProgress(now).houseAchievementComplete, [false, false, false]);
 assert.equal(createDefaultHouseProgress(now).alignmentAchievements.greedy, 0);
 
 const anonymousInitial = redactState(initial, null);
@@ -187,6 +188,7 @@ assert.deepEqual(normalizedInventoryState.progress.gamam.openAgendaTokens, {
 });
 assert.equal(normalizedInventoryState.progress.gamam.narrativeAchievement, true);
 assert.deepEqual(normalizedInventoryState.progress.gamam.houseAchievements, [1, 5, 0]);
+assert.deepEqual(normalizedInventoryState.progress.gamam.houseAchievementComplete, [false, false, false]);
 assert.equal(normalizedInventoryState.progress.gamam.alignmentAchievements.extremist, 2);
 assert.equal(normalizedInventoryState.progress.gamam.alignmentAchievements.greedy, 4);
 
@@ -381,6 +383,7 @@ assert.equal(ended.inventories.gamam.resources.knowledge, 17);
 assert.deepEqual(ended.progress.gamam.openAgendaTokens, { positive: [], negative: [] });
 assert.equal(ended.progress.gamam.narrativeAchievement, true);
 assert.deepEqual(ended.progress.gamam.houseAchievements, [1, 2, 3]);
+assert.deepEqual(ended.progress.gamam.houseAchievementComplete, [false, false, false]);
 assert.equal(ended.progress.gamam.alignmentAchievements.greedy, 4);
 assert.equal(redactState(ended, "solad").canDiscard, true);
 assert.equal(redactState(ended, "gamam").ownChoice, null);

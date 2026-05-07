@@ -37,6 +37,8 @@ export type HouseProgress = {
   openAgendaTokens: Record<OpenAgendaTokenPolarity, PersonalResourceId[]>;
   narrativeAchievement: boolean;
   houseAchievements: number[];
+  /** 도전 과제별 서사 목표와 같은 달성/미달성(토글), `houseAchievements` 표시 수와 별개로 저장 */
+  houseAchievementComplete: boolean[];
   alignmentAchievements: Record<string, number>;
   updatedAt: string;
 };
@@ -390,6 +392,7 @@ export function createDefaultHouseProgress(now = new Date().toISOString()): Hous
     },
     narrativeAchievement: false,
     houseAchievements: Array.from({ length: HOUSE_ACHIEVEMENT_COUNT }, () => 0),
+    houseAchievementComplete: Array.from({ length: HOUSE_ACHIEVEMENT_COUNT }, () => false),
     alignmentAchievements: Object.fromEntries(AGENDAS.map((agenda) => [agenda.id, 0])),
     updatedAt: now,
   };
@@ -1168,6 +1171,9 @@ function sanitizeHouseProgress(value: unknown, now: string): HouseProgress {
       ? (candidate.alignmentAchievements as Record<string, unknown>)
       : {};
   const houseAchievements = Array.isArray(candidate.houseAchievements) ? candidate.houseAchievements : [];
+  const houseAchievementComplete = Array.isArray(candidate.houseAchievementComplete)
+    ? candidate.houseAchievementComplete
+    : [];
 
   return {
     openAgendaTokens: {
@@ -1177,6 +1183,9 @@ function sanitizeHouseProgress(value: unknown, now: string): HouseProgress {
     narrativeAchievement: candidate.narrativeAchievement === true,
     houseAchievements: Array.from({ length: HOUSE_ACHIEVEMENT_COUNT }, (_, index) =>
       sanitizeCounter(houseAchievements[index], HOUSE_ACHIEVEMENT_MARK_MAX, defaults.houseAchievements[index]),
+    ),
+    houseAchievementComplete: Array.from({ length: HOUSE_ACHIEVEMENT_COUNT }, (_, index) =>
+      houseAchievementComplete[index] === true,
     ),
     alignmentAchievements: Object.fromEntries(
       AGENDAS.map((agenda) => [
