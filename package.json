@@ -1,5 +1,5 @@
 {
-  "name": "kings-dilemma-secret-agenda",
+  "name": "jaekan-kings-dilemma",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -13,12 +13,18 @@
     "deploy:prod": "netlify deploy --prod --build"
   },
   "dependencies": {
+    "@emotion/react": "^11.14.0",
+    "@emotion/styled": "^11.14.1",
+    "@mui/icons-material": "^9.0.0",
+    "@mui/material": "^9.0.0",
     "@netlify/blobs": "latest",
+    "matter-js": "^0.20.0",
     "react": "latest",
     "react-dom": "latest"
   },
   "devDependencies": {
     "@netlify/functions": "latest",
+    "@types/matter-js": "^0.20.2",
     "@vitejs/plugin-react-swc": "latest",
     "tsx": "latest",
     "vite": "latest"

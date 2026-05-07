@@ -1,43 +1,162 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
+import AddOutlinedIcon from "@mui/icons-material/AddOutlined";
+import AgricultureOutlinedIcon from "@mui/icons-material/AgricultureOutlined";
+import AnchorOutlinedIcon from "@mui/icons-material/AnchorOutlined";
+import ArticleOutlinedIcon from "@mui/icons-material/ArticleOutlined";
+import AutorenewOutlinedIcon from "@mui/icons-material/AutorenewOutlined";
+import BalanceOutlinedIcon from "@mui/icons-material/BalanceOutlined";
+import CastleOutlinedIcon from "@mui/icons-material/CastleOutlined";
+import CoronavirusOutlinedIcon from "@mui/icons-material/CoronavirusOutlined";
+import CrueltyFreeOutlinedIcon from "@mui/icons-material/CrueltyFreeOutlined";
+import EmojiEventsOutlinedIcon from "@mui/icons-material/EmojiEventsOutlined";
+import FavoriteBorderOutlinedIcon from "@mui/icons-material/FavoriteBorderOutlined";
+import ForestOutlinedIcon from "@mui/icons-material/ForestOutlined";
+import HomeWorkOutlinedIcon from "@mui/icons-material/HomeWorkOutlined";
+import KeyOutlinedIcon from "@mui/icons-material/KeyOutlined";
+import LocalFireDepartmentOutlinedIcon from "@mui/icons-material/LocalFireDepartmentOutlined";
+import LocalFloristOutlinedIcon from "@mui/icons-material/LocalFloristOutlined";
+import LogoutOutlinedIcon from "@mui/icons-material/LogoutOutlined";
+import MenuBookOutlinedIcon from "@mui/icons-material/MenuBookOutlined";
+import MilitaryTechOutlinedIcon from "@mui/icons-material/MilitaryTechOutlined";
+import PaidOutlinedIcon from "@mui/icons-material/PaidOutlined";
+import PetsOutlinedIcon from "@mui/icons-material/PetsOutlined";
+import PestControlRodentOutlinedIcon from "@mui/icons-material/PestControlRodentOutlined";
+import RefreshOutlinedIcon from "@mui/icons-material/RefreshOutlined";
+import RemoveOutlinedIcon from "@mui/icons-material/RemoveOutlined";
+import RestartAltOutlinedIcon from "@mui/icons-material/RestartAltOutlined";
+import SailingOutlinedIcon from "@mui/icons-material/SailingOutlined";
+import ScienceOutlinedIcon from "@mui/icons-material/ScienceOutlined";
+import ShieldOutlinedIcon from "@mui/icons-material/ShieldOutlined";
+import SaveOutlinedIcon from "@mui/icons-material/SaveOutlined";
+import OpenInNewOutlinedIcon from "@mui/icons-material/OpenInNewOutlined";
+import TableChartOutlinedIcon from "@mui/icons-material/TableChartOutlined";
+import MenuOutlinedIcon from "@mui/icons-material/MenuOutlined";
+import UndoOutlinedIcon from "@mui/icons-material/UndoOutlined";
+import VisibilityOutlinedIcon from "@mui/icons-material/VisibilityOutlined";
+import VpnKeyOutlinedIcon from "@mui/icons-material/VpnKeyOutlined";
+import WarningAmberOutlinedIcon from "@mui/icons-material/WarningAmberOutlined";
+import WorkspacePremiumOutlinedIcon from "@mui/icons-material/WorkspacePremiumOutlined";
+import { HOUSE_CATALOG, REQUIRED_HOUSE_COUNT } from "../shared/houses.mjs";
+import { Carrot as shakeCarrot } from "./Carrot";
 import "./styles.css";
 
 const phaseLabels = {
-  discard: "무작위 폐기",
-  choose: "아젠다 선택",
-  complete: "선택 완료",
+  "house-select": "가문 선택",
+  discard: "폐기 의식",
+  choose: "의제 선택",
+  complete: "의제 배정 완료",
 };
 
-const playerNumbers = [1, 2, 3, 4, 5];
+const phaseCopy = {
+  "house-select": "이번 의회에 참여할 5개 가문을 정합니다.",
+  discard: "첫 차례 가문이 봉인 의제 1장을 폐기하고 드래프트를 시작합니다.",
+  choose: "차례가 온 가문만 남은 비밀 의제를 확인합니다.",
+  complete: "게임이 끝나면 장부를 저장하고 설정 메뉴에서 이번 회기를 마감합니다.",
+};
+
 const defaultNamePattern = /^player\s*[1-5]$/i;
 const unsavedExitMessage = "저장하지 않은 변경사항이 있습니다. 정말 창을 종료하겠습니까?";
+const sessionEndUnavailableMessage = "비밀 의제 배정이 끝난 뒤 회기를 종료할 수 있습니다.";
+const sessionEndChecklistItems = [
+  { id: "inventories", label: "모든 가문이 개인 장부를 저장함" },
+  { id: "scores", label: "최종 점수와 명망/갈망 반영을 확인함" },
+  { id: "progress", label: "공개 의제와 업적/성향 업적 표시를 확인함" },
+  { id: "board", label: "공용 보드와 물리/외부 저장 정리를 완료함" },
+];
 const inventoryDraftPrefix = "kd-personal-inventory-draft:";
-const inventoryCounters = [
-  { id: "coins", label: "재화(코인)", max: 99 },
-  { id: "powerTokens", label: "권력 토큰", max: 99 },
-  { id: "prestige", label: "위신 점수", max: 99 },
-  { id: "crave", label: "갈망 점수", max: 99 },
+const progressDraftPrefix = "kd-house-progress-draft:";
+const sharedBoardSheetUrl =
+  "https://docs.google.com/spreadsheets/d/1hJw0gYAeIafIFUJOBTDaC_2QR87CXyXABrOKvu3QG2M/edit?usp=sharing";
+const tokenCounters = [
+  { id: "coins", label: "재화", max: 99, icon: "coin", tone: "coin" },
+  { id: "powerTokens", label: "권력 토큰", max: 99, icon: "power", tone: "power" },
 ];
+const scoreTrackCounters = [
+  { id: "prestige", label: "명망", max: 100, icon: "prestige", tone: "prestige" },
+  { id: "crave", label: "갈망", max: 50, icon: "crave", tone: "crave" },
+];
+const inventoryCounters = [...tokenCounters, ...scoreTrackCounters];
+const inventoryCounterMax = Object.fromEntries(inventoryCounters.map((counter) => [counter.id, counter.max]));
+const houseAlignmentRows = [
+  { id: "Extremist", agendaId: "extremist", label: "Extremist", koreanLabel: "극단주의자" },
+  { id: "Opulent", agendaId: "opulent", label: "Opulent", koreanLabel: "재력가" },
+  { id: "Moderate", agendaId: "moderate", label: "Moderate", koreanLabel: "중도주의자" },
+  { id: "Rebel", agendaId: "rebel", label: "Rebel", koreanLabel: "반역자" },
+  { id: "Opportunist", agendaId: "opportunist", label: "Opportunist", koreanLabel: "기회주의자" },
+  { id: "Greedy", agendaId: "greedy", label: "Greedy", koreanLabel: "탐욕가" },
+];
+const houseAlignmentLabelById = Object.fromEntries(
+  houseAlignmentRows.map((alignment) => [alignment.id, alignment.koreanLabel]),
+);
 const resourceCounters = [
-  { id: "influence", label: "영향력", max: 17 },
-  { id: "wealth", label: "부", max: 17 },
-  { id: "morale", label: "사기", max: 17 },
-  { id: "welfare", label: "복지", max: 17 },
-  { id: "knowledge", label: "지식", max: 17 },
+  { id: "influence", label: "영향력", max: 17, icon: "influence", tone: "influence" },
+  { id: "wealth", label: "부", max: 17, icon: "wealth", tone: "wealth" },
+  { id: "morale", label: "사기", max: 17, icon: "morale", tone: "morale" },
+  { id: "welfare", label: "복지", max: 17, icon: "welfare", tone: "welfare" },
+  { id: "knowledge", label: "지식", max: 17, icon: "knowledge", tone: "knowledge" },
 ];
+const openAgendaTokenTypes = [
+  { id: "positive", label: "긍정 공개 의제", shortLabel: "긍정", tone: "positive" },
+  { id: "negative", label: "부정 공개 의제", shortLabel: "부정", tone: "negative" },
+];
+const openAgendaTokenLimit = 2;
+const houseAchievementRows = [
+  { id: 0, label: "업적 1" },
+  { id: 1, label: "업적 2" },
+  { id: 2, label: "업적 3" },
+];
+const houseAchievementMarkMax = 3;
+const houseAlignmentMarkMax = 4;
+const boardRows = Array.from({ length: 17 }, (_, index) => index + 1);
+const agendaScoringZones = {
+  extremist: [{ from: 1, to: 17, mode: "distance" }],
+  opulent: [{ from: 9, to: 17 }],
+  moderate: [{ from: 5, to: 13 }],
+  rebel: [
+    { from: 1, to: 5 },
+    { from: 13, to: 17 },
+  ],
+  opportunist: [{ from: 1, to: 9 }],
+  greedy: [
+    { from: 1, to: 5 },
+    { from: 13, to: 17 },
+  ],
+};
+
+function createFinalBoardDraft() {
+  return Object.fromEntries(resourceCounters.map((resource) => [resource.id, ""]));
+}
+
+function createSessionEndChecklistState() {
+  return Object.fromEntries(sessionEndChecklistItems.map((item) => [item.id, false]));
+}
 
 function App() {
   const [state, setState] = useState(null);
   const [authenticated, setAuthenticated] = useState(false);
-  const [playerInput, setPlayerInput] = useState("");
+  const [sessionStatus, setSessionStatus] = useState("checking");
+  const [houseInput, setHouseInput] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [seatPassword, setSeatPassword] = useState("");
   const [seatPasswordConfirm, setSeatPasswordConfirm] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [hasUnsavedInventoryChanges, setHasUnsavedInventoryChanges] = useState(false);
+  const [sessionEndDialogOpen, setSessionEndDialogOpen] = useState(false);
+  const [sessionEndChecklist, setSessionEndChecklist] = useState(createSessionEndChecklistState);
+  const [finalBoardDraft, setFinalBoardDraft] = useState(createFinalBoardDraft);
+  const [finalScoring, setFinalScoring] = useState(null);
+  const [finalScoringBusy, setFinalScoringBusy] = useState(false);
   const refreshInFlight = useRef(null);
   const mutationInFlight = useRef(false);
+  const finalScoringRequest = useRef(0);
+  const finalBoardComplete = useMemo(() => isFinalBoardDraftComplete(finalBoardDraft), [finalBoardDraft]);
+  const sessionEndChecklistComplete = useMemo(
+    () => sessionEndChecklistItems.every((item) => sessionEndChecklist[item.id]),
+    [sessionEndChecklist],
+  );
 
   const apiRequest = useCallback(async (options = {}) => {
     const { headers, ...requestOptions } = options;
@@ -69,6 +188,7 @@ function App() {
           setError(requestError.message);
           return null;
         } finally {
+          setSessionStatus("ready");
           refreshInFlight.current = null;
         }
       })();
@@ -116,6 +236,49 @@ function App() {
   }, [refresh]);
 
   useEffect(() => {
+    if (!sessionEndDialogOpen || !finalBoardComplete) {
+      finalScoringRequest.current += 1;
+      setFinalScoring(null);
+      setFinalScoringBusy(false);
+      setSessionEndChecklist((current) => (current.scores ? { ...current, scores: false } : current));
+      return undefined;
+    }
+
+    const requestId = finalScoringRequest.current + 1;
+    finalScoringRequest.current = requestId;
+    const timer = window.setTimeout(async () => {
+      setFinalScoringBusy(true);
+
+      try {
+        const result = await apiRequest({
+          method: "POST",
+          body: JSON.stringify({
+            action: "calculateFinalScores",
+            board: createFinalBoardPayload(finalBoardDraft),
+          }),
+        });
+
+        if (finalScoringRequest.current === requestId) {
+          setFinalScoring(result.scoring || null);
+          setError("");
+        }
+      } catch (requestError) {
+        if (finalScoringRequest.current === requestId) {
+          setFinalScoring(null);
+          setSessionEndChecklist((current) => (current.scores ? { ...current, scores: false } : current));
+          setError(requestError.message);
+        }
+      } finally {
+        if (finalScoringRequest.current === requestId) {
+          setFinalScoringBusy(false);
+        }
+      }
+    }, 260);
+
+    return () => window.clearTimeout(timer);
+  }, [apiRequest, finalBoardComplete, finalBoardDraft, sessionEndDialogOpen]);
+
+  useEffect(() => {
     if (!hasUnsavedInventoryChanges) {
       return undefined;
     }
@@ -136,28 +299,28 @@ function App() {
 
   const handleLogin = async (event) => {
     event.preventDefault();
-    const selectedSeat = state?.players?.find((seat) => String(seat.player) === playerInput);
-    const needsDisplayName = Boolean(selectedSeat) && (!selectedSeat.hasPassword || !selectedSeat.hasCustomName);
+    const selectedHouse = getHouses(state).find((house) => house.id === houseInput);
+    const needsDisplayName = Boolean(selectedHouse) && (!selectedHouse.hasPassword || !selectedHouse.hasCustomName);
 
-    if (!selectedSeat?.hasPassword && seatPassword !== seatPasswordConfirm) {
-      setError("새 좌석 비밀번호가 서로 다릅니다.");
+    if (!selectedHouse?.hasPassword && seatPassword !== seatPasswordConfirm) {
+      setError("새 가문 비밀번호가 서로 다릅니다.");
       return;
     }
 
     if (needsDisplayName && !isCustomNameReady(displayName)) {
-      setError("Player 1 같은 기본 이름 대신 사용할 이름을 입력하세요.");
+      setError("Player 1 같은 기본 이름 대신 사용할 가문 표시명을 입력하세요.");
       return;
     }
 
     const result = await mutate({
       action: "login",
-      player: playerInput.trim(),
+      houseId: houseInput,
       password: seatPassword,
       displayName: needsDisplayName ? displayName.trim() : undefined,
     });
 
     if (result?.authenticated) {
-      setPlayerInput("");
+      setHouseInput("");
       setDisplayName("");
       setSeatPassword("");
       setSeatPasswordConfirm("");
@@ -173,7 +336,7 @@ function App() {
 
     if (result) {
       setHasUnsavedInventoryChanges(false);
-      setPlayerInput("");
+      setHouseInput("");
       setDisplayName("");
       setSeatPassword("");
       setSeatPasswordConfirm("");
@@ -199,32 +362,134 @@ function App() {
 
     setHasUnsavedInventoryChanges(false);
     setAuthenticated(false);
-    setPlayerInput("");
+    setHouseInput("");
     setDisplayName("");
     setSeatPassword("");
     setSeatPasswordConfirm("");
   };
 
+  const handleEndSession = () => {
+    if (state?.phase !== "complete") {
+      setError(sessionEndUnavailableMessage);
+      return;
+    }
+
+    if (hasUnsavedInventoryChanges) {
+      setError("장부 변경사항을 저장한 뒤 회기를 종료하세요.");
+      return;
+    }
+
+    setSessionEndChecklist(createSessionEndChecklistState());
+    setFinalBoardDraft(createFinalBoardDraft());
+    setFinalScoring(null);
+    setFinalScoringBusy(false);
+    setSessionEndDialogOpen(true);
+  };
+
+  const handleFinalBoardChange = (resourceId, value) => {
+    setFinalBoardDraft((current) => ({
+      ...current,
+      [resourceId]: normalizeFinalBoardInput(value),
+    }));
+    setFinalScoring(null);
+    setSessionEndChecklist((current) => (current.scores ? { ...current, scores: false } : current));
+  };
+
+  const handleToggleSessionEndCheck = (itemId) => {
+    if (itemId === "scores" && !finalScoring) {
+      return;
+    }
+
+    setSessionEndChecklist((current) => ({
+      ...current,
+      [itemId]: !current[itemId],
+    }));
+  };
+
+  const handleCancelSessionEnd = () => {
+    setSessionEndDialogOpen(false);
+  };
+
+  const handleConfirmSessionEnd = async () => {
+    if (!sessionEndChecklistComplete) {
+      setError("회기 종료 전 확인 항목을 모두 체크하세요.");
+      return;
+    }
+
+    if (hasUnsavedInventoryChanges) {
+      setSessionEndDialogOpen(false);
+      setError("장부 변경사항을 저장한 뒤 회기를 종료하세요.");
+      return;
+    }
+
+    const result = await mutate({ action: "endSession" });
+
+    if (!result) {
+      return;
+    }
+
+    setHasUnsavedInventoryChanges(false);
+    setAuthenticated(false);
+    setHouseInput("");
+    setDisplayName("");
+    setSeatPassword("");
+    setSeatPasswordConfirm("");
+    setSessionEndDialogOpen(false);
+  };
+
+  const handleSettingsReset = async () => {
+    setSettingsOpen(false);
+    await handleReset();
+  };
+
+  const handleSettingsLogout = async () => {
+    setSettingsOpen(false);
+    await handleLogout();
+  };
+
+  const handleSettingsEndSession = async () => {
+    setSettingsOpen(false);
+    await handleEndSession();
+  };
+  const sessionChecking = sessionStatus === "checking";
+  const isCouncilRoute = Boolean(authenticated && state);
+  const routeClass = sessionChecking ? "is-session-checking" : isCouncilRoute ? "is-council" : "is-entry";
+
   return (
-    <main className="app-shell">
-      <header className="topbar" aria-label="게임 헤더">
-        <div>
-          <p className="section-label">King's Dilemma</p>
-          <h1>Secret Agenda 선택</h1>
-        </div>
-        <button className="ghost-button" type="button" onClick={handleReset} disabled={busy}>
-          초기화
-        </button>
+    <main className={`app-shell ${routeClass}`}>
+      <DecorativeBackdrop />
+      <header className="app-header" aria-label="게임 헤더">
+        <BrandLockup />
       </header>
+      {!sessionChecking ? (
+        <FloatingSettings
+          authenticated={authenticated}
+          busy={busy}
+          canEndSession={Boolean(authenticated && state?.phase === "complete")}
+          open={settingsOpen}
+          onEndSession={handleSettingsEndSession}
+          onLogout={handleSettingsLogout}
+          onRefresh={refresh}
+          onReset={handleSettingsReset}
+          onToggle={() => setSettingsOpen((current) => !current)}
+        />
+      ) : null}
 
-      {error ? <div className="error-box" role="alert">{error}</div> : null}
+      {error ? (
+        <div className="error-box" role="alert">
+          <TokenIcon type="warning" />
+          <span>{error}</span>
+        </div>
+      ) : null}
 
-      {!authenticated || !state ? (
+      {sessionChecking ? (
+        <SessionCheckPanel />
+      ) : !isCouncilRoute ? (
         <LoginPanel
           state={state}
           busy={busy}
-          playerInput={playerInput}
-          setPlayerInput={setPlayerInput}
+          houseInput={houseInput}
+          setHouseInput={setHouseInput}
           displayName={displayName}
           setDisplayName={setDisplayName}
           seatPassword={seatPassword}
@@ -238,20 +503,279 @@ function App() {
           state={state}
           busy={busy}
           mutate={mutate}
-          onLogout={handleLogout}
-          onRefresh={refresh}
           onDirtyChange={setHasUnsavedInventoryChanges}
         />
       )}
+      <SessionEndDialog
+        boardComplete={finalBoardComplete}
+        boardDraft={finalBoardDraft}
+        busy={busy}
+        checks={sessionEndChecklist}
+        scoring={finalScoring}
+        scoringBusy={finalScoringBusy}
+        open={sessionEndDialogOpen}
+        ready={sessionEndChecklistComplete}
+        onBoardChange={handleFinalBoardChange}
+        onCancel={handleCancelSessionEnd}
+        onConfirm={handleConfirmSessionEnd}
+        onToggle={handleToggleSessionEndCheck}
+      />
     </main>
+  );
+}
+
+function SessionCheckPanel() {
+  return (
+    <section className="session-check-panel" aria-busy="true" aria-live="polite">
+      <div className="session-check-seal" aria-hidden="true">
+        <TokenIcon type="key" />
+      </div>
+      <div>
+        <p className="section-label">세션 확인</p>
+        <h2>의회 출입 기록을 확인 중입니다</h2>
+        <p>잠시 후 현재 가문의 의회 화면 또는 가문 선택 화면으로 이동합니다.</p>
+      </div>
+    </section>
+  );
+}
+
+function SessionEndDialog({
+  boardComplete,
+  boardDraft,
+  busy,
+  checks,
+  scoring,
+  scoringBusy,
+  open,
+  ready,
+  onBoardChange,
+  onCancel,
+  onConfirm,
+  onToggle,
+}) {
+  if (!open) {
+    return null;
+  }
+
+  return (
+    <div className="session-end-overlay" role="presentation">
+      <section
+        className="session-end-dialog"
+        aria-labelledby="session-end-title"
+        aria-modal="true"
+        role="dialog"
+      >
+        <div className="session-end-heading">
+          <span className="session-end-seal" aria-hidden="true">
+            <TokenIcon type="seal" />
+          </span>
+          <div>
+            <p className="section-label">회기 종료 확인</p>
+            <h2 id="session-end-title">다음 비밀 의제 드래프트 준비</h2>
+          </div>
+        </div>
+        <p className="session-end-copy">
+          공용 보드의 최종 위치를 기준으로 비밀 의제, 공개 의제, 재화 순위, 권력 보너스를 계산합니다. 명망/갈망과
+          가문 기록은 유지되고, 재화/권력은 다음 회기 기본값으로 돌아갑니다.
+        </p>
+        <SessionScorePanel
+          boardComplete={boardComplete}
+          boardDraft={boardDraft}
+          scoring={scoring}
+          scoringBusy={scoringBusy}
+          onBoardChange={onBoardChange}
+        />
+        <div className="session-end-checklist">
+          {sessionEndChecklistItems.map((item) => (
+            <label className="session-end-check" key={item.id}>
+              <input
+                type="checkbox"
+                checked={Boolean(checks[item.id])}
+                onChange={() => onToggle(item.id)}
+                disabled={busy || (item.id === "scores" && !scoring)}
+              />
+              <span>{item.label}</span>
+            </label>
+          ))}
+        </div>
+        <div className="session-end-actions">
+          <button className="ghost-button" type="button" onClick={onCancel} disabled={busy}>
+            취소
+          </button>
+          <button className="primary-button" type="button" onClick={onConfirm} disabled={busy || !ready}>
+            <TokenIcon type="seal" />
+            회기 종료
+          </button>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function SessionScorePanel({ boardComplete, boardDraft, scoring, scoringBusy, onBoardChange }) {
+  const status = !boardComplete ? "위치 입력" : scoringBusy ? "계산 중" : scoring ? "계산 완료" : "계산 대기";
+
+  return (
+    <section className="session-score-panel" aria-labelledby="session-score-title">
+      <div className="session-score-heading">
+        <div>
+          <p className="section-label">점수 계산</p>
+          <h3 id="session-score-title">공용 보드 최종 위치</h3>
+        </div>
+        <span>{status}</span>
+      </div>
+      <div className="session-board-grid">
+        {resourceCounters.map((resource) => (
+          <label className={`board-position-field tone-${resource.tone}`} key={resource.id}>
+            <span>
+              <TokenIcon type={resource.icon} />
+              {resource.label}
+            </span>
+            <input
+              type="number"
+              inputMode="numeric"
+              min="1"
+              max="17"
+              value={boardDraft[resource.id]}
+              onChange={(event) => onBoardChange(resource.id, event.target.value)}
+              aria-label={`${resource.label} 최종 위치`}
+              placeholder="1-17"
+            />
+          </label>
+        ))}
+      </div>
+      <FinalScoreSummary boardComplete={boardComplete} scoring={scoring} scoringBusy={scoringBusy} />
+    </section>
+  );
+}
+
+function FinalScoreSummary({ boardComplete, scoring, scoringBusy }) {
+  if (!boardComplete) {
+    return <p className="session-score-status">5개 자원 위치를 모두 입력하면 점수표가 갱신됩니다.</p>;
+  }
+
+  if (scoringBusy) {
+    return <p className="session-score-status">점수 계산 중입니다.</p>;
+  }
+
+  if (!scoring?.rows?.length) {
+    return <p className="session-score-status">계산 결과를 기다리고 있습니다.</p>;
+  }
+
+  return (
+    <div className="final-score-table-wrap" aria-live="polite">
+      <table className="final-score-table">
+        <thead>
+          <tr>
+            <th scope="col">가문</th>
+            <th scope="col">비밀</th>
+            <th scope="col">공개</th>
+            <th scope="col">재화</th>
+            <th scope="col">권력</th>
+            <th scope="col">합계</th>
+            <th scope="col">순위</th>
+          </tr>
+        </thead>
+        <tbody>
+          {scoring.rows.map((row) => (
+            <tr key={row.houseId}>
+              <th scope="row">{row.houseName}</th>
+              <td>{formatSignedScore(row.scores.resourceGoal)}</td>
+              <td>{formatSignedScore(row.scores.openAgenda)}</td>
+              <td>{formatSignedScore(row.scores.moneyRanking)}</td>
+              <td>{formatSignedScore(row.scores.powerMajority)}</td>
+              <td>{row.scores.total}</td>
+              <td>{row.ranks.total}위</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function FloatingSettings({ authenticated, busy, canEndSession, open, onEndSession, onLogout, onRefresh, onReset, onToggle }) {
+  return (
+    <div className="settings-float">
+      <button
+        className="settings-toggle"
+        type="button"
+        aria-controls="settings-menu"
+        aria-expanded={open}
+        aria-label="설정 메뉴"
+        onClick={onToggle}
+      >
+        <TokenIcon type="menu" />
+      </button>
+      {open ? (
+        <div className="settings-menu" id="settings-menu">
+          <a className="settings-link" href={sharedBoardSheetUrl} target="_blank" rel="noreferrer">
+            <TokenIcon type="sheet" />
+            공용 보드 시트
+            <TokenIcon type="external" />
+          </a>
+          {authenticated ? (
+            <>
+              <button className="ghost-button wide" type="button" onClick={onRefresh} disabled={busy}>
+                <TokenIcon type="refresh" />
+                상태 새로고침
+              </button>
+              <button
+                className="ghost-button wide session-end-button"
+                type="button"
+                onClick={onEndSession}
+                disabled={busy || !canEndSession}
+                title={canEndSession ? "이번 회기를 마감하고 다음 드래프트를 준비합니다." : sessionEndUnavailableMessage}
+              >
+                <TokenIcon type="seal" />
+                이번 회기 종료
+              </button>
+              <button className="ghost-button wide" type="button" onClick={onLogout} disabled={busy}>
+                <TokenIcon type="exit" />
+                의회 퇴장
+              </button>
+            </>
+          ) : null}
+          <button className="ghost-button wide" type="button" onClick={onReset} disabled={busy}>
+            <TokenIcon type="reset" />
+            왕국 초기화
+          </button>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function DecorativeBackdrop() {
+  return (
+    <div className="royal-backdrop" aria-hidden="true">
+      <div className="backdrop-band top" />
+      <div className="backdrop-band bottom" />
+      <div className="backdrop-grid" />
+    </div>
+  );
+}
+
+function BrandLockup() {
+  return (
+    <div className="brand-lockup">
+      <div className="brand-seal" aria-hidden="true">
+        <TokenIcon type="crown" />
+      </div>
+      <div>
+        <p className="brand-title">왕의 딜레마</p>
+        <h1>King's Dilemma Deck</h1>
+        <p className="brand-subtitle">가문 장부와 비밀 의제를 한 화면에서 관리합니다.</p>
+      </div>
+    </div>
   );
 }
 
 function LoginPanel({
   state,
   busy,
-  playerInput,
-  setPlayerInput,
+  houseInput,
+  setHouseInput,
   displayName,
   setDisplayName,
   seatPassword,
@@ -260,69 +784,89 @@ function LoginPanel({
   setSeatPasswordConfirm,
   onSubmit,
 }) {
-  const seats =
-    state?.players?.length === playerNumbers.length
-      ? state.players
-      : playerNumbers.map((player) => ({
-          player,
-          hasSession: false,
-          hasPassword: false,
-          hasCustomName: false,
-          name: `Player ${player}`,
-          hasChosen: false,
-          isCurrentTurn: false,
-          isSelf: false,
-        }));
-  const selectedSeat = seats.find((seat) => String(seat.player) === playerInput);
-  const needsDisplayName = Boolean(selectedSeat) && (!selectedSeat.hasPassword || !selectedSeat.hasCustomName);
+  const houses = getHouses(state);
+  const selectedHouse = houses.find((house) => house.id === houseInput);
+  const selectionClosed =
+    (state?.claimedHouseCount || 0) >= (state?.requiredHouseCount || REQUIRED_HOUSE_COUNT);
+  const needsDisplayName = Boolean(selectedHouse) && (!selectedHouse.hasPassword || !selectedHouse.hasCustomName);
   const passwordReady =
-    Boolean(selectedSeat) &&
+    Boolean(selectedHouse) &&
     seatPassword.length >= 4 &&
     (!needsDisplayName || isCustomNameReady(displayName)) &&
-    (selectedSeat.hasPassword || seatPassword === seatPasswordConfirm);
-  const selectSeat = (player) => {
-    setPlayerInput(String(player));
+    (selectedHouse.hasPassword || seatPassword === seatPasswordConfirm);
+  const selectHouse = (houseId) => {
+    setHouseInput(houseId);
     setDisplayName("");
     setSeatPassword("");
     setSeatPasswordConfirm("");
   };
 
   return (
-    <section className="login-panel" aria-labelledby="login-title">
-      <div className="login-copy">
-        <p className="section-label">Council Seating</p>
-        <h2 id="login-title">가문 좌석 선택</h2>
-        <p>이번 회의에서 사용할 플레이어 좌석을 선택하세요.</p>
-        <div className="login-state-strip" aria-label="현재 회의 상태">
-          <span>좌석 보호</span>
-          <strong>{selectedSeat ? getSeatName(selectedSeat) : "좌석을 고르세요"}</strong>
+    <section className="council-entry" aria-labelledby="login-title">
+      <div className="entry-brief">
+        <div className="entry-emblem" aria-hidden="true">
+          <TokenIcon type="balance" />
+        </div>
+        <div>
+          <p className="section-label">왕국 회기</p>
+          <h2 id="login-title">참여할 가문을 선택하세요</h2>
+          <p>
+            이번 회의에 참여할 5개 가문을 고릅니다. 명망이 낮은 가문부터, 동률이면 가문 번호순으로 비밀 의제를 선택합니다.
+          </p>
         </div>
       </div>
-      <form className="login-form" onSubmit={onSubmit} aria-busy={busy}>
+
+      <form className="seat-ledger" onSubmit={onSubmit} aria-busy={busy}>
+        <div className="ledger-heading">
+          <div>
+            <p className="section-label">가문 명부</p>
+            <h3>{selectedHouse ? getHouseKoreanName(selectedHouse) : "가문을 선택하세요"}</h3>
+          </div>
+          <span className="ledger-status">
+            {state?.claimedHouseCount || 0} / {state?.requiredHouseCount || REQUIRED_HOUSE_COUNT} 선택
+          </span>
+        </div>
         <fieldset className="seat-fieldset">
-          <legend>플레이어 좌석</legend>
+          <legend>가문 선택</legend>
           <div className="seat-grid">
-            {seats.map((seat) => {
-              const selected = playerInput === String(seat.player);
+            {houses.map((house) => {
+              const selected = houseInput === house.id;
+              const unavailable = selectionClosed && !house.hasPassword;
 
               return (
-                <label className={`seat-option${selected ? " selected" : ""}`} key={seat.player}>
+                <label
+                  className={`seat-option tone-${house.motif}${selected ? " selected" : ""}${unavailable ? " unavailable" : ""}`}
+                  key={house.id}
+                  aria-disabled={unavailable}
+                >
                   <input
                     checked={selected}
-                    name="player"
-                    onChange={() => selectSeat(seat.player)}
+                    disabled={unavailable}
+                    name="house"
+                    onChange={() => selectHouse(house.id)}
                     type="radio"
-                    value={seat.player}
+                    value={house.id}
                   />
-                  <span className="seat-main">{getSeatName(seat)}</span>
-                  <span className={`seat-status ${getSeatTone(seat)}`}>{getSeatStatus(seat)}</span>
+                  <span className="house-number">#{String(house.number).padStart(2, "0")}</span>
+                  <span className="house-crest" aria-hidden="true">
+                    <HouseIcon motif={house.motif} />
+                  </span>
+                  <span className="seat-copy">
+                    <span className="seat-main">{getHouseKoreanName(house)}</span>
+                    <span className={`seat-motto${house.hasCustomName ? "" : " placeholder"}`}>
+                      {house.hasCustomName ? house.name : selectionClosed ? "회의 불참" : "아직 선택되지 않음"}
+                    </span>
+                  </span>
+                  <span className={`seat-status ${getHouseTone(house, selectionClosed)}`}>
+                    {getHouseStatus(house, selectionClosed)}
+                  </span>
                 </label>
               );
             })}
           </div>
         </fieldset>
         <PasswordPanel
-          selectedSeat={selectedSeat}
+          selectedHouse={selectedHouse}
           needsDisplayName={needsDisplayName}
           displayName={displayName}
           setDisplayName={setDisplayName}
@@ -331,8 +875,9 @@ function LoginPanel({
           seatPasswordConfirm={seatPasswordConfirm}
           setSeatPasswordConfirm={setSeatPasswordConfirm}
         />
-        <button type="submit" disabled={busy || !passwordReady}>
-          {busy ? "입장 중" : "좌석에 앉기"}
+        <button className="primary-button wide" type="submit" disabled={busy || !passwordReady}>
+          <TokenIcon type="key" />
+          {busy ? "선택 중" : "가문 선택 / 입장"}
         </button>
       </form>
     </section>
@@ -340,7 +885,7 @@ function LoginPanel({
 }
 
 function PasswordPanel({
-  selectedSeat,
+  selectedHouse,
   needsDisplayName,
   displayName,
   setDisplayName,
@@ -349,18 +894,23 @@ function PasswordPanel({
   seatPasswordConfirm,
   setSeatPasswordConfirm,
 }) {
-  if (!selectedSeat) {
-    return <p className="password-hint">좌석을 선택하면 비밀번호 입력란이 열립니다.</p>;
+  if (!selectedHouse) {
+    return (
+      <p className="password-hint">
+        <TokenIcon type="seal" />
+        가문을 고르면 표시명과 비밀번호를 기록합니다.
+      </p>
+    );
   }
 
-  if (selectedSeat.hasPassword) {
+  if (selectedHouse.hasPassword) {
     return (
       <div className="password-panel">
         {needsDisplayName ? (
           <NameField displayName={displayName} setDisplayName={setDisplayName} />
         ) : null}
-        <label>
-          좌석 비밀번호
+        <label className="credential-field">
+          <span className="field-label">가문 비밀번호</span>
           <input
             value={seatPassword}
             onChange={(event) => setSeatPassword(event.target.value)}
@@ -368,6 +918,8 @@ function PasswordPanel({
             minLength={4}
             maxLength={64}
             autoComplete="current-password"
+            aria-label="가문 비밀번호"
+            placeholder="가문 비밀번호"
             required
           />
         </label>
@@ -378,8 +930,8 @@ function PasswordPanel({
   return (
     <div className="password-panel">
       <NameField displayName={displayName} setDisplayName={setDisplayName} />
-      <label>
-        새 좌석 비밀번호
+      <label className="credential-field">
+        <span className="field-label">새 가문 비밀번호</span>
         <input
           value={seatPassword}
           onChange={(event) => setSeatPassword(event.target.value)}
@@ -387,11 +939,13 @@ function PasswordPanel({
           minLength={4}
           maxLength={64}
           autoComplete="new-password"
+          aria-label="새 가문 비밀번호"
+          placeholder="새 가문 비밀번호"
           required
         />
       </label>
-      <label>
-        비밀번호 확인
+      <label className="credential-field">
+        <span className="field-label">가문 비밀번호 확인</span>
         <input
           value={seatPasswordConfirm}
           onChange={(event) => setSeatPasswordConfirm(event.target.value)}
@@ -399,6 +953,8 @@ function PasswordPanel({
           minLength={4}
           maxLength={64}
           autoComplete="new-password"
+          aria-label="가문 비밀번호 확인"
+          placeholder="가문 비밀번호 확인"
           required
         />
       </label>
@@ -408,16 +964,17 @@ function PasswordPanel({
 
 function NameField({ displayName, setDisplayName }) {
   return (
-    <label>
-      사용할 이름
+    <label className="credential-field">
+      <span className="field-label">가문 표시명</span>
       <input
         value={displayName}
         onChange={(event) => setDisplayName(event.target.value)}
         type="text"
         minLength={2}
-        maxLength={24}
+        maxLength={32}
         autoComplete="nickname"
-        placeholder="예: 라니스터"
+        aria-label="가문 표시명"
+        placeholder="예: 핀체이 가문"
         required
       />
     </label>
@@ -426,124 +983,362 @@ function NameField({ displayName, setDisplayName }) {
 
 function isCustomNameReady(name) {
   const trimmed = name.trim();
-  return trimmed.length >= 2 && trimmed.length <= 24 && !defaultNamePattern.test(trimmed);
+  return trimmed.length >= 2 && trimmed.length <= 32 && !defaultNamePattern.test(trimmed);
 }
 
-function getSeatName(seat) {
-  return seat.name || `Player ${seat.player}`;
+function getHouses(state) {
+  if (state?.houses?.length === HOUSE_CATALOG.length) {
+    return state.houses;
+  }
+
+  return HOUSE_CATALOG.map((house) => ({
+    ...house,
+    houseId: house.id,
+    player: house.number,
+    name: house.koreanTitle,
+    hasSession: false,
+    hasPassword: false,
+    hasCustomName: false,
+    hasChosen: false,
+    isCurrentTurn: false,
+    isSelf: false,
+  }));
 }
 
-function getSeatStatus(seat) {
-  if (seat.isSelf) {
+function getHouseKoreanName(house) {
+  return house?.koreanTitle || house?.name || "가문";
+}
+
+function getHouseStatus(house, selectionClosed = false) {
+  if (house.isSelf) {
     return "현재 접속";
   }
 
-  if (seat.hasChosen) {
-    return "선택 완료";
+  if (house.hasChosen) {
+    return "의제 선택";
   }
 
-  if (seat.hasPassword) {
-    return "잠김";
+  if (house.hasPassword) {
+    return "가문 선택됨";
   }
 
-  return "설정 필요";
+  if (selectionClosed) {
+    return "정원 마감";
+  }
+
+  return "선택 가능";
 }
 
-function getSeatTone(seat) {
-  if (seat.hasChosen) {
+function getHouseTone(house, selectionClosed = false) {
+  if (house.hasChosen) {
     return "done";
   }
 
-  if (seat.hasPassword) {
+  if (house.hasPassword) {
     return "locked";
+  }
+
+  if (selectionClosed) {
+    return "closed";
   }
 
   return "idle";
 }
 
-function GamePanel({ state, busy, mutate, onLogout, onRefresh, onDirtyChange }) {
-  const currentPlayerName = getPlayerName(state, state.currentPlayer);
-  const turnName = getPlayerName(state, state.turn);
+function GamePanel({ state, busy, mutate, onDirtyChange }) {
+  const currentHouseName = getHouseDisplayName(state, state.currentHouseId);
+  const draftTurnName = state.turn ? getHouseDisplayName(state, state.turn) : "시작 전";
+  const currentHouse = getCurrentHouse(state);
+  const currentHouseBaseName = currentHouse ? getHouseKoreanName(currentHouse) : "";
+  const availableAgendas = state.availableAgendas || [];
+  const hasAgendaDraft = availableAgendas.length > 0;
+  const hasCouncilContext = state.canDiscard;
 
   return (
-    <section className="game-grid">
-      <aside className="status-panel" aria-live="polite">
-        <StatusItem label="내 플레이어" value={currentPlayerName || "-"} />
-        <StatusItem label="현재 차례" value={turnName} />
-        <StatusItem label="진행" value={phaseLabels[state.phase] || state.phase} />
-        <StatusItem label="선택 완료" value={`${state.selectedCount} / 5`} />
-        <p className="privacy-note">남은 아젠다 이름은 자기 차례가 오기 전까지 서버에서 내려오지 않습니다.</p>
-        <button className="ghost-button wide" type="button" onClick={onRefresh} disabled={busy}>
-          상태 새로고침
-        </button>
-        <button className="ghost-button wide" type="button" onClick={onLogout} disabled={busy}>
-          나가기
-        </button>
+    <section className="council-layout">
+      <aside className="council-sidebar" aria-live="polite">
+        <div className="sidebar-heading">
+          <div className="sidebar-heading-row">
+            <div className="sidebar-seal" aria-hidden="true">
+              <TokenIcon type="crown" />
+            </div>
+            <div className="sidebar-heading-copy">
+              <p className="section-label">의회 현황</p>
+              <h2>{phaseLabels[state.phase] || state.phase}</h2>
+            </div>
+          </div>
+          <p>{phaseCopy[state.phase] || "의회 기록을 갱신하고 있습니다."}</p>
+        </div>
+        <HouseProfileCard house={currentHouse} displayName={currentHouseName} />
+        <section className={`dilemma-stage phase-${state.phase}`} aria-labelledby="stage-title">
+          <div className="stage-copy">
+            <p className="section-label">의회 절차</p>
+            <h2 id="stage-title">드래프트 상태</h2>
+            <GameMessage state={state} />
+            {isWaitingForDraft(state) ? <CarrotWaitAction /> : null}
+          </div>
+          <div className="stage-tableau" aria-hidden="true">
+            <div className="balance-rail">
+              <span />
+              <span />
+              <span />
+            </div>
+            <div className="tableau-token coin-token">
+              <TokenIcon type="coin" />
+            </div>
+            <div className="tableau-token power-token">
+              <TokenIcon type="power" />
+            </div>
+            <div className="tableau-token seal-token">
+              <TokenIcon type="seal" />
+            </div>
+          </div>
+        </section>
+        <div className="status-stack">
+          <StatusItem icon="house" label="내 가문" value={currentHouseBaseName || "-"} />
+          <StatusItem icon="turn" label="차례" value={draftTurnName} />
+          <StatusItem icon="scroll" label="현재 단계" value={phaseLabels[state.phase] || state.phase} />
+          <StatusItem
+            icon="seal"
+            label={state.phase === "house-select" ? "가문 선택" : "의제 선택"}
+            value={
+              state.phase === "house-select"
+                ? `${state.claimedHouseCount} / ${state.requiredHouseCount}`
+                : `${state.selectedCount} / ${state.draftOrder.length || REQUIRED_HOUSE_COUNT}`
+            }
+          />
+        </div>
+        <TurnTrack houses={state.houses} draftOrder={state.draftOrder} turn={state.turn} phase={state.phase} />
+        <p className="privacy-note">남은 의제는 자기 차례가 오기 전까지 봉인됩니다.</p>
       </aside>
 
-      <section className="play-panel">
-        <GameMessage state={state} />
+      <section className={`council-main${hasAgendaDraft ? " has-agenda" : ""}${hasCouncilContext ? " has-context" : " no-context"}`}>
+        {hasCouncilContext ? (
+          <aside className="council-context" aria-label="드래프트 보조 정보">
+            <ActionPanel state={state} busy={busy} mutate={mutate} />
+          </aside>
+        ) : null}
+        <AgendaList agendas={availableAgendas} busy={busy} mutate={mutate} />
         <PersonalInventoryPanel
           inventory={state.ownInventory}
-          player={state.currentPlayer}
+          progress={state.ownHouseProgress}
+          ownChoice={state.ownChoice}
+          houseId={state.currentHouseId}
           busy={busy}
           mutate={mutate}
           onDirtyChange={onDirtyChange}
         />
-        <OwnChoice agenda={state.ownChoice} />
-        <ActionPanel state={state} busy={busy} mutate={mutate} />
-        <AgendaList agendas={state.availableAgendas || []} busy={busy} mutate={mutate} />
       </section>
     </section>
   );
 }
 
-function getPlayerName(state, player) {
-  if (!player) {
+function getCurrentHouse(state) {
+  if (!state.currentHouseId) {
+    return null;
+  }
+
+  return (
+    state.houses?.find((house) => house.id === state.currentHouseId) ||
+    HOUSE_CATALOG.find((house) => house.id === state.currentHouseId) ||
+    null
+  );
+}
+
+function getHouseDisplayName(state, houseId) {
+  if (!houseId) {
     return "";
   }
 
-  return state.players?.find((seat) => seat.player === player)?.name || `Player ${player}`;
+  const house =
+    state.houses?.find((item) => item.id === houseId) ||
+    HOUSE_CATALOG.find((item) => item.id === houseId);
+  const houseName = getHouseKoreanName(house);
+  const customName = house?.hasCustomName && typeof house.name === "string" ? house.name.trim() : "";
+
+  if (!customName || customName === houseName || customName === house?.koreanTitle || customName === house?.title) {
+    return houseName;
+  }
+
+  return `${houseName} (${customName})`;
 }
 
-function StatusItem({ label, value }) {
+function HouseProfileCard({ house, displayName }) {
+  if (!house) {
+    return null;
+  }
+
+  return (
+    <section className="house-profile-card" aria-labelledby="house-profile-title">
+      <div className="house-profile-crest" aria-hidden="true">
+        <HouseIcon motif={house.motif} />
+      </div>
+      <div className="house-profile-main">
+        <div className="house-profile-heading">
+          <div>
+            <p className="section-label">가문 상세</p>
+            <h2 id="house-profile-title">{getHouseKoreanName(house)}</h2>
+          </div>
+          <span className="house-profile-number">#{String(house.number).padStart(2, "0")}</span>
+        </div>
+        <div className="house-profile-grid">
+          <HouseProfileField label="선호 의제 성향" value={getAlignmentKoreanLabels(house.alignments).join(" / ")} />
+          <HouseProfileField label="서사 목표" value={house.goal} />
+        </div>
+        <HouseAlignmentTrack alignments={house.alignments || []} />
+        <p title={house.profile}>{house.profile}</p>
+      </div>
+    </section>
+  );
+}
+
+function HouseAlignmentTrack({ alignments }) {
+  const favoriteAlignments = new Set(alignments);
+
+  return (
+    <div className="house-alignment-track" aria-label="가문 선호 비밀 의제">
+      {houseAlignmentRows.map((alignment) => {
+        const preferred = favoriteAlignments.has(alignment.id);
+
+        return (
+          <div className={`house-alignment-row${preferred ? " preferred" : ""}`} key={alignment.id}>
+            <span>
+              {alignment.koreanLabel}
+            </span>
+            <div className="house-alignment-boxes" aria-hidden="true">
+              {Array.from({ length: 5 }, (_, index) => (
+                <i key={index} className={preferred && index >= 3 ? "bonus" : ""} />
+              ))}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function HouseProfileField({ label, value }) {
+  return (
+    <div className="house-profile-field">
+      <span>{label}</span>
+      <strong>{value || "-"}</strong>
+    </div>
+  );
+}
+
+function StatusItem({ icon, label, value }) {
   return (
     <div className="status-item">
+      <span className="status-icon" aria-hidden="true">
+        <TokenIcon type={icon} />
+      </span>
       <span>{label}</span>
       <strong>{value}</strong>
     </div>
   );
 }
 
+function TurnTrack({ houses, draftOrder, turn, phase }) {
+  const claimedHouses = (houses || []).filter((house) => house.hasPassword);
+  const orderedHouses = draftOrder?.length
+    ? draftOrder.map((houseId) => houses?.find((house) => house.id === houseId)).filter(Boolean)
+    : claimedHouses;
+  const nodes = orderedHouses.length ? orderedHouses : HOUSE_CATALOG.slice(0, REQUIRED_HOUSE_COUNT);
+
+  return (
+    <div
+      className="turn-track"
+      aria-label="의회 차례"
+      style={{ gridTemplateColumns: `repeat(${Math.max(nodes.length, 1)}, 34px)` }}
+    >
+      {nodes.map((house) => {
+        const selected = turn === house.id;
+        const done = Boolean(house.hasChosen);
+
+        return (
+          <span
+            className={`turn-node${selected ? " current" : ""}${done ? " done" : ""}${phase === "house-select" ? " claimed" : ""}`}
+            key={house.id}
+            title={house.koreanTitle}
+          >
+            {house.number}
+          </span>
+        );
+      })}
+    </div>
+  );
+}
+
 function GameMessage({ state }) {
   const text = useMemo(() => {
+    if (state.phase === "house-select") {
+      const remaining = Math.max((state.requiredHouseCount || REQUIRED_HOUSE_COUNT) - (state.claimedHouseCount || 0), 0);
+      return remaining
+        ? `${remaining}개 가문이 더 선택되면 명망이 낮은 가문부터 비밀 의제 드래프트를 시작합니다. 동률이면 가문 번호순입니다.`
+        : "의석이 모두 찼습니다. 첫 가문이 폐기 의식을 시작합니다.";
+    }
+
     if (state.phase === "complete") {
-      return "모든 플레이어가 Secret Agenda를 선택했습니다. 각자 본인 아젠다만 계속 확인할 수 있습니다.";
+      return "비밀 의제 배정 완료. 게임 종료 후 명망과 갈망까지 저장한 뒤 이번 회기를 마감하세요.";
     }
 
     if (state.canDiscard) {
-      return `${getPlayerName(state, 1)} 차례입니다. 룰에 따라 6장 중 1장을 무작위로 버린 뒤 남은 5장 중 하나를 선택합니다.`;
+      return `${getHouseDisplayName(state, state.currentHouseId)} 차례입니다. 봉인된 6장 중 1장을 폐기하고 남은 의제를 펼칩니다.`;
     }
 
     if (state.canChoose) {
-      return `${getPlayerName(state, state.currentPlayer)} 차례입니다. 아래 남은 아젠다 중 하나를 선택하세요.`;
+      return `${getHouseDisplayName(state, state.currentHouseId)} 차례입니다. 남은 비밀 의제 중 하나를 고르세요.`;
     }
 
     if (state.ownChoice) {
-      return "선택이 끝났습니다. 다른 플레이어 차례가 끝날 때까지 남은 아젠다 목록은 볼 수 없습니다.";
+      return "선택 완료. 다른 가문의 차례에는 남은 의제가 봉인됩니다.";
     }
 
-    return `아직 ${getPlayerName(state, state.currentPlayer)}의 차례가 아닙니다. 현재 ${getPlayerName(state, state.turn)} 진행 중이며 남은 아젠다 목록은 숨겨져 있습니다.`;
+    return `${getHouseDisplayName(state, state.currentHouseId)} 대기 중. 지금은 ${getHouseDisplayName(state, state.turn)} 차례라 남은 의제는 봉인되어 있습니다.`;
   }, [state]);
 
-  return <div className="message">{text}</div>;
+  return <p className="message">{text}</p>;
 }
 
-function PersonalInventoryPanel({ inventory, player, busy, mutate, onDirtyChange }) {
-  const storageKey = player ? `${inventoryDraftPrefix}${player}` : "";
+function isWaitingForDraft(state) {
+  if (!state) {
+    return false;
+  }
+
+  if (state.phase === "house-select") {
+    return Boolean(state.currentHouseId);
+  }
+
+  return Boolean((state.phase === "discard" || state.phase === "choose") && !state.canDiscard && !state.canChoose);
+}
+
+function CarrotWaitAction() {
+  return (
+    <div className="carrot-wait-action">
+      <button className="carrot-button" type="button" onClick={shakeCarrot}>
+        <span className="carrot-button-icon" aria-hidden="true">
+          🥕
+        </span>
+        <span className="carrot-button-label">당근이나 흔들고 있으세요</span>
+      </button>
+    </div>
+  );
+}
+
+function formatAgendaTitle(agenda) {
+  return agenda?.name || "";
+}
+
+function PersonalInventoryPanel({ inventory, progress, ownChoice, houseId, busy, mutate, onDirtyChange }) {
+  const storageKey = houseId ? `${inventoryDraftPrefix}${houseId}` : "";
+  const progressStorageKey = houseId ? `${progressDraftPrefix}${houseId}` : "";
   const serverInventory = useMemo(() => normalizeInventory(inventory), [inventory]);
+  const serverProgress = useMemo(() => normalizeHouseProgress(progress), [progress]);
   const [draft, setDraft] = useState(serverInventory);
-  const isDirty = useMemo(() => !inventoriesMatch(draft, serverInventory), [draft, serverInventory]);
+  const [progressDraft, setProgressDraft] = useState(serverProgress);
+  const inventoryDirty = useMemo(() => !inventoriesMatch(draft, serverInventory), [draft, serverInventory]);
+  const progressDirty = useMemo(() => !progressMatches(progressDraft, serverProgress), [progressDraft, serverProgress]);
+  const isDirty = inventoryDirty || progressDirty;
 
   useEffect(() => {
     const storedDraft = storageKey ? readStoredInventoryDraft(storageKey) : null;
@@ -551,10 +1346,21 @@ function PersonalInventoryPanel({ inventory, player, busy, mutate, onDirtyChange
   }, [storageKey]);
 
   useEffect(() => {
-    if (!isDirty) {
+    const storedDraft = progressStorageKey ? readStoredProgressDraft(progressStorageKey) : null;
+    setProgressDraft(storedDraft && !progressMatches(storedDraft, serverProgress) ? storedDraft : serverProgress);
+  }, [progressStorageKey]);
+
+  useEffect(() => {
+    if (!inventoryDirty) {
       setDraft(serverInventory);
     }
-  }, [isDirty, serverInventory]);
+  }, [inventoryDirty, serverInventory]);
+
+  useEffect(() => {
+    if (!progressDirty) {
+      setProgressDraft(serverProgress);
+    }
+  }, [progressDirty, serverProgress]);
 
   useEffect(() => {
     onDirtyChange(isDirty);
@@ -569,12 +1375,24 @@ function PersonalInventoryPanel({ inventory, player, busy, mutate, onDirtyChange
       return;
     }
 
-    if (isDirty) {
+    if (inventoryDirty) {
       window.sessionStorage.setItem(storageKey, JSON.stringify(draft));
     } else {
       window.sessionStorage.removeItem(storageKey);
     }
-  }, [draft, isDirty, storageKey]);
+  }, [draft, inventoryDirty, storageKey]);
+
+  useEffect(() => {
+    if (!progressStorageKey) {
+      return;
+    }
+
+    if (progressDirty) {
+      window.sessionStorage.setItem(progressStorageKey, JSON.stringify(progressDraft));
+    } else {
+      window.sessionStorage.removeItem(progressStorageKey);
+    }
+  }, [progressDraft, progressDirty, progressStorageKey]);
 
   const adjustCounter = (counter, delta) => {
     setDraft((current) => ({
@@ -583,32 +1401,89 @@ function PersonalInventoryPanel({ inventory, player, busy, mutate, onDirtyChange
     }));
   };
 
-  const adjustResource = (counter, delta) => {
-    setDraft((current) => ({
+  const toggleOpenAgendaToken = (polarity, resourceId) => {
+    setProgressDraft((current) => {
+      const currentTokens = current.openAgendaTokens[polarity] || [];
+      const hasToken = currentTokens.includes(resourceId);
+      const nextTokens = hasToken
+        ? currentTokens.filter((token) => token !== resourceId)
+        : currentTokens.length < openAgendaTokenLimit
+          ? [...currentTokens, resourceId]
+          : currentTokens;
+
+      return {
+        ...current,
+        openAgendaTokens: {
+          ...current.openAgendaTokens,
+          [polarity]: nextTokens,
+        },
+      };
+    });
+  };
+
+  const toggleNarrativeAchievement = () => {
+    setProgressDraft((current) => ({
       ...current,
-      resources: {
-        ...current.resources,
-        [counter.id]: clampCounter(current.resources[counter.id] + delta, counter.max),
+      narrativeAchievement: !current.narrativeAchievement,
+    }));
+  };
+
+  const adjustHouseAchievement = (index, delta) => {
+    setProgressDraft((current) => ({
+      ...current,
+      houseAchievements: current.houseAchievements.map((value, itemIndex) =>
+        itemIndex === index ? clampCounter(value + delta, houseAchievementMarkMax) : value,
+      ),
+    }));
+  };
+
+  const adjustAlignmentAchievement = (agendaId, delta) => {
+    setProgressDraft((current) => ({
+      ...current,
+      alignmentAchievements: {
+        ...current.alignmentAchievements,
+        [agendaId]: clampCounter((current.alignmentAchievements[agendaId] || 0) + delta, houseAlignmentMarkMax),
       },
     }));
   };
 
   const resetDraft = () => {
-    if (isDirty && !window.confirm("저장하지 않은 개인 보유물 변경사항을 되돌릴까요?")) {
+    if (isDirty && !window.confirm("저장하지 않은 가문 장부 변경사항을 되돌릴까요?")) {
       return;
     }
 
     setDraft(serverInventory);
+    setProgressDraft(serverProgress);
     if (storageKey) {
       window.sessionStorage.removeItem(storageKey);
+    }
+    if (progressStorageKey) {
+      window.sessionStorage.removeItem(progressStorageKey);
     }
   };
 
   const saveDraft = async () => {
-    const result = await mutate({ action: "saveInventory", inventory: draft });
+    if (inventoryDirty) {
+      const inventoryResult = await mutate({ action: "saveInventory", inventory: draft });
 
-    if (result && storageKey) {
+      if (!inventoryResult) {
+        return;
+      }
+    }
+
+    if (progressDirty) {
+      const progressResult = await mutate({ action: "saveHouseProgress", progress: progressDraft });
+
+      if (!progressResult) {
+        return;
+      }
+    }
+
+    if (storageKey) {
       window.sessionStorage.removeItem(storageKey);
+    }
+    if (progressStorageKey) {
+      window.sessionStorage.removeItem(progressStorageKey);
     }
   };
 
@@ -616,21 +1491,36 @@ function PersonalInventoryPanel({ inventory, player, busy, mutate, onDirtyChange
     <section className="inventory-panel" aria-labelledby="inventory-title">
       <div className="inventory-header">
         <div>
-          <p className="section-label">Private Ledger</p>
-          <h2 id="inventory-title">내 개인 보유물</h2>
+          <p className="section-label">가문 기록</p>
+          <h2 id="inventory-title">가문 장부</h2>
         </div>
-        {isDirty ? <span className="dirty-pill">저장 전</span> : <span className="saved-pill">저장됨</span>}
+        {isDirty ? <span className="dirty-pill">저장 필요</span> : <span className="saved-pill">저장 완료</span>}
       </div>
 
-      <div className="inventory-section">
-        <h3>재화와 토큰</h3>
-        <div className="inventory-grid">
-          {inventoryCounters.map((counter) => (
+      <div className="inventory-section resource-section">
+        <h3>재화 · 권력 · 명망 · 갈망</h3>
+        <div className="inventory-resource-grid">
+          {tokenCounters.map((counter) => (
             <CounterRow
               key={counter.id}
               label={counter.label}
               value={draft[counter.id]}
               max={counter.max}
+              icon={counter.icon}
+              tone={counter.tone}
+              disabled={busy}
+              onDecrease={() => adjustCounter(counter, -1)}
+              onIncrease={() => adjustCounter(counter, 1)}
+            />
+          ))}
+          {scoreTrackCounters.map((counter) => (
+            <ScoreTrackRow
+              key={counter.id}
+              label={counter.label}
+              value={draft[counter.id]}
+              max={counter.max}
+              icon={counter.icon}
+              tone={counter.tone}
               disabled={busy}
               onDecrease={() => adjustCounter(counter, -1)}
               onIncrease={() => adjustCounter(counter, 1)}
@@ -639,31 +1529,86 @@ function PersonalInventoryPanel({ inventory, player, busy, mutate, onDirtyChange
         </div>
       </div>
 
-      <div className="inventory-section">
-        <h3>자원 메모</h3>
-        <div className="inventory-grid resource-grid">
-          {resourceCounters.map((counter) => (
-            <CounterRow
-              key={counter.id}
-              label={counter.label}
-              value={draft.resources[counter.id]}
-              max={counter.max}
-              disabled={busy}
-              onDecrease={() => adjustResource(counter, -1)}
-              onIncrease={() => adjustResource(counter, 1)}
-            />
-          ))}
+      <div className={`inventory-section progress-section${ownChoice ? " has-own-choice" : ""}`}>
+        <div className="progress-choice-layout">
+          <div className="progress-column">
+            <h3>공개 의제와 업적</h3>
+            <div className="progress-ledger">
+              <div className="open-agenda-ledger">
+                {openAgendaTokenTypes.map((type) => (
+                  <OpenAgendaTokenRow
+                    key={type.id}
+                    type={type}
+                    selectedTokens={progressDraft.openAgendaTokens[type.id] || []}
+                    disabled={busy}
+                    onToggle={(resourceId) => toggleOpenAgendaToken(type.id, resourceId)}
+                  />
+                ))}
+              </div>
+              <div className="achievement-ledger">
+                <button
+                  className={`achievement-toggle${progressDraft.narrativeAchievement ? " complete" : ""}`}
+                  type="button"
+                  aria-pressed={progressDraft.narrativeAchievement}
+                  onClick={toggleNarrativeAchievement}
+                  disabled={busy}
+                >
+                  <span className="achievement-toggle-icon" aria-hidden="true">
+                    <TokenIcon type="seal" />
+                  </span>
+                  <span>
+                    <strong>서사 업적</strong>
+                    <small>{progressDraft.narrativeAchievement ? "달성" : "미달성"}</small>
+                  </span>
+                </button>
+                <div className="achievement-track-list">
+                  {houseAchievementRows.map((row) => (
+                    <AchievementProgressRow
+                      key={row.id}
+                      label={row.label}
+                      value={progressDraft.houseAchievements[row.id] || 0}
+                      max={houseAchievementMarkMax}
+                      disabled={busy}
+                      onDecrease={() => adjustHouseAchievement(row.id, -1)}
+                      onIncrease={() => adjustHouseAchievement(row.id, 1)}
+                    />
+                  ))}
+                </div>
+                <div className="alignment-achievement-list" aria-label="성향 업적">
+                  {houseAlignmentRows.map((alignment) => (
+                    <AlignmentProgressRow
+                      key={alignment.agendaId}
+                      alignment={alignment}
+                      value={progressDraft.alignmentAchievements[alignment.agendaId] || 0}
+                      max={houseAlignmentMarkMax}
+                      disabled={busy}
+                      onDecrease={() => adjustAlignmentAchievement(alignment.agendaId, -1)}
+                      onIncrease={() => adjustAlignmentAchievement(alignment.agendaId, 1)}
+                    />
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+          {ownChoice ? (
+            <div className="inventory-secret-agenda">
+              <h3>비밀 의제</h3>
+              <OwnChoice agenda={ownChoice} />
+            </div>
+          ) : null}
         </div>
       </div>
 
       <div className="inventory-actions">
-        <span>{isDirty ? "저장 버튼을 눌러야 서버에 반영됩니다." : "마지막 저장값과 같습니다."}</span>
+        <span>{isDirty ? "변경사항은 아직 이 브라우저에만 저장되어 있습니다." : "의회 기록에 반영된 값입니다."}</span>
         <div>
           <button className="ghost-button" type="button" onClick={resetDraft} disabled={busy || !isDirty}>
-            되돌리기
+            <TokenIcon type="undo" />
+            초안 폐기
           </button>
-          <button type="button" onClick={saveDraft} disabled={busy || !isDirty}>
-            {busy ? "저장 중" : "일괄 저장"}
+          <button className="primary-button" type="button" onClick={saveDraft} disabled={busy || !isDirty}>
+            <TokenIcon type="save" />
+            {busy ? "저장 중" : "장부 저장"}
           </button>
         </div>
       </div>
@@ -671,10 +1616,77 @@ function PersonalInventoryPanel({ inventory, player, busy, mutate, onDirtyChange
   );
 }
 
-function CounterRow({ label, value, max, disabled, onDecrease, onIncrease }) {
+function ScoreTrackRow({ label, value, max, icon, tone, disabled, onDecrease, onIncrease }) {
+  const percent = max > 0 ? Math.round((value / max) * 100) : 0;
+  const groups = max === 100 ? [50, 50] : [25, 25];
+  let offset = 0;
+
   return (
-    <div className="counter-row">
-      <span>{label}</span>
+    <div className={`score-track-row tone-${tone}`} style={{ "--track-progress": `${percent}%` }}>
+      <div className="score-track-summary">
+        <span className="counter-icon" aria-hidden="true">
+          <TokenIcon type={icon} />
+        </span>
+        <span className="counter-label">{label}</span>
+        <output className="score-track-value" aria-label={`${label} 현재 값`}>
+          {value}
+          <span>/{max}</span>
+        </output>
+      </div>
+      <div className="score-track-body">
+        <div className="score-track-header">
+          <div className="score-track-rail" aria-hidden="true">
+            <span />
+          </div>
+          <div className="counter-controls score-track-controls">
+            <button
+              className="stepper-button"
+              type="button"
+              aria-label={`${label} 내리기`}
+              onClick={onDecrease}
+              disabled={disabled || value <= 0}
+            >
+              <TokenIcon type="minus" />
+            </button>
+            <button
+              className="stepper-button"
+              type="button"
+              aria-label={`${label} 올리기`}
+              onClick={onIncrease}
+              disabled={disabled || value >= max}
+            >
+              <TokenIcon type="plus" />
+            </button>
+          </div>
+        </div>
+        <div className="score-track-groups" aria-hidden="true">
+          {groups.map((groupSize, groupIndex) => {
+            const start = offset;
+            offset += groupSize;
+
+            return (
+              <div className="score-track-group" key={`${label}-${groupIndex}`}>
+                {Array.from({ length: groupSize }, (_, index) => {
+                  const checked = start + index < value;
+
+                  return <span className={checked ? "checked" : ""} key={index} />;
+                })}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CounterRow({ label, value, max, icon, tone, disabled, onDecrease, onIncrease }) {
+  return (
+    <div className={`counter-row tone-${tone}`}>
+      <span className="counter-icon" aria-hidden="true">
+        <TokenIcon type={icon} />
+      </span>
+      <span className="counter-label">{label}</span>
       <div className="counter-controls">
         <button
           className="stepper-button"
@@ -683,7 +1695,7 @@ function CounterRow({ label, value, max, disabled, onDecrease, onIncrease }) {
           onClick={onDecrease}
           disabled={disabled || value <= 0}
         >
-          ▼
+          <TokenIcon type="minus" />
         </button>
         <output aria-label={`${label} 현재 값`}>{value}</output>
         <button
@@ -693,11 +1705,156 @@ function CounterRow({ label, value, max, disabled, onDecrease, onIncrease }) {
           onClick={onIncrease}
           disabled={disabled || value >= max}
         >
-          ▲
+          <TokenIcon type="plus" />
         </button>
       </div>
     </div>
   );
+}
+
+function OpenAgendaTokenRow({ type, selectedTokens, disabled, onToggle }) {
+  const selected = new Set(selectedTokens);
+
+  return (
+    <div className={`open-agenda-token-row tone-${type.tone}`}>
+      <div className="open-agenda-token-heading">
+        <span>{type.shortLabel}</span>
+        <strong>
+          {selectedTokens.length}/{openAgendaTokenLimit}
+        </strong>
+      </div>
+      <div className="resource-token-list" role="group" aria-label={type.label}>
+        {resourceCounters.map((resource) => {
+          const isSelected = selected.has(resource.id);
+          const isDisabled = disabled || (!isSelected && selectedTokens.length >= openAgendaTokenLimit);
+
+          return (
+            <button
+              className={`resource-token-chip tone-${resource.tone}${isSelected ? " selected" : ""}`}
+              key={resource.id}
+              type="button"
+              aria-pressed={isSelected}
+              aria-label={`${type.shortLabel} ${resource.label} 공개 의제 토큰`}
+              title={`${type.shortLabel} ${resource.label}`}
+              onClick={() => onToggle(resource.id)}
+              disabled={isDisabled}
+            >
+              <TokenIcon type={resource.icon} />
+              <span>{resource.label}</span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function AchievementProgressRow({ label, value, max, disabled, onDecrease, onIncrease }) {
+  return (
+    <div className="achievement-progress-row">
+      <span className="achievement-progress-label">{label}</span>
+      <ProgressPips value={value} max={max} label={label} />
+      <div className="counter-controls">
+        <button
+          className="stepper-button compact"
+          type="button"
+          aria-label={`${label} 표시 줄이기`}
+          onClick={onDecrease}
+          disabled={disabled || value <= 0}
+        >
+          <TokenIcon type="minus" />
+        </button>
+        <output aria-label={`${label} 표시 수`}>
+          {value}/{max}
+        </output>
+        <button
+          className="stepper-button compact"
+          type="button"
+          aria-label={`${label} 표시 늘리기`}
+          onClick={onIncrease}
+          disabled={disabled || value >= max}
+        >
+          <TokenIcon type="plus" />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function AlignmentProgressRow({ alignment, value, max, disabled, onDecrease, onIncrease }) {
+  return (
+    <div className="alignment-progress-row">
+      <span>
+        <strong>{alignment.koreanLabel}</strong>
+        <small>{alignment.label}</small>
+      </span>
+      <ProgressPips value={value} max={max} label={`${alignment.koreanLabel} 성향 업적`} />
+      <div className="counter-controls">
+        <button
+          className="stepper-button compact"
+          type="button"
+          aria-label={`${alignment.koreanLabel} 성향 업적 표시 줄이기`}
+          onClick={onDecrease}
+          disabled={disabled || value <= 0}
+        >
+          <TokenIcon type="minus" />
+        </button>
+        <output aria-label={`${alignment.koreanLabel} 성향 업적 표시 수`}>
+          {value}/{max}
+        </output>
+        <button
+          className="stepper-button compact"
+          type="button"
+          aria-label={`${alignment.koreanLabel} 성향 업적 표시 늘리기`}
+          onClick={onIncrease}
+          disabled={disabled || value >= max}
+        >
+          <TokenIcon type="plus" />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function ProgressPips({ value, max, label }) {
+  return (
+    <span className="progress-pips" aria-label={`${label} ${value}/${max}`}>
+      {Array.from({ length: max }, (_, index) => (
+        <span className={index < value ? "checked" : ""} key={index} aria-hidden="true" />
+      ))}
+    </span>
+  );
+}
+
+function normalizeFinalBoardInput(value) {
+  const trimmed = String(value).trim();
+
+  if (!trimmed) {
+    return "";
+  }
+
+  const number = Number(trimmed);
+
+  if (!Number.isFinite(number)) {
+    return "";
+  }
+
+  return String(Math.max(1, Math.min(17, Math.trunc(number))));
+}
+
+function isFinalBoardDraftComplete(draft) {
+  return resourceCounters.every((resource) => {
+    const value = Number(draft[resource.id]);
+    return Number.isInteger(value) && value >= 1 && value <= 17;
+  });
+}
+
+function createFinalBoardPayload(draft) {
+  return Object.fromEntries(resourceCounters.map((resource) => [resource.id, Number(draft[resource.id])]));
+}
+
+function formatSignedScore(value) {
+  return value > 0 ? `+${value}` : String(value);
 }
 
 function normalizeInventory(value) {
@@ -706,10 +1863,10 @@ function normalizeInventory(value) {
   const resources = candidate.resources && typeof candidate.resources === "object" ? candidate.resources : {};
 
   return {
-    coins: normalizeCounter(candidate.coins, 99, defaults.coins),
-    powerTokens: normalizeCounter(candidate.powerTokens, 99, defaults.powerTokens),
-    prestige: normalizeCounter(candidate.prestige, 99, defaults.prestige),
-    crave: normalizeCounter(candidate.crave, 99, defaults.crave),
+    coins: normalizeCounter(candidate.coins, inventoryCounterMax.coins, defaults.coins),
+    powerTokens: normalizeCounter(candidate.powerTokens, inventoryCounterMax.powerTokens, defaults.powerTokens),
+    prestige: normalizeCounter(candidate.prestige, inventoryCounterMax.prestige, defaults.prestige),
+    crave: normalizeCounter(candidate.crave, inventoryCounterMax.crave, defaults.crave),
     resources: Object.fromEntries(
       resourceCounters.map((counter) => [
         counter.id,
@@ -720,6 +1877,44 @@ function normalizeInventory(value) {
   };
 }
 
+function normalizeHouseProgress(value) {
+  const defaults = createDefaultHouseProgress();
+  const candidate = value && typeof value === "object" ? value : {};
+  const openAgendaTokens =
+    candidate.openAgendaTokens && typeof candidate.openAgendaTokens === "object" ? candidate.openAgendaTokens : {};
+  const alignmentAchievements =
+    candidate.alignmentAchievements && typeof candidate.alignmentAchievements === "object"
+      ? candidate.alignmentAchievements
+      : {};
+  const houseAchievements = Array.isArray(candidate.houseAchievements) ? candidate.houseAchievements : [];
+
+  return {
+    openAgendaTokens: {
+      positive: normalizeOpenAgendaTokens(openAgendaTokens.positive),
+      negative: normalizeOpenAgendaTokens(openAgendaTokens.negative),
+    },
+    narrativeAchievement: candidate.narrativeAchievement === true,
+    houseAchievements: houseAchievementRows.map((row) =>
+      normalizeCounter(houseAchievements[row.id], houseAchievementMarkMax, defaults.houseAchievements[row.id]),
+    ),
+    alignmentAchievements: Object.fromEntries(
+      houseAlignmentRows.map((alignment) => [
+        alignment.agendaId,
+        normalizeCounter(
+          alignmentAchievements[alignment.agendaId] ?? alignmentAchievements[alignment.id],
+          houseAlignmentMarkMax,
+          defaults.alignmentAchievements[alignment.agendaId],
+        ),
+      ]),
+    ),
+    updatedAt: typeof candidate.updatedAt === "string" ? candidate.updatedAt : defaults.updatedAt,
+  };
+}
+
+function getAlignmentKoreanLabels(alignments = []) {
+  return alignments.map((alignment) => houseAlignmentLabelById[alignment] || alignment);
+}
+
 function createDefaultInventory() {
   return {
     coins: 10,
@@ -727,6 +1922,19 @@ function createDefaultInventory() {
     prestige: 0,
     crave: 0,
     resources: Object.fromEntries(resourceCounters.map((counter) => [counter.id, 0])),
+    updatedAt: "",
+  };
+}
+
+function createDefaultHouseProgress() {
+  return {
+    openAgendaTokens: {
+      positive: [],
+      negative: [],
+    },
+    narrativeAchievement: false,
+    houseAchievements: houseAchievementRows.map(() => 0),
+    alignmentAchievements: Object.fromEntries(houseAlignmentRows.map((alignment) => [alignment.agendaId, 0])),
     updatedAt: "",
   };
 }
@@ -744,16 +1952,62 @@ function clampCounter(value, max) {
 }
 
 function inventoriesMatch(left, right) {
+  return inventoryCounters.every((counter) => left[counter.id] === right[counter.id]);
+}
+
+function progressMatches(left, right) {
   return (
-    inventoryCounters.every((counter) => left[counter.id] === right[counter.id]) &&
-    resourceCounters.every((counter) => left.resources[counter.id] === right.resources[counter.id])
+    left.narrativeAchievement === right.narrativeAchievement &&
+    arraysMatch(left.openAgendaTokens.positive, right.openAgendaTokens.positive) &&
+    arraysMatch(left.openAgendaTokens.negative, right.openAgendaTokens.negative) &&
+    arraysMatch(left.houseAchievements, right.houseAchievements) &&
+    houseAlignmentRows.every(
+      (alignment) => left.alignmentAchievements[alignment.agendaId] === right.alignmentAchievements[alignment.agendaId],
+    )
   );
+}
+
+function normalizeOpenAgendaTokens(value) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  const seen = new Set();
+  const tokens = [];
+
+  for (const resourceId of value) {
+    if (!resourceCounters.some((resource) => resource.id === resourceId) || seen.has(resourceId)) {
+      continue;
+    }
+
+    seen.add(resourceId);
+    tokens.push(resourceId);
+
+    if (tokens.length >= openAgendaTokenLimit) {
+      break;
+    }
+  }
+
+  return tokens;
+}
+
+function arraysMatch(left = [], right = []) {
+  return left.length === right.length && left.every((value, index) => value === right[index]);
 }
 
 function readStoredInventoryDraft(storageKey) {
   try {
     const raw = window.sessionStorage.getItem(storageKey);
     return raw ? normalizeInventory(JSON.parse(raw)) : null;
+  } catch {
+    return null;
+  }
+}
+
+function readStoredProgressDraft(storageKey) {
+  try {
+    const raw = window.sessionStorage.getItem(storageKey);
+    return raw ? normalizeHouseProgress(JSON.parse(raw)) : null;
   } catch {
     return null;
   }
@@ -766,9 +2020,13 @@ function OwnChoice({ agenda }) {
 
   return (
     <div className="own-choice">
-      <h3>내 Secret Agenda: {agenda.name}</h3>
-      <p>{agenda.resourceGoal}</p>
-      {agenda.note ? <p>{agenda.note}</p> : null}
+      <span className="choice-seal" aria-hidden="true">
+        <TokenIcon type="seal" />
+      </span>
+      <div>
+        <h3>{formatAgendaTitle(agenda)}</h3>
+        <AgendaScoringBoard agenda={agenda} />
+      </div>
     </div>
   );
 }
@@ -780,31 +2038,60 @@ function ActionPanel({ state, busy, mutate }) {
 
   return (
     <div className="action-card">
-      <p>버려진 카드는 누구에게도 공개되지 않습니다.</p>
-      <button type="button" onClick={() => mutate({ action: "discard" })} disabled={busy}>
-        무작위 1장 버리기
+      <div>
+        <p className="section-label">봉인 의제 폐기</p>
+        <h3>봉인 의제 1장을 폐기하고 시작</h3>
+        <p>폐기된 의제는 공개하지 않습니다.</p>
+      </div>
+      <button className="primary-button" type="button" onClick={() => mutate({ action: "discard" })} disabled={busy}>
+        <TokenIcon type="flame" />
+        의제 폐기
       </button>
     </div>
   );
 }
 
 function AgendaList({ agendas, busy, mutate }) {
+  const [expanded, setExpanded] = useState(false);
+
   if (!agendas.length) {
     return null;
   }
 
   return (
-    <div className="agenda-list">
-      {agendas.map((agenda) => (
-        <AgendaCard key={agenda.id} agenda={agenda} busy={busy} mutate={mutate} />
-      ))}
-    </div>
+    <section className="agenda-section" aria-labelledby="agenda-title">
+      <div className="agenda-section-heading">
+        <div>
+          <p className="section-label">드래프트</p>
+          <h2 id="agenda-title">선택 가능한 비밀 의제</h2>
+        </div>
+        <span>{agendas.length}장 남음</span>
+      </div>
+      <div className="agenda-list" id="agenda-list">
+        {agendas.map((agenda) => (
+          <AgendaCard key={agenda.id} agenda={agenda} busy={busy} expanded={expanded} mutate={mutate} />
+        ))}
+      </div>
+      <div className="agenda-section-controls">
+        <button
+          className="ghost-button agenda-expand-toggle"
+          type="button"
+          aria-controls="agenda-list"
+          aria-expanded={expanded}
+          onClick={() => setExpanded((current) => !current)}
+        >
+          <TokenIcon type={expanded ? "minus" : "plus"} />
+          {expanded ? "전체 접기" : "전체 펼치기"}
+        </button>
+      </div>
+    </section>
   );
 }
 
-function AgendaCard({ agenda, busy, mutate }) {
+function AgendaCard({ agenda, busy, expanded, mutate }) {
+  const detailId = `agenda-detail-${agenda.id}`;
   const choose = () => {
-    const confirmed = window.confirm(`${agenda.name} 아젠다를 선택할까요? 선택 후 되돌릴 수 없습니다.`);
+    const confirmed = window.confirm("이 비밀 의제를 채택할까요? 채택 후에는 되돌릴 수 없습니다.");
 
     if (confirmed) {
       mutate({ action: "choose", agendaId: agenda.id });
@@ -812,39 +2099,160 @@ function AgendaCard({ agenda, busy, mutate }) {
   };
 
   return (
-    <article className="agenda-card">
-      <div>
-        <h3>{agenda.name}</h3>
-        <p>{agenda.resourceGoal}</p>
-        {agenda.note ? <p>{agenda.note}</p> : null}
+    <article className={`agenda-card${expanded ? " expanded" : ""}`}>
+      <div className="agenda-card-top">
+        <span className="agenda-sigil" aria-hidden="true">
+          <TokenIcon type="scroll" />
+        </span>
+        <div className="agenda-card-title">
+          <div className="agenda-card-label-row">
+            <p className="section-label">비밀 의제</p>
+            <button className="primary-button" type="button" onClick={choose} disabled={busy}>
+              <TokenIcon type="key" />
+              채택
+            </button>
+          </div>
+          <h3>{formatAgendaTitle(agenda)}</h3>
+        </div>
       </div>
-      <ScoreBlock
-        title="자원"
-        rows={agenda.resourceScoring.map((item) => [item.label, `${item.vp} 승점`])}
-      />
-      <ScoreBlock
-        title="재화 순위"
-        rows={agenda.coinRanking.map((item) => [`${item.rank}위`, `${item.vp} 승점`])}
-      />
-      <button type="button" onClick={choose} disabled={busy}>
-        선택
-      </button>
+      <div className="agenda-card-detail" hidden={!expanded} id={detailId}>
+        <AgendaScoringBoard agenda={agenda} />
+      </div>
     </article>
   );
 }
 
-function ScoreBlock({ title, rows }) {
+function AgendaScoringBoard({ agenda }) {
   return (
-    <div className="score-block">
-      <div className="score-title">{title}</div>
-      {rows.map(([label, value]) => (
-        <div className="score-row" key={label}>
-          <span>{label}</span>
-          <strong>{value}</strong>
-        </div>
-      ))}
+    <div className="agenda-score-board" aria-label={`${formatAgendaTitle(agenda)} 점수 구간`}>
+      <AgendaResourceZoneStrip agenda={agenda} />
+      <AgendaScoreTrack
+        title="자원 구간"
+        items={agenda.resourceScoring.map((item) => ({
+          label: item.label,
+          vp: item.vp,
+        }))}
+      />
+      <AgendaScoreTrack
+        title="재화 순위"
+        items={agenda.coinRanking.map((item) => ({
+          label: `${item.rank}위`,
+          vp: item.vp,
+        }))}
+      />
     </div>
   );
+}
+
+function AgendaResourceZoneStrip({ agenda }) {
+  const zones = agendaScoringZones[agenda.id] ?? [];
+  const hasDistanceMode = zones.some((zone) => zone.mode === "distance");
+  const isActiveRow = (row) => zones.some((zone) => row >= zone.from && row <= zone.to);
+
+  return (
+    <div className={`agenda-zone-strip${hasDistanceMode ? " distance" : ""}`}>
+      <div className="agenda-score-title">{hasDistanceMode ? "거리 산정" : "보드 구간"}</div>
+      <div className="agenda-zone-cells" aria-label="공용 보드 줄">
+        {boardRows.map((row) => {
+          const active = isActiveRow(row);
+          const showLabel = active || row === 1 || row === 5 || row === 9 || row === 13 || row === 17;
+
+          return (
+            <span
+              className={`agenda-zone-cell${active ? " active" : ""}`}
+              key={row}
+              aria-label={`${row}번 줄${active ? " 점수 구간" : ""}`}
+            >
+              {showLabel ? row : ""}
+            </span>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function AgendaScoreTrack({ title, items }) {
+  const maxVp = items.length ? Math.max(...items.map((item) => item.vp)) : 0;
+
+  return (
+    <div className="agenda-score-track">
+      <div className="agenda-score-title">{title}</div>
+      <div className="agenda-score-segments">
+        {items.map((item) => {
+          const intensity = maxVp > 0 ? item.vp / maxVp : 0;
+          const isBest = item.vp === maxVp && maxVp > 0;
+
+          return (
+            <div
+              className={`agenda-score-segment${item.vp > 0 ? " scoring" : ""}${isBest ? " best" : ""}`}
+              key={`${title}-${item.label}`}
+              style={{ "--score-fill": `${Math.round(intensity * 100)}%` }}
+              aria-label={`${item.label}: ${item.vp}점`}
+            >
+              <span>{item.label}</span>
+              <strong>+{item.vp}</strong>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function TokenIcon({ type }) {
+  const Icon = {
+    balance: BalanceOutlinedIcon,
+    coin: PaidOutlinedIcon,
+    crown: EmojiEventsOutlinedIcon,
+    crave: LocalFireDepartmentOutlinedIcon,
+    exit: LogoutOutlinedIcon,
+    external: OpenInNewOutlinedIcon,
+    flame: LocalFireDepartmentOutlinedIcon,
+    gear: MenuOutlinedIcon,
+    house: HomeWorkOutlinedIcon,
+    influence: VisibilityOutlinedIcon,
+    key: VpnKeyOutlinedIcon,
+    knowledge: MenuBookOutlinedIcon,
+    menu: MenuOutlinedIcon,
+    minus: RemoveOutlinedIcon,
+    morale: MilitaryTechOutlinedIcon,
+    plus: AddOutlinedIcon,
+    power: ShieldOutlinedIcon,
+    prestige: EmojiEventsOutlinedIcon,
+    refresh: RefreshOutlinedIcon,
+    reset: RestartAltOutlinedIcon,
+    save: SaveOutlinedIcon,
+    scroll: ArticleOutlinedIcon,
+    seal: WorkspacePremiumOutlinedIcon,
+    sheet: TableChartOutlinedIcon,
+    turn: AutorenewOutlinedIcon,
+    undo: UndoOutlinedIcon,
+    warning: WarningAmberOutlinedIcon,
+    wealth: PaidOutlinedIcon,
+    welfare: FavoriteBorderOutlinedIcon,
+  }[type] || AddOutlinedIcon;
+
+  return <Icon aria-hidden="true" focusable="false" />;
+}
+
+function HouseIcon({ motif }) {
+  const Icon = {
+    boar: PetsOutlinedIcon,
+    keys: KeyOutlinedIcon,
+    lobster: AnchorOutlinedIcon,
+    porcupine: PestControlRodentOutlinedIcon,
+    rooster: AgricultureOutlinedIcon,
+    rose: LocalFloristOutlinedIcon,
+    ship: SailingOutlinedIcon,
+    skull: CoronavirusOutlinedIcon,
+    snake: ScienceOutlinedIcon,
+    sword: MilitaryTechOutlinedIcon,
+    tree: ForestOutlinedIcon,
+    turtle: CrueltyFreeOutlinedIcon,
+  }[motif] || CastleOutlinedIcon;
+
+  return <Icon aria-hidden="true" focusable="false" />;
 }
 
 createRoot(document.querySelector("#root")).render(

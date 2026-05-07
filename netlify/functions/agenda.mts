@@ -2,19 +2,25 @@ import { getDeployStore, getStore } from "@netlify/blobs";
 import type { Config, Context } from "@netlify/functions";
 import {
   AgendaStateError,
+  PLAYER_COUNT,
   applyChoose,
   applyDiscard,
+  calculateFinalScores,
   clearSession,
   createInitialState,
+  endSession,
+  getClaimedHouseIds,
   normalizeState,
-  parsePlayer,
+  parseHouseId,
   redactState,
   registerSession,
+  saveHouseProgress,
   savePlayerInventory,
-  setPlayerName,
-  setSeatCredential,
+  setHouseName,
+  setHouseCredential,
+  startDraftIfReady,
   type GameState,
-  type PlayerNumber,
+  type HouseId,
   type SeatCredential,
 } from "./_shared/agenda-state.mts";
 
@@ -34,7 +40,7 @@ const PASSWORD_MAX_LENGTH = 64;
 const PASSWORD_ITERATIONS = 120_000;
 const PASSWORD_SALT_BYTES = 16;
 const NAME_MIN_LENGTH = 2;
-const NAME_MAX_LENGTH = 24;
+const NAME_MAX_LENGTH = 32;
 const NO_STORE_HEADERS = { "Cache-Control": "no-store" };
 const ANONYMOUS_GET_CACHE_HEADERS = {
   "Cache-Control": "public, max-age=0, must-revalidate",
@@ -50,11 +56,11 @@ export default async function agenda(req: Request, context: Context) {
 
     if (req.method === "GET") {
       const state = await loadState(store);
-      const player = getAuthenticatedPlayer(req, context, state);
+      const houseId = getAuthenticatedHouse(req, context, state);
       return json(
-        { ok: true, authenticated: Boolean(player), state: redactState(state, player) },
+        { ok: true, authenticated: Boolean(houseId), state: redactState(state, houseId) },
         200,
-        player ? NO_STORE_HEADERS : ANONYMOUS_GET_CACHE_HEADERS,
+        houseId ? NO_STORE_HEADERS : ANONYMOUS_GET_CACHE_HEADERS,
       );
     }
 
@@ -83,29 +89,49 @@ export default async function agenda(req: Request, context: Context) {
       return await handleLogout(req, context, store, state);
     }
 
-    const player = getAuthenticatedPlayer(req, context, state);
+    const houseId = getAuthenticatedHouse(req, context, state);
 
-    if (!player) {
+    if (!houseId) {
       return json({ ok: false, error: "Login required." }, 401, NO_STORE_HEADERS);
     }
 
     if (action === "discard") {
-      const nextState = applyDiscard(state, player);
+      const nextState = applyDiscard(state, houseId);
       await saveState(store, nextState);
-      return json({ ok: true, state: redactState(nextState, player) }, 200, NO_STORE_HEADERS);
+      return json({ ok: true, state: redactState(nextState, houseId) }, 200, NO_STORE_HEADERS);
     }
 
     if (action === "choose") {
       const agendaId = typeof body.agendaId === "string" ? body.agendaId : "";
-      const nextState = applyChoose(state, player, agendaId);
+      const nextState = applyChoose(state, houseId, agendaId);
       await saveState(store, nextState);
-      return json({ ok: true, state: redactState(nextState, player) }, 200, NO_STORE_HEADERS);
+      return json({ ok: true, state: redactState(nextState, houseId) }, 200, NO_STORE_HEADERS);
     }
 
     if (action === "saveInventory") {
-      const nextState = savePlayerInventory(state, player, body.inventory);
+      const nextState = savePlayerInventory(state, houseId, body.inventory);
       await saveState(store, nextState);
-      return json({ ok: true, state: redactState(nextState, player) }, 200, NO_STORE_HEADERS);
+      return json({ ok: true, state: redactState(nextState, houseId) }, 200, NO_STORE_HEADERS);
+    }
+
+    if (action === "saveHouseProgress") {
+      const nextState = saveHouseProgress(state, houseId, body.progress);
+      await saveState(store, nextState);
+      return json({ ok: true, state: redactState(nextState, houseId) }, 200, NO_STORE_HEADERS);
+    }
+
+    if (action === "calculateFinalScores") {
+      return json({ ok: true, scoring: calculateFinalScores(state, body.board) }, 200, NO_STORE_HEADERS);
+    }
+
+    if (action === "endSession") {
+      const nextState = endSession(state);
+      await saveState(store, nextState);
+      return json(
+        { ok: true, authenticated: false, state: redactState(nextState, null) },
+        200,
+        { ...NO_STORE_HEADERS, "Set-Cookie": clearSessionCookie(req) },
+      );
     }
 
     return json({ ok: false, error: "Unknown action." }, 400, NO_STORE_HEADERS);
@@ -125,7 +151,10 @@ function isKnownStateAction(action: string) {
     action === "logout" ||
     action === "discard" ||
     action === "choose" ||
-    action === "saveInventory"
+    action === "saveInventory" ||
+    action === "saveHouseProgress" ||
+    action === "calculateFinalScores" ||
+    action === "endSession"
   );
 }
 
@@ -149,11 +178,19 @@ async function handleLogin(
   state: GameState,
   body: Record<string, unknown>,
 ) {
-  const player = parsePlayer(body.player);
+  const houseId = parseHouseId(body.houseId ?? body.player);
   const password = parsePassword(body.password);
-  const credential = state.credentials[String(player)];
-  const needsDisplayName = !state.playerNames[String(player)];
+  const credential = state.credentials[houseId];
+  const needsDisplayName = !state.playerNames[houseId];
   let nextState = state;
+
+  if (!credential && state.phase !== "house-select") {
+    return json({ ok: false, error: "이미 드래프트가 시작되어 새 가문을 선택할 수 없습니다." }, 409);
+  }
+
+  if (!credential && getClaimedHouseIds(state).length >= PLAYER_COUNT) {
+    return json({ ok: false, error: "이번 의회의 5개 가문이 이미 모두 선택되었습니다." }, 409);
+  }
 
   if (credential) {
     const verified = await verifyPassword(password, credential);
@@ -163,42 +200,42 @@ async function handleLogin(
     }
 
     if (needsDisplayName) {
-      nextState = setPlayerName(state, player, parseDisplayName(body.displayName));
+      nextState = setHouseName(state, houseId, parseDisplayName(body.displayName));
     }
   } else {
     const displayName = parseDisplayName(body.displayName);
-    nextState = setPlayerName(state, player, displayName);
-    nextState = setSeatCredential(nextState, player, await createPasswordCredential(password));
+    nextState = setHouseName(state, houseId, displayName);
+    nextState = setHouseCredential(nextState, houseId, await createPasswordCredential(password));
   }
 
   const token = crypto.randomUUID();
-  const nextSessionState = registerSession(nextState, player, token);
+  const nextSessionState = startDraftIfReady(registerSession(nextState, houseId, token));
   await saveState(store, nextSessionState);
 
   return json(
-    { ok: true, authenticated: true, state: redactState(nextSessionState, player) },
+    { ok: true, authenticated: true, state: redactState(nextSessionState, houseId) },
     200,
-    { ...NO_STORE_HEADERS, "Set-Cookie": createSessionCookie(req, player, token) },
+    { ...NO_STORE_HEADERS, "Set-Cookie": createSessionCookie(req, houseId, token) },
   );
 }
 
 function parseDisplayName(value: unknown) {
   if (typeof value !== "string") {
-    throw new AgendaStateError("좌석 이름을 입력하세요.");
+    throw new AgendaStateError("가문 서명명을 입력하세요.");
   }
 
   const trimmed = value.trim().replace(/\s+/g, " ");
 
   if (trimmed.length < NAME_MIN_LENGTH) {
-    throw new AgendaStateError(`좌석 이름은 ${NAME_MIN_LENGTH}자 이상이어야 합니다.`);
+    throw new AgendaStateError(`가문 서명명은 ${NAME_MIN_LENGTH}자 이상이어야 합니다.`);
   }
 
   if (trimmed.length > NAME_MAX_LENGTH) {
-    throw new AgendaStateError(`좌석 이름은 ${NAME_MAX_LENGTH}자 이하여야 합니다.`);
+    throw new AgendaStateError(`가문 서명명은 ${NAME_MAX_LENGTH}자 이하여야 합니다.`);
   }
 
   if (isDefaultPlayerName(trimmed)) {
-    throw new AgendaStateError("기본 이름 Player 1-5 대신 사용할 이름을 입력하세요.");
+    throw new AgendaStateError("기본 이름 Player 1-5 대신 사용할 가문 서명명을 입력하세요.");
   }
 
   return trimmed;
@@ -210,15 +247,15 @@ function isDefaultPlayerName(name: string) {
 
 function parsePassword(value: unknown) {
   if (typeof value !== "string") {
-    throw new AgendaStateError("좌석 비밀번호를 입력하세요.");
+    throw new AgendaStateError("가문 비밀번호를 입력하세요.");
   }
 
   if (value.length < PASSWORD_MIN_LENGTH) {
-    throw new AgendaStateError(`좌석 비밀번호는 ${PASSWORD_MIN_LENGTH}자 이상이어야 합니다.`);
+    throw new AgendaStateError(`가문 비밀번호는 ${PASSWORD_MIN_LENGTH}자 이상이어야 합니다.`);
   }
 
   if (value.length > PASSWORD_MAX_LENGTH) {
-    throw new AgendaStateError(`좌석 비밀번호는 ${PASSWORD_MAX_LENGTH}자 이하여야 합니다.`);
+    throw new AgendaStateError(`가문 비밀번호는 ${PASSWORD_MAX_LENGTH}자 이하여야 합니다.`);
   }
 
   return value;
@@ -293,10 +330,10 @@ function hexToBytes(hex: string) {
 }
 
 async function handleLogout(req: Request, context: Context, store: AgendaStore, state: GameState) {
-  const player = getAuthenticatedPlayer(req, context, state);
-  const nextState = player ? clearSession(state, player) : state;
+  const houseId = getAuthenticatedHouse(req, context, state);
+  const nextState = houseId ? clearSession(state, houseId) : state;
 
-  if (player) {
+  if (houseId) {
     await saveState(store, nextState);
   }
 
@@ -362,35 +399,33 @@ function getLoginCode(context: Context) {
   return getDeployContext(context) === "production" ? "" : DEFAULT_LOGIN_CODE;
 }
 
-function getAuthenticatedPlayer(
+function getAuthenticatedHouse(
   req: Request,
   context: Context,
   state: GameState,
-): PlayerNumber | null {
+): HouseId | null {
   const rawCookie = context.cookies?.get(COOKIE_NAME) || parseCookie(req.headers.get("cookie"))[COOKIE_NAME];
 
   if (!rawCookie) {
     return null;
   }
 
-  let playerText: string;
+  let houseId: string;
   let token: string | undefined;
 
   try {
-    [playerText, token] = decodeURIComponent(rawCookie).split(":");
+    [houseId, token] = decodeURIComponent(rawCookie).split(":");
   } catch {
     return null;
   }
-
-  const player = Number(playerText);
 
   if (!token) {
     return null;
   }
 
   try {
-    const parsedPlayer = parsePlayer(player);
-    return state.sessions[String(parsedPlayer)]?.token === token ? parsedPlayer : null;
+    const parsedHouseId = parseHouseId(houseId);
+    return state.sessions[parsedHouseId]?.token === token ? parsedHouseId : null;
   } catch {
     return null;
   }
@@ -415,9 +450,9 @@ function json(body: unknown, status = 200, headers: Record<string, string> = {})
   });
 }
 
-function createSessionCookie(req: Request, player: PlayerNumber, token: string) {
+function createSessionCookie(req: Request, houseId: HouseId, token: string) {
   const secure = new URL(req.url).protocol === "https:" ? "; Secure" : "";
-  const value = encodeURIComponent(`${player}:${token}`);
+  const value = encodeURIComponent(`${houseId}:${token}`);
   return `${COOKIE_NAME}=${value}; HttpOnly; Path=/; SameSite=Lax; Max-Age=28800${secure}`;
 }
 

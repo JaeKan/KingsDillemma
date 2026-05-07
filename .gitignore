@@ -5,3 +5,7 @@ dist/
 .env.*
 !.env.example
 *.log
+.playwright-cli/
+output/
+tmp/
+.codex/

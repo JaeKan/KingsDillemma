@@ -3,21 +3,35 @@ import {
   AGENDAS,
   applyChoose,
   applyDiscard,
+  calculateFinalScores,
   clearSession,
+  createDefaultHouseProgress,
   createDefaultPlayerInventory,
   createInitialState,
+  endSession,
   normalizeState,
   registerSession,
   redactState,
+  saveHouseProgress,
   savePlayerInventory,
-  setPlayerName,
+  setHouseName,
   setSeatCredential,
+  startDraftIfReady,
 } from "../netlify/functions/_shared/agenda-state.mts";
 
 const now = "2026-05-07T00:00:00.000Z";
+const credential = {
+  salt: "a1",
+  hash: "secret-hash",
+  iterations: 1,
+  createdAt: now,
+};
+
 const initial = createInitialState(now);
 
-assert.equal(initial.phase, "discard");
+assert.equal(initial.phase, "house-select");
+assert.equal(initial.turn, null);
+assert.deepEqual(initial.draftOrder, []);
 assert.equal(initial.pool.length, 6);
 assert.deepEqual(createDefaultPlayerInventory(now).resources, {
   influence: 0,
@@ -26,29 +40,27 @@ assert.deepEqual(createDefaultPlayerInventory(now).resources, {
   welfare: 0,
   knowledge: 0,
 });
-assert.equal(redactState(initial, 2).availableAgendas, undefined);
-assert.equal(redactState(initial, 1).canDiscard, true);
-assert.equal(redactState(initial, null).ownInventory, null);
-assert.equal(redactState(initial, 1).ownInventory?.coins, 10);
-assert.equal(redactState(initial, 1).ownInventory?.powerTokens, 8);
-assert.deepEqual(
-  redactState(initial, null).players.map((seat) => [
-    seat.player,
-    seat.name,
-    seat.hasCustomName,
-    seat.isCurrentTurn,
-    seat.hasSession,
-    seat.hasPassword,
-  ]),
-  [
-    [1, "Player 1", false, false, false, false],
-    [2, "Player 2", false, false, false, false],
-    [3, "Player 3", false, false, false, false],
-    [4, "Player 4", false, false, false, false],
-    [5, "Player 5", false, false, false, false],
-  ],
-);
-assert.equal(redactState(initial, 1).players[0].isCurrentTurn, true);
+assert.deepEqual(createDefaultHouseProgress(now).openAgendaTokens, {
+  positive: [],
+  negative: [],
+});
+assert.deepEqual(createDefaultHouseProgress(now).houseAchievements, [0, 0, 0]);
+assert.equal(createDefaultHouseProgress(now).alignmentAchievements.greedy, 0);
+
+const anonymousInitial = redactState(initial, null);
+assert.equal(anonymousInitial.houses.length, 12);
+assert.equal(anonymousInitial.houses[0].goal, "지식과 정신 사이의 조화 찾기");
+assert.match(anonymousInitial.houses[0].profile, /환대와 개방성/);
+assert.equal(anonymousInitial.claimedHouseCount, 0);
+assert.equal(anonymousInitial.requiredHouseCount, 5);
+assert.equal(anonymousInitial.canDiscard, false);
+assert.equal(anonymousInitial.canChoose, false);
+assert.equal(anonymousInitial.availableAgendas, undefined);
+assert.equal(anonymousInitial.ownHouseProgress, null);
+assert.equal(redactState(initial, "gamam").ownInventory?.coins, 10);
+assert.equal(redactState(initial, "gamam").ownHouseProgress?.narrativeAchievement, false);
+assert.throws(() => applyDiscard(initial, "gamam", now, () => 0), /모든 가문/);
+assert.throws(() => applyChoose(initial, "gamam", AGENDAS[0].id, now), /모든 가문/);
 
 const legacyState = normalizeState(
   {
@@ -64,19 +76,61 @@ const legacyState = normalizeState(
   },
   now,
 );
+assert.equal(legacyState.phase, "house-select");
 assert.deepEqual(legacyState.credentials, {});
 assert.deepEqual(legacyState.playerNames, {});
 assert.deepEqual(legacyState.inventories, {});
 
+let selecting = initial;
+selecting = setHouseName(selecting, "gamam", "House Pinchay", now);
+selecting = setSeatCredential(selecting, "gamam", credential, now);
+selecting = setHouseName(selecting, "solad", "House Gambol", now);
+selecting = setSeatCredential(selecting, "solad", credential, now);
+selecting = setHouseName(selecting, "natar", "House Lethe", now);
+selecting = setSeatCredential(selecting, "natar", credential, now);
+selecting = setHouseName(selecting, "coden", "House Cyfoeth", now);
+selecting = setSeatCredential(selecting, "coden", credential, now);
+
+assert.equal(startDraftIfReady(selecting, now).phase, "house-select");
+assert.equal(redactState(selecting, null).claimedHouseCount, 4);
+
+selecting = setHouseName(selecting, "olwyn", "House Daucus", now);
+selecting = setSeatCredential(selecting, "olwyn", credential, now);
+const draftReady = startDraftIfReady(selecting, now);
+
+assert.equal(draftReady.phase, "discard");
+assert.deepEqual(draftReady.draftOrder, ["solad", "coden", "olwyn", "gamam", "natar"]);
+assert.equal(draftReady.turn, "solad");
+assert.equal(redactState(draftReady, "solad").canDiscard, true);
+assert.equal(redactState(draftReady, "gamam").canDiscard, false);
+assert.equal(redactState(draftReady, "solad").availableAgendas, undefined);
+
+let prestigeSelecting = savePlayerInventory(selecting, "solad", { ...createDefaultPlayerInventory(now), prestige: 3 }, now);
+prestigeSelecting = savePlayerInventory(prestigeSelecting, "coden", { ...createDefaultPlayerInventory(now), prestige: 1 }, now);
+prestigeSelecting = savePlayerInventory(prestigeSelecting, "olwyn", { ...createDefaultPlayerInventory(now), prestige: 1 }, now);
+prestigeSelecting = savePlayerInventory(prestigeSelecting, "natar", { ...createDefaultPlayerInventory(now), prestige: 5 }, now);
+const prestigeDraftReady = startDraftIfReady(prestigeSelecting, now);
+assert.deepEqual(prestigeDraftReady.draftOrder, ["gamam", "coden", "olwyn", "solad", "natar"]);
+
+const playerSession = registerSession(draftReady, "solad", "token-a", now);
+const overwrittenSession = registerSession(playerSession, "solad", "token-b", now);
+assert.equal(overwrittenSession.sessions.solad.token, "token-b");
+assert.equal(redactState(overwrittenSession, null).houses.find((house) => house.id === "solad")?.hasSession, false);
+assert.equal(redactState(overwrittenSession, "solad").houses.find((house) => house.id === "solad")?.hasSession, true);
+
+const clearedSession = clearSession(overwrittenSession, "solad", now);
+assert.equal(clearedSession.sessions.solad, undefined);
+assert.equal(redactState(clearedSession, null).houses.find((house) => house.id === "solad")?.hasSession, false);
+
 const normalizedInventoryState = normalizeState(
   {
-    ...initial,
+    ...draftReady,
     inventories: {
-      "2": {
+      gamam: {
         coins: 12.7,
         powerTokens: 101,
-        prestige: 4,
-        crave: -2,
+        prestige: 101,
+        crave: 51,
         resources: {
           influence: 13,
           wealth: 99,
@@ -86,19 +140,37 @@ const normalizedInventoryState = normalizeState(
         },
         updatedAt: now,
       },
-      "9": {
+      invalid: {
         coins: 99,
+      },
+    },
+    progress: {
+      gamam: {
+        openAgendaTokens: {
+          positive: ["influence", "influence", "bad", "wealth", "morale"],
+          negative: ["knowledge", "welfare", "morale"],
+        },
+        narrativeAchievement: true,
+        houseAchievements: [1.8, 7, "bad"],
+        alignmentAchievements: {
+          Extremist: 2,
+          greedy: 8,
+        },
+        updatedAt: now,
+      },
+      invalid: {
+        narrativeAchievement: true,
       },
     },
   },
   now,
 );
-assert.deepEqual(Object.keys(normalizedInventoryState.inventories), ["2"]);
-assert.deepEqual(normalizedInventoryState.inventories["2"], {
+assert.deepEqual(Object.keys(normalizedInventoryState.inventories), ["gamam"]);
+assert.deepEqual(normalizedInventoryState.inventories.gamam, {
   coins: 12,
   powerTokens: 99,
-  prestige: 4,
-  crave: 0,
+  prestige: 100,
+  crave: 50,
   resources: {
     influence: 13,
     wealth: 17,
@@ -108,38 +180,19 @@ assert.deepEqual(normalizedInventoryState.inventories["2"], {
   },
   updatedAt: now,
 });
-
-const credential = {
-  salt: "a1",
-  hash: "secret-hash",
-  iterations: 1,
-  createdAt: now,
-};
-const namedState = setPlayerName(initial, 1, "라니스터", now);
-assert.equal(namedState.playerNames["1"], "라니스터");
-assert.equal(redactState(namedState, null).players[0].name, "라니스터");
-assert.equal(redactState(namedState, null).players[0].hasCustomName, true);
-
-const credentialState = setSeatCredential(namedState, 1, credential, now);
-assert.equal(credentialState.credentials["1"].hash, "secret-hash");
-assert.equal(redactState(credentialState, null).players[0].hasPassword, true);
-assert.equal(JSON.stringify(redactState(credentialState, null)).includes("secret-hash"), false);
-assert.equal(JSON.stringify(redactState(credentialState, null)).includes("a1"), false);
-
-const playerOneSession = registerSession(initial, 1, "token-a", now);
-const overwrittenSession = registerSession(playerOneSession, 1, "token-b", now);
-assert.equal(overwrittenSession.sessions["1"].token, "token-b");
-assert.equal(Object.keys(overwrittenSession.sessions).length, 1);
-assert.equal(redactState(overwrittenSession, null).players[0].hasSession, false);
-assert.equal(redactState(overwrittenSession, 1).players[0].hasSession, true);
-
-const clearedSession = clearSession(overwrittenSession, 1, now);
-assert.equal(clearedSession.sessions["1"], undefined);
-assert.equal(redactState(clearedSession, null).players[0].hasSession, false);
+assert.deepEqual(Object.keys(normalizedInventoryState.progress), ["gamam"]);
+assert.deepEqual(normalizedInventoryState.progress.gamam.openAgendaTokens, {
+  positive: ["influence", "wealth"],
+  negative: ["knowledge", "welfare"],
+});
+assert.equal(normalizedInventoryState.progress.gamam.narrativeAchievement, true);
+assert.deepEqual(normalizedInventoryState.progress.gamam.houseAchievements, [1, 3, 0]);
+assert.equal(normalizedInventoryState.progress.gamam.alignmentAchievements.extremist, 2);
+assert.equal(normalizedInventoryState.progress.gamam.alignmentAchievements.greedy, 4);
 
 const inventoryState = savePlayerInventory(
-  initial,
-  2,
+  draftReady,
+  "gamam",
   {
     coins: 14,
     powerTokens: 6,
@@ -155,36 +208,182 @@ const inventoryState = savePlayerInventory(
   },
   now,
 );
-assert.equal(inventoryState.version, initial.version + 1);
-assert.equal(inventoryState.inventories["2"].updatedAt, now);
+assert.equal(inventoryState.version, draftReady.version + 1);
 assert.equal(redactState(inventoryState, null).ownInventory, null);
-assert.equal(redactState(inventoryState, 1).ownInventory?.coins, 10);
-assert.equal(redactState(inventoryState, 2).ownInventory?.coins, 14);
-assert.equal(redactState(inventoryState, 2).ownInventory?.resources.knowledge, 17);
+assert.equal(redactState(inventoryState, "solad").ownInventory?.coins, 10);
+assert.equal(redactState(inventoryState, "gamam").ownInventory?.coins, 14);
+assert.equal(redactState(inventoryState, "gamam").ownInventory?.resources.knowledge, 17);
 
-const discarded = applyDiscard(initial, 1, now, () => 0);
+const progressState = saveHouseProgress(
+  inventoryState,
+  "gamam",
+  {
+    openAgendaTokens: {
+      positive: ["influence", "wealth"],
+      negative: ["morale"],
+    },
+    narrativeAchievement: true,
+    houseAchievements: [1, 2, 3],
+    alignmentAchievements: {
+      greedy: 4,
+      rebel: 1,
+    },
+  },
+  now,
+);
+assert.equal(progressState.version, inventoryState.version + 1);
+assert.equal(redactState(progressState, null).ownHouseProgress, null);
+assert.equal(redactState(progressState, "solad").ownHouseProgress?.narrativeAchievement, false);
+assert.deepEqual(redactState(progressState, "gamam").ownHouseProgress?.openAgendaTokens.positive, [
+  "influence",
+  "wealth",
+]);
+assert.equal(redactState(progressState, "gamam").ownHouseProgress?.alignmentAchievements.greedy, 4);
+
+const discarded = applyDiscard(progressState, "solad", now, () => 0);
 assert.equal(discarded.phase, "choose");
 assert.equal(discarded.discarded, AGENDAS[0].id);
 assert.equal(discarded.pool.length, 5);
-assert.equal(redactState(discarded, 2).availableAgendas, undefined);
-assert.equal(redactState(discarded, 1).availableAgendas?.length, 5);
+assert.equal(discarded.turn, "solad");
+assert.equal(redactState(discarded, "gamam").availableAgendas, undefined);
+assert.equal(redactState(discarded, "solad").availableAgendas?.length, 5);
+assert.throws(() => applyDiscard(draftReady, "gamam", now, () => 0), /not your turn/i);
 
-let state = applyChoose(discarded, 1, discarded.pool[0], now);
-assert.equal(state.turn, 2);
+let state = applyChoose(discarded, "solad", discarded.pool[0], now);
+assert.equal(state.turn, "coden");
 assert.equal(state.pool.length, 4);
-assert.equal(redactState(state, 1).ownChoice?.id, discarded.pool[0]);
-assert.equal(redactState(state, 1).availableAgendas, undefined);
-assert.throws(() => applyChoose(state, 1, state.pool[0], now), /not your turn/i);
+assert.equal(redactState(state, "solad").ownChoice?.id, discarded.pool[0]);
+assert.equal(redactState(state, "solad").availableAgendas, undefined);
+assert.throws(() => applyChoose(state, "solad", state.pool[0], now), /not your turn/i);
 
-state = applyChoose(state, 2, state.pool[0], now);
-state = applyChoose(state, 3, state.pool[0], now);
-state = applyChoose(state, 4, state.pool[0], now);
-state = applyChoose(state, 5, state.pool[0], now);
+state = applyChoose(state, "coden", state.pool[0], now);
+state = applyChoose(state, "olwyn", state.pool[0], now);
+state = applyChoose(state, "gamam", state.pool[0], now);
+state = applyChoose(state, "natar", state.pool[0], now);
 
 assert.equal(state.phase, "complete");
 assert.equal(state.pool.length, 0);
 assert.equal(Object.keys(state.choices).length, 5);
-assert.equal(redactState(state, 5).ownChoice?.id, state.choices["5"]);
-assert.equal(redactState(state, 3).availableAgendas, undefined);
+assert.equal(redactState(state, "natar").ownChoice?.id, state.choices.natar);
+assert.equal(redactState(state, "olwyn").availableAgendas, undefined);
+assert.throws(() => endSession(discarded, now), /비밀 의제/);
+assert.throws(
+  () =>
+    calculateFinalScores(discarded, {
+      influence: 17,
+      wealth: 13,
+      morale: 5,
+      welfare: 1,
+      knowledge: 13,
+    }),
+  /비밀 의제/,
+);
+
+state = saveHouseProgress(
+  state,
+  "gamam",
+  {
+    openAgendaTokens: {
+      positive: ["influence", "wealth"],
+      negative: ["morale", "knowledge"],
+    },
+    narrativeAchievement: true,
+    houseAchievements: [1, 2, 3],
+    alignmentAchievements: {
+      greedy: 4,
+      rebel: 1,
+    },
+  },
+  now,
+);
+state = savePlayerInventory(state, "solad", { ...createDefaultPlayerInventory(now), coins: 20, powerTokens: 9 }, now);
+state = savePlayerInventory(state, "coden", { ...createDefaultPlayerInventory(now), coins: 15, powerTokens: 4 }, now);
+state = savePlayerInventory(state, "olwyn", { ...createDefaultPlayerInventory(now), coins: 15, powerTokens: 8 }, now);
+state = savePlayerInventory(
+  state,
+  "gamam",
+  {
+    coins: 3,
+    powerTokens: 9,
+    prestige: 2,
+    crave: 1,
+    resources: {
+      influence: 11,
+      wealth: 9,
+      morale: 0,
+      welfare: 3,
+      knowledge: 17,
+    },
+  },
+  now,
+);
+state = savePlayerInventory(state, "natar", { ...createDefaultPlayerInventory(now), coins: 0, powerTokens: 1 }, now);
+
+const finalScoring = calculateFinalScores(
+  state,
+  {
+    influence: 17,
+    wealth: 13,
+    morale: 5,
+    welfare: 1,
+    knowledge: 13,
+  },
+  now,
+);
+assert.deepEqual(
+  finalScoring.rows.map((row) => [row.houseId, row.scores.total, row.ranks.total]),
+  [
+    ["olwyn", 23, 1],
+    ["coden", 20, 2],
+    ["solad", 18, 3],
+    ["gamam", 14, 4],
+    ["natar", 0, 5],
+  ],
+);
+assert.deepEqual(finalScoring.rows.find((row) => row.houseId === "gamam")?.scores, {
+  resourceGoal: 7,
+  moneyRanking: 2,
+  openAgenda: 3,
+  powerMajority: 2,
+  total: 14,
+});
+assert.equal(finalScoring.rows.find((row) => row.houseId === "solad")?.ranks.coins, 1);
+assert.equal(finalScoring.rows.find((row) => row.houseId === "olwyn")?.ranks.coins, 2);
+assert.equal(finalScoring.rows.find((row) => row.houseId === "gamam")?.ranks.power, 1);
+assert.throws(
+  () =>
+    calculateFinalScores(state, {
+      influence: 18,
+      wealth: 13,
+      morale: 5,
+      welfare: 1,
+      knowledge: 13,
+    }),
+  /영향력/,
+);
+
+const activeSessions = registerSession(registerSession(state, "solad", "token-a", now), "gamam", "token-b", now);
+const ended = endSession(activeSessions, now);
+assert.equal(ended.phase, "discard");
+assert.deepEqual(ended.draftOrder, ["solad", "coden", "olwyn", "natar", "gamam"]);
+assert.equal(ended.turn, "solad");
+assert.deepEqual(ended.choices, {});
+assert.equal(ended.discarded, null);
+assert.equal(ended.pool.length, AGENDAS.length);
+assert.deepEqual(ended.sessions, {});
+assert.equal(ended.credentials.gamam, credential);
+assert.equal(ended.playerNames.gamam, "House Pinchay");
+assert.equal(ended.inventories.gamam.coins, 10);
+assert.equal(ended.inventories.gamam.powerTokens, 8);
+assert.equal(ended.inventories.gamam.prestige, 2);
+assert.equal(ended.inventories.gamam.crave, 1);
+assert.equal(ended.inventories.gamam.resources.knowledge, 17);
+assert.deepEqual(ended.progress.gamam.openAgendaTokens, { positive: [], negative: [] });
+assert.equal(ended.progress.gamam.narrativeAchievement, true);
+assert.deepEqual(ended.progress.gamam.houseAchievements, [1, 2, 3]);
+assert.equal(ended.progress.gamam.alignmentAchievements.greedy, 4);
+assert.equal(redactState(ended, "solad").canDiscard, true);
+assert.equal(redactState(ended, "gamam").ownChoice, null);
+assert.deepEqual(normalizeState(ended, now).draftOrder, ended.draftOrder);
 
 console.log("agenda-state tests passed");
