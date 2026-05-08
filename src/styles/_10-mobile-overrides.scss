@@ -1,0 +1,425 @@
+@media (max-width: 980px) {
+  .app-shell {
+    width: min(100% - 14px, 800px);
+    padding-top: 16px;
+  }
+
+  .app-shell.is-council {
+    height: auto;
+    min-height: 100vh;
+    overflow: visible;
+    padding: 16px 0 calc(92px + env(safe-area-inset-bottom));
+  }
+
+  .app-header,
+  .council-entry,
+  .council-layout,
+  .dilemma-stage {
+    grid-template-columns: 1fr;
+  }
+
+  .app-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  h1 {
+    font-size: 2.12rem;
+  }
+
+  h2 {
+    font-size: 1.74rem;
+  }
+
+  .council-sidebar {
+    position: static;
+  }
+
+  .council-layout,
+  .council-main {
+    height: auto;
+    max-height: none;
+    overflow: visible;
+  }
+
+  .progress-section.has-own-choice .progress-choice-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .council-layout {
+    min-height: 0;
+  }
+
+  .council-main {
+    padding-right: 0;
+    scrollbar-gutter: auto;
+  }
+
+  .entry-brief {
+    min-height: auto;
+  }
+
+  .stage-tableau {
+    min-height: 140px;
+  }
+
+  .coin-token {
+    right: 22px;
+    bottom: 14px;
+  }
+
+  .power-token {
+    left: 28px;
+    top: 20px;
+  }
+
+  .seal-token {
+    right: 18px;
+    top: 10px;
+  }
+}
+
+@media (max-width: 680px) {
+
+  .brand-lockup,
+  .ledger-heading,
+  .session-check-panel,
+  .session-score-heading,
+  .dilemma-summary-head,
+  .inventory-header,
+  .inventory-actions,
+  .agenda-section-heading,
+  .action-card,
+  .own-choice {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .brand-seal {
+    width: 66px;
+    height: 66px;
+  }
+
+  .brand-seal svg {
+    width: 38px;
+    height: 38px;
+  }
+
+  h1 {
+    font-size: 1.82rem;
+  }
+
+  h2 {
+    font-size: 1.5rem;
+    line-height: 1.18;
+  }
+
+  .entry-brief,
+  .session-check-panel,
+  .seat-ledger,
+  .inventory-panel,
+  .agenda-section {
+    padding: 16px;
+  }
+
+  .inventory-panel {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "head"
+      "resources"
+      "agenda"
+      "progress"
+      "actions";
+    height: auto;
+  }
+
+  .inventory-panel.has-house-profile {
+    grid-template-areas:
+      "head"
+      "resources"
+      "house"
+      "agenda"
+      "progress"
+      "actions";
+  }
+
+  .seat-grid,
+  .dilemma-facts,
+  .dilemma-vote-breakdown,
+  .dilemma-outcome-grid,
+  .dilemma-dialog-grid,
+  .dilemma-dialog-grid.compact,
+  .dilemma-history-layout,
+  .dilemma-photo-editor-grid,
+  .dilemma-outcome-selector-grid,
+  .dilemma-outcome-edit-grid,
+  .inventory-grid,
+  .inventory-resource-grid,
+  .session-board-grid,
+  .progress-choice-layout,
+  .progress-ledger,
+  .achievement-ledger,
+  .achievement-track-list,
+  .alignment-achievement-list,
+  .score-track-grid,
+  .agenda-list {
+    grid-template-columns: 1fr;
+  }
+
+  .inventory-resource-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .dilemma-summary-actions {
+    width: 100%;
+    justify-content: stretch;
+  }
+
+  .dilemma-vote-options {
+    grid-template-columns: 1fr;
+  }
+
+  .dilemma-status-pill,
+  .dilemma-summary-button {
+    flex: 1 1 0;
+    max-width: none;
+  }
+
+  .dilemma-dialog {
+    padding: 16px;
+  }
+
+  .achievement-dialog {
+    padding: 16px;
+  }
+
+  .settings-float-actions {
+    gap: 8px;
+  }
+
+  .settings-toggle {
+    width: 50px;
+    min-height: 50px;
+  }
+
+  .dilemma-history-dialog {
+    padding: 16px;
+  }
+
+  .vote-order-dialog {
+    padding: 16px;
+  }
+
+  .dilemma-role-dialog {
+    padding: 16px;
+  }
+
+  .dilemma-role-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .vote-order-ring {
+    --seat-width: 106px;
+    --seat-height: 52px;
+    --seat-radius: clamp(58px, 20vw, 82px);
+    width: min(100%, calc((var(--seat-radius) * 2) + var(--seat-width) + 20px));
+  }
+
+  .vote-order-seat {
+    grid-template-columns: 26px minmax(0, 1fr);
+    gap: 5px;
+    width: var(--seat-width);
+    min-height: var(--seat-height);
+    padding: 6px;
+  }
+
+  .vote-order-rank {
+    width: 26px;
+    height: 26px;
+    font-size: 0.62rem;
+  }
+
+  .vote-order-house strong {
+    font-size: 0.74rem;
+  }
+
+  .vote-order-house small {
+    display: none;
+  }
+
+  .dilemma-history-list {
+    max-height: none;
+  }
+
+  .dilemma-photo-editor-head {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .dilemma-photo-add {
+    width: 100%;
+  }
+
+  .alignment-progress-row {
+    grid-template-columns: minmax(0, 1fr) auto auto;
+  }
+
+  .achievement-progress-row--challenge {
+    grid-template-columns: minmax(0, 1fr) max-content;
+  }
+
+  .achievement-progress-row--challenge .progress-pips,
+  .achievement-progress-row--challenge .counter-controls {
+    grid-column: 1 / -1;
+  }
+
+  .achievement-progress-row--challenge .achievement-challenge-status {
+    justify-self: start;
+  }
+
+  .achievement-effect-row {
+    grid-template-columns: 34px minmax(0, 1fr) 32px;
+  }
+
+  .achievement-effect-row-icon {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  .achievement-effect-select-field {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  .achievement-effect-remove-button {
+    grid-column: 3;
+    grid-row: 1;
+  }
+
+  .achievement-effect-text-field,
+  .achievement-effect-amount-field,
+  .achievement-effect-row-preview {
+    grid-column: 2 / -1;
+  }
+
+  .seat-option {
+    min-height: 118px;
+    grid-template-columns: auto 1fr;
+    grid-template-rows: auto auto;
+  }
+
+  .seat-status {
+    grid-column: 2;
+  }
+
+  .counter-row {
+    grid-template-columns: 42px 1fr;
+  }
+
+  .house-profile-card,
+  .house-profile-grid,
+  .house-alignment-track {
+    grid-template-columns: 1fr;
+  }
+
+  .house-profile-card {
+    align-items: start;
+  }
+
+  .counter-controls {
+    grid-column: 1 / -1;
+    width: 100%;
+  }
+
+  .score-track-row {
+    grid-template-columns: 90px minmax(0, 1fr);
+    gap: 6px;
+  }
+
+  .score-track-controls {
+    grid-column: auto;
+    width: auto;
+  }
+
+  .score-track-group {
+    grid-template-columns: repeat(10, 6px);
+    grid-auto-rows: 6px;
+    gap: 1px;
+    padding: 3px;
+  }
+
+  .score-track-group span {
+    width: 6px;
+    height: 6px;
+  }
+
+  .counter-controls output {
+    flex: 1;
+  }
+
+  .achievement-progress-row .counter-controls,
+  .alignment-progress-row .counter-controls {
+    grid-column: auto;
+    width: auto;
+  }
+
+  .achievement-progress-row .counter-controls output,
+  .alignment-progress-row .counter-controls output {
+    flex: 0 0 auto;
+    min-width: 34px;
+  }
+
+  .inventory-actions>div,
+  .session-end-actions,
+  .score-guide-actions,
+  .score-guide-actions button,
+  .action-card button,
+  .agenda-card button {
+    width: 100%;
+  }
+
+  .agenda-card-label-row button {
+    width: auto;
+  }
+
+  .inventory-actions>div,
+  .session-end-actions {
+    flex-direction: column;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+.score-track-groups {
+  align-self: start;
+  align-items: stretch;
+  align-content: stretch;
+}
+
+.score-track-group {
+  --score-track-cell-min: 10px;
+  align-content: start;
+  align-items: start;
+  justify-content: start;
+  justify-items: stretch;
+  grid-template-columns: repeat(10, minmax(var(--score-track-cell-min), 1fr));
+  grid-auto-rows: auto;
+  gap: 1px;
+}
+
+.score-track-group span {
+  width: 100%;
+  height: auto;
+  min-width: 0;
+  min-height: 0;
+  aspect-ratio: 1 / 1;
+  box-sizing: border-box;
+}

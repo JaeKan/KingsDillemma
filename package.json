@@ -31,6 +31,7 @@
     "@mui/icons-material": "^9.0.0",
     "@mui/material": "^9.0.0",
     "@netlify/blobs": "latest",
+    "@tanstack/react-query": "^5.100.9",
     "express": "^5.2.1",
     "matter-js": "^0.20.0",
     "mysql2": "^3.22.3",
@@ -41,6 +42,7 @@
     "@netlify/functions": "latest",
     "@types/matter-js": "^0.20.2",
     "@vitejs/plugin-react-swc": "latest",
+    "sass": "^1.99.0",
     "tsx": "latest",
     "vite": "latest"
   }

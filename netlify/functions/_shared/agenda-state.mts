@@ -34,9 +34,22 @@ export type PlayerInventory = {
   updatedAt: string;
 };
 
+export type AchievementEffect = {
+  icon: string;
+  amount: number;
+};
+
+export type AchievementEffectEntry = {
+  icon: string;
+  amount: number;
+  text: string;
+};
+
 export type AchievementDetail = {
   conditionText: string;
   requiredCount: number;
+  effectEntries: AchievementEffectEntry[];
+  effects: AchievementEffect[];
   effectIcon: string;
   effectAmount: number;
   effectText: string;
@@ -58,6 +71,7 @@ export type HouseProgress = {
   houseAchievementDetails: AchievementDetail[];
   alignmentAchievements: Record<string, number>;
   alignmentRewards: Record<string, AlignmentReward>;
+  alignmentOrder: string[];
   updatedAt: string;
 };
 
@@ -145,6 +159,8 @@ export type GameState = {
   inventories: Record<string, PlayerInventory>;
   progress: Record<string, HouseProgress>;
   dilemma: DilemmaRecord;
+  dilemmaLeader: HouseId | null;
+  dilemmaModerator: HouseId | null;
   dilemmaVoteOrder: HouseId[];
   dilemmaHistory: DilemmaHistoryEntry[];
   createdAt: string;
@@ -200,6 +216,8 @@ export type RedactedState = {
   canChoose: boolean;
   dilemmaVoteTurn: HouseId | null;
   canVoteDilemma: boolean;
+  dilemmaLeader: HouseId | null;
+  dilemmaModerator: HouseId | null;
   dilemmaVoteOrder: HouseId[];
   ownChoice: Agenda | null;
   ownInventory: PlayerInventory | null;
@@ -290,10 +308,10 @@ export const AGENDAS: Agenda[] = [
     resourceGoal: "5-13번 줄 안에 있는 자원 마커 수에 따라 승점을 얻습니다.",
     resourceScoring: [
       { label: "마커 1개", vp: 6 },
-      { label: "마커 2개", vp: 13 },
-      { label: "마커 3개", vp: 17 },
-      { label: "마커 4개", vp: 19 },
-      { label: "마커 5개", vp: 20 },
+      { label: "마커 2개", vp: 7 },
+      { label: "마커 3개", vp: 10 },
+      { label: "마커 4개", vp: 13 },
+      { label: "마커 5개", vp: 14 },
     ],
     coinRanking: [
       { rank: 1, vp: 5 },
@@ -368,7 +386,7 @@ export const PERSONAL_RESOURCE_TRACKS = [
 ] as const;
 
 const AGENDA_BY_ID = new Map(AGENDAS.map((agenda) => [agenda.id, agenda]));
-const STATE_VERSION = 6;
+const STATE_VERSION = 9;
 const PERSONAL_COUNTER_LIMITS = {
   coins: 99,
   powerTokens: 99,
@@ -382,20 +400,15 @@ const HOUSE_ACHIEVEMENT_MARK_MAX = 5;
 const HOUSE_ALIGNMENT_MARK_MAX = 4;
 const HOUSE_ALIGNMENT_REWARD_COUNT_MAX = 3;
 const ACHIEVEMENT_DETAIL_TEXT_LIMIT = 300;
+const ACHIEVEMENT_EFFECT_ENTRY_LIMIT = 8;
 const ACHIEVEMENT_EFFECT_AMOUNT_MAX = 99;
 const ACHIEVEMENT_EFFECT_ICONS = new Set([
   "",
   "instant",
   "start",
   "condition",
-  "charges",
-  "prestige",
-  "crave",
-  "coins",
-  "power",
-  "finale",
 ]);
-const ACHIEVEMENT_EFFECT_AMOUNT_ICONS = new Set(["prestige", "crave", "coins", "power", "finale"]);
+const ACHIEVEMENT_EFFECT_AMOUNT_ICONS = new Set<string>();
 const DILEMMA_EDIT_LOCK_TTL_MS = 15 * 60 * 1000;
 const DILEMMA_CODE_LIMIT = 32;
 const DILEMMA_TITLE_LIMIT = 80;
@@ -468,6 +481,8 @@ export function createInitialState(now = new Date().toISOString()): GameState {
     inventories: {},
     progress: {},
     dilemma: createDefaultDilemmaRecord(now),
+    dilemmaLeader: null,
+    dilemmaModerator: null,
     dilemmaVoteOrder: [],
     dilemmaHistory: [],
     createdAt: now,
@@ -482,9 +497,11 @@ export function normalizeState(value: unknown, now = new Date().toISOString()): 
 
   const candidate = value as Partial<GameState>;
   const credentials = sanitizeCredentials(candidate.credentials);
+  const sessions = sanitizeSessions(candidate.sessions, credentials);
   const inventories = sanitizeInventories(candidate.inventories, now);
   const progress = sanitizeProgress(candidate.progress, now);
   const activeHouseIds = getActiveHouseIds(credentials);
+  const loggedInHouseIds = getLoggedInHouseIdsFromMaps(credentials, sessions);
   const draftReady = activeHouseIds.length >= REQUIRED_HOUSE_COUNT;
   const candidateVersion = Number.isInteger(candidate.version) ? Number(candidate.version) : 0;
   const migrateUnpickedDraftOrder = shouldMigrateUnpickedDraftOrder(candidateVersion, candidate.choices);
@@ -502,7 +519,15 @@ export function normalizeState(value: unknown, now = new Date().toISOString()): 
   const phase = derivePhase(draftReady, discarded, choices, draftOrder);
   const turn = deriveTurn(migrateUnpickedDraftOrder ? null : candidate.turn, phase, draftOrder, choices);
   const dilemma = phase === "complete" ? sanitizeDilemmaRecord(candidate.dilemma, now) : createDefaultDilemmaRecord(now);
-  const dilemmaVoteOrder = sanitizeDilemmaVoteOrder(candidate.dilemmaVoteOrder, activeHouseIds);
+  const dilemmaLeader =
+    phase === "complete"
+      ? sanitizeRoleHouseId(candidate.dilemmaLeader, activeHouseIds)
+      : null;
+  const dilemmaModerator =
+    phase === "complete"
+      ? sanitizeRoleHouseId(candidate.dilemmaModerator, activeHouseIds)
+      : null;
+  const dilemmaVoteOrder = pickStoredDilemmaVoteOrder(candidate.dilemmaVoteOrder, loggedInHouseIds);
   const dilemmaHistory = sanitizeDilemmaHistory(candidate.dilemmaHistory, now);
 
   return {
@@ -514,12 +539,14 @@ export function normalizeState(value: unknown, now = new Date().toISOString()): 
     discarded,
     randomDiscardEnabled,
     choices,
-    sessions: sanitizeSessions(candidate.sessions, credentials),
+    sessions,
     credentials,
     playerNames: sanitizePlayerNames(candidate.playerNames),
     inventories,
     progress,
     dilemma,
+    dilemmaLeader,
+    dilemmaModerator,
     dilemmaVoteOrder,
     dilemmaHistory,
     createdAt: typeof candidate.createdAt === "string" ? candidate.createdAt : now,
@@ -569,8 +596,13 @@ export function createDefaultHouseProgress(now = new Date().toISOString()): Hous
     ),
     alignmentAchievements: Object.fromEntries(AGENDAS.map((agenda) => [agenda.id, 0])),
     alignmentRewards: Object.fromEntries(AGENDAS.map((agenda) => [agenda.id, createDefaultAlignmentReward()])),
+    alignmentOrder: getDefaultAlignmentOrder(),
     updatedAt: now,
   };
+}
+
+function getDefaultAlignmentOrder() {
+  return AGENDAS.map((agenda) => agenda.id);
 }
 
 function createDefaultAlignmentReward(): AlignmentReward {
@@ -584,6 +616,8 @@ function createDefaultAchievementDetail(requiredCount: number): AchievementDetai
   return {
     conditionText: "",
     requiredCount,
+    effectEntries: [],
+    effects: [],
     effectIcon: "",
     effectAmount: 0,
     effectText: "",
@@ -717,9 +751,10 @@ export function endSession(state: GameState, now = new Date().toISOString()): Ga
     discarded: null,
     choices: {},
     sessions: {},
-    inventories: resetSessionInventories(state.inventories, now),
-    progress: resetSessionProgress(state.progress, now),
     dilemma: createDefaultDilemmaRecord(now),
+    dilemmaLeader: null,
+    dilemmaModerator: null,
+    dilemmaVoteOrder: [],
     updatedAt: now,
   };
 }
@@ -734,21 +769,58 @@ export function saveDilemmaVoteOrder(
     throw new AgendaStateError("딜레마 투표가 진행 중일 때는 투표 순서를 변경할 수 없습니다.", 409);
   }
 
-  const activeHouseIds = getClaimedHouseIds(state);
+  const activeHouseIds = getLoggedInHouseIds(state);
 
-  if (activeHouseIds.length !== REQUIRED_HOUSE_COUNT) {
-    throw new AgendaStateError("참여 가문 5개가 정해진 뒤 투표 순서를 설정할 수 있습니다.", 409);
+  if (activeHouseIds.length === 0) {
+    throw new AgendaStateError("로그인 중인 가문이 있을 때 투표 순서를 설정할 수 있습니다.", 409);
   }
 
   const nextOrder = sanitizeDilemmaVoteOrder(order, activeHouseIds);
 
-  if (nextOrder.length !== REQUIRED_HOUSE_COUNT) {
-    throw new AgendaStateError("다섯 가문을 모두 포함한 투표 순서를 저장하세요.", 400);
+  if (nextOrder.length !== activeHouseIds.length) {
+    throw new AgendaStateError("로그인 중인 가문을 모두 포함한 투표 순서를 저장하세요.", 400);
   }
 
   return {
     ...state,
     dilemmaVoteOrder: nextOrder,
+    version: state.version + 1,
+    updatedAt: now,
+  };
+}
+
+export function saveDilemmaRoles(
+  state: GameState,
+  _houseId: HouseId,
+  roles: unknown,
+  now = new Date().toISOString(),
+): GameState {
+  assertCanEditDilemma(state);
+
+  const currentDilemma = sanitizeDilemmaRecord(state.dilemma, now);
+
+  if (currentDilemma.editLock || !isDilemmaRecordBlank(currentDilemma)) {
+    throw new AgendaStateError("리더와 중재자는 딜레마 작성 전에만 지정할 수 있습니다.", 409);
+  }
+
+  const activeHouseIds = getLoggedInHouseIds(state);
+
+  if (activeHouseIds.length === 0) {
+    throw new AgendaStateError("로그인 중인 가문이 있을 때 리더와 중재자를 지정할 수 있습니다.", 409);
+  }
+
+  const candidate = roles && typeof roles === "object" ? (roles as Record<string, unknown>) : {};
+  const leader = sanitizeRoleHouseId(candidate.leaderHouseId, activeHouseIds);
+  const moderator = sanitizeRoleHouseId(candidate.moderatorHouseId, activeHouseIds);
+
+  if (!leader || !moderator) {
+    throw new AgendaStateError("리더와 중재자를 모두 선택하세요.", 400);
+  }
+
+  return {
+    ...state,
+    dilemmaLeader: leader,
+    dilemmaModerator: moderator,
     version: state.version + 1,
     updatedAt: now,
   };
@@ -792,15 +864,46 @@ export function saveHouseProgress(
           ...progressCandidate,
           alignmentRewards: currentProgress.alignmentRewards,
         };
+  const progressWithServerManagedFields = {
+    ...progressWithRewards,
+    alignmentOrder: currentProgress.alignmentOrder,
+  };
 
   return {
     ...state,
     progress: {
       ...state.progress,
       [houseId]: {
-        ...sanitizeHouseProgress(progressWithRewards, now),
+        ...sanitizeHouseProgress(progressWithServerManagedFields, now),
         updatedAt: now,
       },
+    },
+    version: state.version + 1,
+    updatedAt: now,
+  };
+}
+
+export function saveAlignmentOrder(
+  state: GameState,
+  houseId: HouseId,
+  order: unknown,
+  now = new Date().toISOString(),
+): GameState {
+  const currentProgress = getHouseProgress(state, houseId);
+  const nextProgress = sanitizeHouseProgress(
+    {
+      ...currentProgress,
+      alignmentOrder: order,
+      updatedAt: now,
+    },
+    now,
+  );
+
+  return {
+    ...state,
+    progress: {
+      ...state.progress,
+      [houseId]: nextProgress,
     },
     version: state.version + 1,
     updatedAt: now,
@@ -851,6 +954,7 @@ export function beginDilemmaEdit(
   now = new Date().toISOString(),
 ): GameState {
   assertCanEditDilemma(state);
+  assertDilemmaRolesAssigned(state);
 
   if (!token) {
     throw new AgendaStateError("딜레마 편집 토큰을 만들 수 없습니다.");
@@ -916,9 +1020,18 @@ export function saveDilemmaRecord(
   const sanitizedDraft = sanitizeDilemmaRecord(draft, now);
   const nextHistoryId =
     currentDilemma.historyId || sanitizeSingleLineText(historyId, DILEMMA_HISTORY_ID_LIMIT);
+  const votesComplete = areDilemmaVotesComplete(state, sanitizedDraft, now);
 
   if (!nextHistoryId) {
     throw new AgendaStateError("딜레마 이력 식별값을 만들 수 없습니다.");
+  }
+
+  if (!votesComplete && sanitizedDraft.selectedOutcome) {
+    throw new AgendaStateError("로그인 중인 모든 가문이 투표한 뒤 결과를 선택할 수 있습니다.", 409);
+  }
+
+  if (!votesComplete && sanitizedDraft.resolutionNotes.trim()) {
+    throw new AgendaStateError("로그인 중인 모든 가문이 투표한 뒤 해결 후속을 입력할 수 있습니다.", 409);
   }
 
   const nextDilemma: DilemmaRecord = {
@@ -976,6 +1089,8 @@ export function publishDilemmaRecord(
   return {
     ...state,
     dilemma: createDefaultDilemmaRecord(now),
+    dilemmaLeader: null,
+    dilemmaModerator: null,
     dilemmaHistory: upsertDilemmaHistory(state.dilemmaHistory, nextDilemma, houseId, getHouseLabel(state, houseId), now),
     version: state.version + 1,
     updatedAt: now,
@@ -1018,13 +1133,13 @@ export function saveDilemmaVote(
   const participants = getDilemmaVotingParticipants(state);
 
   if (currentDilemma.selectedOutcome) {
-    throw new AgendaStateError("이미 적용된 딜레마 투표입니다.", 409);
+    throw new AgendaStateError("이미 결과가 선택된 딜레마 투표입니다.", 409);
   }
 
   const currentVoteTurn = getCurrentDilemmaVoteTurn(state, now);
 
   if (!currentVoteTurn) {
-    throw new AgendaStateError("다섯 가문이 모두 투표했습니다. 결과를 적용하세요.", 409);
+    throw new AgendaStateError("로그인 중인 모든 가문이 투표했습니다. 결과와 후속 처리를 기록하세요.", 409);
   }
 
   if (currentVoteTurn !== houseId) {
@@ -1063,18 +1178,18 @@ export function applyDilemmaVotes(
   const participants = getDilemmaVotingParticipants(state);
 
   if (currentDilemma.selectedOutcome) {
-    throw new AgendaStateError("이미 적용된 딜레마 투표입니다.", 409);
+    throw new AgendaStateError("이미 결과가 선택된 딜레마 투표입니다.", 409);
   }
 
-  if (participants.length !== REQUIRED_HOUSE_COUNT) {
-    throw new AgendaStateError("참여 가문 5개가 확정되어야 딜레마 투표를 적용할 수 있습니다.", 409);
+  if (participants.length === 0) {
+    throw new AgendaStateError("로그인 중인 가문이 있어야 딜레마 투표를 적용할 수 있습니다.", 409);
   }
 
   const votes = sanitizeDilemmaVotes(currentDilemma.votes, now);
   const missingHouse = participants.find((participantId) => !votes[participantId]?.side);
 
   if (missingHouse) {
-    throw new AgendaStateError("다섯 가문이 모두 찬성/반대/기권을 선택해야 적용할 수 있습니다.", 409);
+    throw new AgendaStateError("로그인 중인 모든 가문이 찬성/반대/기권을 선택해야 적용할 수 있습니다.", 409);
   }
 
   for (const participantId of participants) {
@@ -1098,38 +1213,14 @@ export function applyDilemmaVotes(
   const ayePower = sumDilemmaVotePower(votes, participants, "aye");
   const nayPower = sumDilemmaVotePower(votes, participants, "nay");
 
-  if (ayePower === nayPower) {
-    throw new AgendaStateError("찬성과 반대 권력 합계가 같습니다. 사회자가 승리한 쪽을 결정한 뒤 결과를 직접 선택하세요.", 409);
-  }
-
-  const selectedOutcome: DilemmaVoteSide = ayePower > nayPower ? "aye" : "nay";
-  const nextInventories = { ...state.inventories };
-
-  for (const participantId of participants) {
-    const playerVote = votes[participantId];
-
-    if (!playerVote || playerVote.side !== selectedOutcome || playerVote.powerTokens <= 0) {
-      continue;
-    }
-
-    const inventory = getPlayerInventory(state, participantId);
-    nextInventories[participantId] = {
-      ...inventory,
-      powerTokens: Math.max(0, inventory.powerTokens - playerVote.powerTokens),
-      updatedAt: now,
-    };
-  }
-
   const passCount = participants.filter((participantId) => votes[participantId]?.side === "pass").length;
-  const voteNotes = `투표 적용: 찬성 ${ayePower} / 반대 ${nayPower} / 기권 ${passCount}`;
+  const voteNotes = `투표 집계: 찬성 ${ayePower} / 반대 ${nayPower} / 기권 ${passCount}. 결과 선택, 재화, 권력 토큰 처리는 가문 장부와 딜레마 편집에서 수기로 반영하세요.`;
 
   return {
     ...state,
-    inventories: nextInventories,
     dilemma: {
       ...currentDilemma,
       votes: Object.fromEntries(participants.map((participantId) => [participantId, votes[participantId]])),
-      selectedOutcome,
       voteNotes,
       updatedAt: now,
       updatedBy: houseId,
@@ -1325,6 +1416,9 @@ export function applyChoose(
   const nextPool = state.pool.filter((id) => id !== agendaId);
   const nextChoices = { ...state.choices, [houseId]: agendaId };
   const isComplete = draftIndex === state.draftOrder.length - 1;
+  const defaultDilemmaRoles = isComplete
+    ? deriveDefaultDilemmaRoles(getClaimedHouseIds({ ...state, choices: nextChoices }), state.inventories)
+    : { leader: state.dilemmaLeader, moderator: state.dilemmaModerator };
 
   return {
     ...state,
@@ -1333,6 +1427,8 @@ export function applyChoose(
     turn: isComplete ? houseId : state.draftOrder[draftIndex + 1],
     pool: nextPool,
     choices: nextChoices,
+    dilemmaLeader: isComplete ? null : defaultDilemmaRoles.leader,
+    dilemmaModerator: isComplete ? null : defaultDilemmaRoles.moderator,
     updatedAt: now,
   };
 }
@@ -1391,7 +1487,9 @@ export function redactState(state: GameState, houseId: HouseId | null): Redacted
     canChoose,
     dilemmaVoteTurn,
     canVoteDilemma,
-    dilemmaVoteOrder: getDilemmaVotingParticipants(state),
+    dilemmaLeader: state.dilemmaLeader,
+    dilemmaModerator: state.dilemmaModerator,
+    dilemmaVoteOrder: pickStoredDilemmaVoteOrder(state.dilemmaVoteOrder, getLoggedInHouseIds(state)),
     ownChoice: ownChoiceId ? getAgenda(ownChoiceId) : null,
     ownInventory: houseId ? getPlayerInventory(state, houseId) : null,
     ownHouseProgress: houseId ? getHouseProgress(state, houseId) : null,
@@ -1418,6 +1516,46 @@ export function getAgenda(id: string): Agenda {
 
 function getActiveHouseIds(credentials: Record<string, SeatCredential>): HouseId[] {
   return sortHouseIdsByNumber(Object.keys(credentials)).slice(0, REQUIRED_HOUSE_COUNT);
+}
+
+function sanitizeRoleHouseId(value: unknown, activeHouseIds: HouseId[]): HouseId | null {
+  return isHouseId(value) && activeHouseIds.includes(value) ? value : null;
+}
+
+function deriveDefaultDilemmaRoles(
+  houseIds: HouseId[],
+  inventories: Record<string, PlayerInventory>,
+): { leader: HouseId | null; moderator: HouseId | null } {
+  const activeHouseIds = sortHouseIdsByNumber(houseIds).slice(0, REQUIRED_HOUSE_COUNT);
+
+  if (activeHouseIds.length === 0) {
+    return { leader: null, moderator: null };
+  }
+
+  const byPrestige = [...activeHouseIds].sort((left, right) => {
+    const leftPrestige = inventories[left]?.prestige ?? 0;
+    const rightPrestige = inventories[right]?.prestige ?? 0;
+
+    return rightPrestige - leftPrestige || compareHouseIdsByNumberDescending(left, right);
+  });
+
+  return {
+    leader: byPrestige[0],
+    moderator: byPrestige[byPrestige.length - 1],
+  };
+}
+
+function getLoggedInHouseIds(state: GameState): HouseId[] {
+  return getLoggedInHouseIdsFromMaps(state.credentials, state.sessions);
+}
+
+function getLoggedInHouseIdsFromMaps(
+  credentials: Record<string, SeatCredential>,
+  sessions: Record<string, { token: string; createdAt: string }>,
+): HouseId[] {
+  return sortHouseIdsByNumber(
+    Object.keys(sessions).filter((houseId): houseId is HouseId => isHouseId(houseId) && Boolean(credentials[houseId])),
+  ).slice(0, REQUIRED_HOUSE_COUNT);
 }
 
 function sanitizeDraftOrder(
@@ -1459,8 +1597,15 @@ function sortHouseIdsForDraft(
     const leftPrestige = inventories[left]?.prestige ?? 0;
     const rightPrestige = inventories[right]?.prestige ?? 0;
 
-    return leftPrestige - rightPrestige || compareHouseIdsByNumberDescending(left, right);
+    return leftPrestige - rightPrestige || compareHouseIdsByNumberAscending(left, right);
   });
+}
+
+function compareHouseIdsByNumberAscending(left: HouseId, right: HouseId) {
+  const leftNumber = getHouseById(left)?.number ?? Number.MAX_SAFE_INTEGER;
+  const rightNumber = getHouseById(right)?.number ?? Number.MAX_SAFE_INTEGER;
+
+  return leftNumber - rightNumber || left.localeCompare(right);
 }
 
 function compareHouseIdsByNumberDescending(left: HouseId, right: HouseId) {
@@ -1501,13 +1646,24 @@ function assertCanEditDilemma(state: GameState) {
   }
 }
 
+function assertDilemmaRolesAssigned(state: GameState) {
+  const activeHouseIds = getLoggedInHouseIds(state);
+
+  if (
+    !sanitizeRoleHouseId(state.dilemmaLeader, activeHouseIds) ||
+    !sanitizeRoleHouseId(state.dilemmaModerator, activeHouseIds)
+  ) {
+    throw new AgendaStateError("딜레마를 작성하기 전에 리더와 중재자를 지정하세요.", 409);
+  }
+}
+
 function getDilemmaForVoting(state: GameState, houseId: HouseId, now: string) {
   assertCanEditDilemma(state);
 
   const participants = getDilemmaVotingParticipants(state);
 
   if (!participants.includes(houseId)) {
-    throw new AgendaStateError("이번 회기에 참여 중인 가문만 딜레마 투표를 할 수 있습니다.", 403);
+    throw new AgendaStateError("현재 로그인 중인 가문만 딜레마 투표를 할 수 있습니다.", 403);
   }
 
   const currentDilemma = sanitizeDilemmaRecord(state.dilemma, now);
@@ -1524,21 +1680,18 @@ function getDilemmaForVoting(state: GameState, houseId: HouseId, now: string) {
 }
 
 function assertDilemmaPublishReady(state: GameState, dilemma: DilemmaRecord, now: string) {
-  const participants = getDilemmaVotingParticipants(state);
+  const readiness = getDilemmaVoteReadiness(state, dilemma, now);
 
-  if (participants.length !== REQUIRED_HOUSE_COUNT) {
-    throw new AgendaStateError("참여 가문 5개가 확정되어야 딜레마를 게시할 수 있습니다.", 409);
+  if (readiness.participants.length === 0) {
+    throw new AgendaStateError("로그인 중인 가문이 있어야 딜레마를 게시할 수 있습니다.", 409);
   }
 
-  const votes = sanitizeDilemmaVotes(dilemma.votes, now);
-  const missingHouse = participants.find((participantId) => !votes[participantId]?.side);
-
-  if (missingHouse) {
-    throw new AgendaStateError("다섯 가문이 모두 투표한 뒤 게시할 수 있습니다.", 409);
+  if (readiness.missingHouse) {
+    throw new AgendaStateError("로그인 중인 모든 가문이 투표한 뒤 게시할 수 있습니다.", 409);
   }
 
   if (!dilemma.selectedOutcome) {
-    throw new AgendaStateError("딜레마 투표 결과를 적용하거나 선택한 뒤 게시할 수 있습니다.", 409);
+    throw new AgendaStateError("딜레마 투표 결과를 직접 선택한 뒤 게시할 수 있습니다.", 409);
   }
 
   if (!dilemma.resolutionNotes.trim()) {
@@ -1546,15 +1699,30 @@ function assertDilemmaPublishReady(state: GameState, dilemma: DilemmaRecord, now
   }
 }
 
-function getDilemmaVotingParticipants(state: GameState) {
-  const activeHouseIds = getClaimedHouseIds(state);
-  const manualOrder = sanitizeDilemmaVoteOrder(state.dilemmaVoteOrder, activeHouseIds);
+function areDilemmaVotesComplete(state: GameState, dilemma: DilemmaRecord, now: string) {
+  const readiness = getDilemmaVoteReadiness(state, dilemma, now);
+  return readiness.participants.length > 0 && !readiness.missingHouse;
+}
 
-  if (manualOrder.length === REQUIRED_HOUSE_COUNT) {
-    return manualOrder;
+function getDilemmaVoteReadiness(state: GameState, dilemma: DilemmaRecord, now: string) {
+  const participants = getDilemmaVotingParticipants(state);
+  const votes = sanitizeDilemmaVotes(dilemma.votes, now);
+
+  return {
+    participants,
+    missingHouse: participants.find((participantId) => !votes[participantId]?.side) || null,
+  };
+}
+
+function getDilemmaVotingParticipants(state: GameState) {
+  const activeHouseIds = getLoggedInHouseIds(state);
+  const manualOrder = pickStoredDilemmaVoteOrder(state.dilemmaVoteOrder, activeHouseIds);
+
+  if (manualOrder.length === activeHouseIds.length) {
+    return rotateHouseIdsToLeader(manualOrder, state.dilemmaLeader);
   }
 
-  return sortHouseIdsForVoting(activeHouseIds, state.inventories);
+  return sortHouseIdsForVoting(activeHouseIds, state.inventories, state.dilemmaLeader);
 }
 
 function getCurrentDilemmaVoteTurn(state: GameState, now = new Date().toISOString()): HouseId | null {
@@ -1577,6 +1745,7 @@ function getCurrentDilemmaVoteTurn(state: GameState, now = new Date().toISOStrin
 function sortHouseIdsForVoting(
   houseIds: HouseId[],
   inventories: Record<string, PlayerInventory>,
+  leaderHouseId: HouseId | null = null,
 ): HouseId[] {
   const orderedBySeat = sortHouseIdsByNumber(houseIds).slice(0, REQUIRED_HOUSE_COUNT);
 
@@ -1584,15 +1753,25 @@ function sortHouseIdsForVoting(
     return [];
   }
 
-  const leader = [...orderedBySeat].sort((left, right) => {
-    const leftPrestige = inventories[left]?.prestige ?? 0;
-    const rightPrestige = inventories[right]?.prestige ?? 0;
-
-    return rightPrestige - leftPrestige || compareHouseIdsByNumberDescending(left, right);
-  })[0];
-  const leaderIndex = orderedBySeat.indexOf(leader);
+  const defaultLeader = deriveDefaultDilemmaRoles(orderedBySeat, inventories).leader || orderedBySeat[0];
+  const leader = leaderHouseId && orderedBySeat.includes(leaderHouseId) ? leaderHouseId : defaultLeader;
+  const leaderIndex = Math.max(orderedBySeat.indexOf(leader), 0);
 
   return [...orderedBySeat.slice(leaderIndex), ...orderedBySeat.slice(0, leaderIndex)];
+}
+
+function rotateHouseIdsToLeader(order: HouseId[], leaderHouseId: HouseId | null): HouseId[] {
+  if (!leaderHouseId) {
+    return order;
+  }
+
+  const leaderIndex = order.indexOf(leaderHouseId);
+
+  if (leaderIndex <= 0) {
+    return order;
+  }
+
+  return [...order.slice(leaderIndex), ...order.slice(0, leaderIndex)];
 }
 
 function isDilemmaVoteOrderLocked(state: GameState, now = new Date().toISOString()) {
@@ -1672,48 +1851,6 @@ function addMilliseconds(value: string, milliseconds: number) {
   return new Date(timestamp + milliseconds).toISOString();
 }
 
-function resetSessionInventories(
-  inventories: Record<string, PlayerInventory>,
-  now: string,
-): Record<string, PlayerInventory> {
-  return Object.fromEntries(
-    Object.entries(inventories).map(([houseId, inventory]) => {
-      const sanitized = sanitizePlayerInventory(inventory, now);
-      return [
-        houseId,
-        {
-          ...sanitized,
-          coins: 10,
-          powerTokens: 8,
-          updatedAt: now,
-        },
-      ];
-    }),
-  );
-}
-
-function resetSessionProgress(
-  progress: Record<string, HouseProgress>,
-  now: string,
-): Record<string, HouseProgress> {
-  return Object.fromEntries(
-    Object.entries(progress).map(([houseId, houseProgress]) => {
-      const sanitized = sanitizeHouseProgress(houseProgress, now);
-      return [
-        houseId,
-        {
-          ...sanitized,
-          openAgendaTokens: {
-            positive: [],
-            negative: [],
-          },
-          updatedAt: now,
-        },
-      ];
-    }),
-  );
-}
-
 function derivePhase(
   draftReady: boolean,
   discarded: string | null,
@@ -1784,6 +1921,29 @@ function sanitizePool(
   });
 
   return pool.length ? pool : fallback;
+}
+
+function sanitizeAgendaOrder(value: unknown, currentPool: string[]): string[] {
+  if (!Array.isArray(value)) {
+    throw new AgendaStateError("정렬할 의제 목록을 전달하세요.", 400);
+  }
+
+  const poolSet = new Set(currentPool);
+  const seen = new Set<string>();
+  const nextOrder = value.filter((id): id is string => {
+    if (typeof id !== "string" || !poolSet.has(id) || seen.has(id)) {
+      return false;
+    }
+
+    seen.add(id);
+    return true;
+  });
+
+  if (nextOrder.length !== currentPool.length) {
+    throw new AgendaStateError("현재 남은 의제를 모두 포함한 순서로 저장하세요.", 400);
+  }
+
+  return nextOrder;
 }
 
 function sanitizeChoices(value: unknown, draftOrder: HouseId[]): Record<string, string> {
@@ -1956,6 +2116,25 @@ function sanitizeDilemmaVotes(value: unknown, now: string): Partial<Record<House
 
 function sanitizeDilemmaVoteOrder(value: unknown, activeHouseIds: HouseId[]): HouseId[] {
   if (!Array.isArray(value)) {
+    return [];
+  }
+
+  const activeHouseSet = new Set(activeHouseIds);
+  const seen = new Set<HouseId>();
+  const order = value.filter((houseId): houseId is HouseId => {
+    if (!isHouseId(houseId) || !activeHouseSet.has(houseId) || seen.has(houseId)) {
+      return false;
+    }
+
+    seen.add(houseId);
+    return true;
+  });
+
+  return order.length === activeHouseIds.length ? order : [];
+}
+
+function pickStoredDilemmaVoteOrder(value: unknown, activeHouseIds: HouseId[]): HouseId[] {
+  if (!Array.isArray(value) || activeHouseIds.length === 0) {
     return [];
   }
 
@@ -2410,8 +2589,30 @@ function sanitizeHouseProgress(value: unknown, now: string): HouseProgress {
         ),
       ]),
     ),
+    alignmentOrder: sanitizeAlignmentOrder(candidate.alignmentOrder),
     updatedAt: typeof candidate.updatedAt === "string" ? candidate.updatedAt : now,
   };
+}
+
+function sanitizeAlignmentOrder(value: unknown) {
+  const defaultOrder = getDefaultAlignmentOrder();
+  const allowed = new Set(defaultOrder);
+  const candidate = Array.isArray(value) ? value : defaultOrder;
+  const next: string[] = [];
+
+  for (const item of candidate) {
+    if (typeof item === "string" && allowed.has(item) && !next.includes(item)) {
+      next.push(item);
+    }
+  }
+
+  for (const agendaId of defaultOrder) {
+    if (!next.includes(agendaId)) {
+      next.push(agendaId);
+    }
+  }
+
+  return next;
 }
 
 function sanitizeAlignmentReward(value: unknown, fallback: AlignmentReward): AlignmentReward {
@@ -2427,15 +2628,137 @@ function sanitizeAlignmentReward(value: unknown, fallback: AlignmentReward): Ali
 
 function sanitizeAchievementDetail(value: unknown, fallbackRequiredCount: number): AchievementDetail {
   const candidate = value && typeof value === "object" ? (value as Partial<AchievementDetail>) : {};
-  const effectIcon = sanitizeAchievementEffectIcon(candidate.effectIcon);
+  const hasEffectEntries = Array.isArray(candidate.effectEntries);
+  const legacyEffectText = sanitizeMultilineText(candidate.effectText, ACHIEVEMENT_DETAIL_TEXT_LIMIT);
+  const effectEntries = sanitizeAchievementEffectEntries(
+    candidate.effectEntries,
+    candidate.effects,
+    legacyEffectText,
+    candidate.effectIcon,
+    candidate.effectAmount,
+  );
+  const effects = sanitizeAchievementEffectsFromEntries(effectEntries);
+  const primaryEffect = effects[0] || { icon: "", amount: 0 };
 
   return {
     conditionText: sanitizeMultilineText(candidate.conditionText, ACHIEVEMENT_DETAIL_TEXT_LIMIT),
     requiredCount: sanitizeAchievementRequiredCount(candidate.requiredCount, fallbackRequiredCount),
-    effectIcon,
-    effectAmount: sanitizeAchievementEffectAmount(candidate.effectAmount, effectIcon),
-    effectText: sanitizeMultilineText(candidate.effectText, ACHIEVEMENT_DETAIL_TEXT_LIMIT),
+    effectEntries,
+    effects,
+    effectIcon: primaryEffect.icon,
+    effectAmount: primaryEffect.amount,
+    effectText: hasEffectEntries ? formatAchievementEffectEntriesText(effectEntries) : legacyEffectText,
   };
+}
+
+function sanitizeAchievementEffectEntries(
+  value: unknown,
+  legacyEffects: unknown,
+  legacyText: unknown,
+  legacyIcon: unknown,
+  legacyAmount: unknown,
+): AchievementEffectEntry[] {
+  if (Array.isArray(value)) {
+    const entries: AchievementEffectEntry[] = [];
+
+    for (const item of value) {
+      if (entries.length >= ACHIEVEMENT_EFFECT_ENTRY_LIMIT) {
+        break;
+      }
+
+      const candidate =
+        item && typeof item === "object"
+          ? (item as Record<string, unknown>)
+          : typeof item === "string"
+            ? { text: item }
+            : {};
+      const icon = sanitizeAchievementEffectIcon(candidate.icon ?? candidate.effectIcon);
+      const amount = sanitizeAchievementEffectAmount(candidate.amount ?? candidate.effectAmount, icon);
+      const text = sanitizeMultilineText(
+        candidate.text ?? candidate.memoText ?? candidate.effectText,
+        ACHIEVEMENT_DETAIL_TEXT_LIMIT,
+      );
+
+      if (!icon && !text) {
+        continue;
+      }
+
+      entries.push({ icon, amount, text });
+    }
+
+    return entries;
+  }
+
+  const text = sanitizeMultilineText(legacyText, ACHIEVEMENT_DETAIL_TEXT_LIMIT);
+  const effects = sanitizeAchievementEffects(legacyEffects, legacyIcon, legacyAmount);
+
+  if (effects.length) {
+    return effects.slice(0, ACHIEVEMENT_EFFECT_ENTRY_LIMIT).map((effect, index) => ({
+      icon: effect.icon,
+      amount: effect.amount,
+      text: index === 0 ? text : "",
+    }));
+  }
+
+  return text ? [{ icon: "", amount: 0, text }] : [];
+}
+
+function sanitizeAchievementEffectsFromEntries(entries: AchievementEffectEntry[]): AchievementEffect[] {
+  const seen = new Set<string>();
+  const effects: AchievementEffect[] = [];
+
+  for (const entry of entries) {
+    const icon = sanitizeAchievementEffectIcon(entry.icon);
+
+    if (!icon || seen.has(icon)) {
+      continue;
+    }
+
+    seen.add(icon);
+    effects.push({
+      icon,
+      amount: sanitizeAchievementEffectAmount(entry.amount, icon),
+    });
+  }
+
+  return effects;
+}
+
+function formatAchievementEffectEntriesText(entries: AchievementEffectEntry[]) {
+  return entries.map((entry) => entry.text).filter(Boolean).join(" · ").slice(0, ACHIEVEMENT_DETAIL_TEXT_LIMIT);
+}
+
+function sanitizeAchievementEffects(value: unknown, legacyIcon: unknown, legacyAmount: unknown): AchievementEffect[] {
+  const candidates =
+    Array.isArray(value) && value.length > 0
+      ? value
+      : typeof legacyIcon === "string" && legacyIcon
+        ? [{ icon: legacyIcon, amount: legacyAmount }]
+        : [];
+  const seen = new Set<string>();
+  const effects: AchievementEffect[] = [];
+
+  for (const item of candidates) {
+    const candidate =
+      typeof item === "string"
+        ? { icon: item }
+        : item && typeof item === "object"
+          ? (item as Record<string, unknown>)
+          : {};
+    const icon = sanitizeAchievementEffectIcon(candidate.icon ?? candidate.effectIcon);
+
+    if (!icon || seen.has(icon)) {
+      continue;
+    }
+
+    seen.add(icon);
+    effects.push({
+      icon,
+      amount: sanitizeAchievementEffectAmount(candidate.amount ?? candidate.effectAmount, icon),
+    });
+  }
+
+  return effects;
 }
 
 function sanitizeAchievementEffectIcon(value: unknown) {

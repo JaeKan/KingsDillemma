@@ -17,7 +17,9 @@ import {
   publishDilemmaRecord,
   redactState,
   registerSession,
+  saveAlignmentOrder,
   saveDilemmaRecord,
+  saveDilemmaRoles,
   saveDilemmaVote,
   saveDilemmaVoteOrder,
   saveAlignmentReward,
@@ -146,6 +148,12 @@ export async function handleAgendaRequest(
       return json({ ok: true, state: redactState(nextState, houseId) }, 200, NO_STORE_HEADERS);
     }
 
+    if (action === "saveAlignmentOrder") {
+      const nextState = saveAlignmentOrder(state, houseId, body.alignmentOrder);
+      await saveState(store, nextState);
+      return json({ ok: true, state: redactState(nextState, houseId) }, 200, NO_STORE_HEADERS);
+    }
+
     if (action === "beginDilemmaEdit") {
       const dilemmaEditToken = crypto.randomUUID();
       const nextState = beginDilemmaEdit(state, houseId, dilemmaEditToken);
@@ -191,6 +199,12 @@ export async function handleAgendaRequest(
 
     if (action === "saveDilemmaVoteOrder") {
       const nextState = saveDilemmaVoteOrder(state, houseId, body.voteOrder);
+      await saveState(store, nextState);
+      return json({ ok: true, state: redactState(nextState, houseId) }, 200, NO_STORE_HEADERS);
+    }
+
+    if (action === "saveDilemmaRoles") {
+      const nextState = saveDilemmaRoles(state, houseId, body.roles);
       await saveState(store, nextState);
       return json({ ok: true, state: redactState(nextState, houseId) }, 200, NO_STORE_HEADERS);
     }
@@ -247,12 +261,14 @@ function isKnownStateAction(action: string) {
     action === "saveInventory" ||
     action === "saveHouseProgress" ||
     action === "saveAlignmentReward" ||
+    action === "saveAlignmentOrder" ||
     action === "beginDilemmaEdit" ||
     action === "cancelDilemmaEdit" ||
     action === "saveDilemma" ||
     action === "publishDilemma" ||
     action === "deleteDilemmaHistory" ||
     action === "saveDilemmaVoteOrder" ||
+    action === "saveDilemmaRoles" ||
     action === "saveDilemmaVote" ||
     action === "applyDilemmaVotes" ||
     action === "setRandomDiscardEnabled" ||

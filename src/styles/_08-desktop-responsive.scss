@@ -1,0 +1,512 @@
+@media (min-width: 981px) {
+  .council-main {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto;
+    grid-template-areas: "inventory";
+    align-content: start;
+    align-items: start;
+  }
+
+  .council-main.has-dilemma {
+    grid-template-areas:
+      "dilemma"
+      "inventory";
+  }
+
+  .council-main.has-context {
+    grid-template-areas:
+      "context"
+      "inventory";
+  }
+
+  .council-main.has-context.has-dilemma {
+    grid-template-areas:
+      "context"
+      "dilemma"
+      "inventory";
+  }
+
+  .council-main.has-agenda {
+    grid-template-areas:
+      "agenda"
+      "inventory";
+  }
+
+  .council-main.has-agenda.has-dilemma {
+    grid-template-areas:
+      "agenda"
+      "dilemma"
+      "inventory";
+  }
+
+  .council-main.has-context.has-agenda {
+    grid-template-areas:
+      "context"
+      "agenda"
+      "inventory";
+  }
+
+  .council-main.has-context.has-agenda.has-dilemma {
+    grid-template-areas:
+      "context"
+      "agenda"
+      "dilemma"
+      "inventory";
+  }
+
+  .inventory-panel {
+    grid-area: inventory;
+    grid-template-columns: minmax(0, 1fr) minmax(320px, 0.72fr);
+    grid-template-areas:
+      "head actions"
+      "resources agenda"
+      "progress progress";
+    align-self: start;
+    justify-self: stretch;
+    width: 100%;
+    height: auto;
+  }
+
+  .inventory-panel.has-house-profile {
+    grid-template-columns: minmax(320px, 0.8fr) minmax(260px, 0.45fr) minmax(420px, 1.05fr);
+    grid-template-areas:
+      "head head actions"
+      "resources house agenda"
+      "progress progress progress";
+  }
+
+  .inventory-resource-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .council-context {
+    grid-area: context;
+    max-height: none;
+    overflow: visible;
+  }
+
+  .council-context .house-profile-card {
+    padding-right: 70px;
+  }
+
+  .council-context .house-profile-grid,
+  .council-context .house-alignment-track {
+    grid-template-columns: 1fr;
+  }
+
+  .council-context .dilemma-stage {
+    padding: 12px;
+  }
+
+  .council-context .stage-copy h2 {
+    font-size: 1.24rem;
+  }
+
+  .council-context .message {
+    font-size: 0.86rem;
+  }
+
+  .council-context .action-card,
+  .council-context .own-choice,
+  .council-context .agenda-section-heading {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .council-context .agenda-list {
+    grid-template-columns: 1fr;
+  }
+
+  .council-context .action-card button,
+  .council-context .agenda-card button {
+    width: 100%;
+  }
+
+  .council-main>.agenda-section {
+    grid-area: agenda;
+  }
+
+  .council-main>.agenda-section .agenda-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(320px, 100%), 1fr));
+    gap: 10px;
+    overflow-x: visible;
+    padding-bottom: 0;
+  }
+
+  .council-main>.agenda-section .agenda-card,
+  .council-main>.agenda-section .agenda-card.expanded {
+    width: 100%;
+  }
+
+  .score-track-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .score-track-row {
+    grid-template-columns: minmax(76px, 0.34fr) minmax(0, 1fr);
+    gap: 6px;
+    padding: 6px;
+  }
+}
+
+@media (min-width: 981px) and (max-width: 1279px) {
+  .inventory-panel.has-house-profile {
+    grid-template-columns: minmax(0, 1fr) minmax(260px, 0.62fr);
+    grid-template-areas:
+      "head actions"
+      "resources house"
+      "agenda agenda"
+      "progress progress";
+  }
+
+  .house-detail-section .house-alignment-track {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (min-width: 1600px) {
+  .app-shell.is-council {
+    width: min(1920px, calc(100% - 16px));
+    padding: 8px 0;
+    --council-panel-title-size: 1.32rem;
+  }
+
+  .council-layout {
+    grid-template-columns: 268px minmax(0, 1fr);
+    gap: 12px;
+    height: calc(100vh - 16px);
+    height: calc(100dvh - 16px);
+  }
+
+  .council-sidebar {
+    top: 0;
+    max-height: calc(100vh - 16px);
+    max-height: calc(100dvh - 16px);
+    gap: 10px;
+    padding: 14px;
+  }
+
+  .status-item {
+    min-height: 40px;
+  }
+
+  .council-main {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto;
+    grid-template-areas: "inventory";
+    align-content: start;
+    height: 100%;
+    max-height: calc(100dvh - 16px);
+    gap: 12px;
+  }
+
+  .council-main.has-dilemma {
+    grid-template-areas:
+      "dilemma"
+      "inventory";
+  }
+
+  .council-main.has-context {
+    grid-template-areas:
+      "context"
+      "inventory";
+  }
+
+  .council-main.has-context.has-dilemma {
+    grid-template-areas:
+      "context"
+      "dilemma"
+      "inventory";
+  }
+
+  .council-main.has-agenda {
+    grid-template-areas:
+      "agenda"
+      "inventory";
+  }
+
+  .council-main.has-agenda.has-dilemma {
+    grid-template-areas:
+      "agenda"
+      "dilemma"
+      "inventory";
+  }
+
+  .council-main.has-context.has-agenda {
+    grid-template-areas:
+      "context"
+      "agenda"
+      "inventory";
+  }
+
+  .council-main.has-context.has-agenda.has-dilemma {
+    grid-template-areas:
+      "context"
+      "agenda"
+      "dilemma"
+      "inventory";
+  }
+
+  .council-context {
+    gap: 12px;
+  }
+
+  .council-context .house-profile-card {
+    grid-area: auto;
+    grid-template-columns: 74px minmax(0, 1fr);
+    gap: 14px;
+    padding: 16px 82px 16px 16px;
+  }
+
+  .council-context .house-profile-crest {
+    width: 74px;
+    height: 74px;
+  }
+
+  .council-context .house-profile-crest svg {
+    width: 46px;
+    height: 46px;
+  }
+
+  .council-context .house-profile-heading h2 {
+    font-size: 1.56rem;
+  }
+
+  .council-context .house-profile-grid {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .council-context .house-profile-field {
+    padding: 8px 10px;
+  }
+
+  .council-context .house-profile-field span {
+    font-size: 0.68rem;
+  }
+
+  .council-context .house-profile-field strong {
+    font-size: 0.78rem;
+  }
+
+  .council-context .house-alignment-track {
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
+
+  .council-context .house-alignment-row {
+    padding: 7px 8px;
+  }
+
+  .house-profile-card blockquote {
+    font-size: 1rem;
+  }
+
+  .house-profile-card p:last-child {
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    font-size: 0.9rem;
+  }
+
+  .dilemma-stage {
+    grid-area: auto;
+    align-content: start;
+    align-self: start;
+    min-height: 0;
+    padding: 18px;
+  }
+
+  .stage-copy h2 {
+    max-width: none;
+    font-size: 1.88rem;
+  }
+
+  .message {
+    max-width: 980px;
+    font-size: 1rem;
+  }
+
+  .council-context .stage-copy h2 {
+    font-size: 1.28rem;
+  }
+
+  .council-context .message {
+    font-size: 0.9rem;
+  }
+
+  .inventory-panel {
+    grid-area: inventory;
+    grid-template-columns: minmax(0, 1fr) minmax(360px, 0.72fr);
+    grid-template-areas:
+      "head actions"
+      "resources agenda"
+      "progress progress";
+    align-content: start;
+    align-self: start;
+    justify-self: stretch;
+    width: 100%;
+    height: auto;
+    gap: 12px;
+    padding: 14px;
+  }
+
+  .inventory-panel.has-house-profile {
+    grid-template-columns: minmax(360px, 0.86fr) minmax(280px, 0.52fr) minmax(520px, 1.12fr);
+    grid-template-areas:
+      "head head actions"
+      "resources house agenda"
+      "progress progress progress";
+  }
+
+  .inventory-section h3 {
+    font-size: 0.98rem;
+  }
+
+  .inventory-grid,
+  .inventory-resource-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .inventory-resource-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .progress-ledger {
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
+
+  .counter-row {
+    min-height: 52px;
+    padding: 9px;
+  }
+
+  .counter-icon {
+    width: 36px;
+    height: 36px;
+  }
+
+  .counter-icon svg {
+    width: 21px;
+    height: 21px;
+  }
+
+  .score-track-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: stretch;
+    gap: 10px;
+  }
+
+  .score-track-row {
+    align-content: start;
+    grid-template-columns: minmax(82px, 0.34fr) minmax(0, 1fr);
+    gap: 7px;
+    min-height: 0;
+    padding: 7px;
+    background:
+      radial-gradient(circle at 16% 24%, color-mix(in srgb, var(--tone, var(--gold-2)) 18%, transparent), transparent 34%),
+      linear-gradient(180deg, rgba(234, 223, 189, 0.1), rgba(234, 223, 189, 0.045)),
+      rgba(8, 13, 13, 0.18);
+  }
+
+  .score-track-summary .counter-label {
+    font-size: 1.08rem;
+  }
+
+  .score-track-value {
+    font-size: 1.24rem;
+  }
+
+  .score-track-value span {
+    font-size: 0.66rem;
+  }
+
+  .score-track-controls .stepper-button {
+    width: 30px;
+    min-height: 30px;
+  }
+
+  .score-track-group {
+    grid-template-columns: repeat(10, minmax(5px, 7px));
+    grid-auto-rows: minmax(5px, 7px);
+    gap: 1px;
+    padding: 3px;
+  }
+
+  .score-track-group span {
+    width: 100%;
+    height: 100%;
+  }
+
+  .inventory-actions {
+    align-self: center;
+    justify-content: space-between;
+    border-top: 0;
+    padding-top: 0;
+  }
+
+  .inventory-actions>span {
+    display: inline;
+  }
+
+  .inventory-actions button {
+    min-height: 40px;
+    font-size: 0.9rem;
+  }
+
+  .action-card,
+  .own-choice,
+  .agenda-section {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (min-width: 981px) {
+  .council-main.has-agenda {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      "agenda"
+      "inventory";
+    align-items: start;
+  }
+
+  .council-main.has-agenda.has-dilemma {
+    grid-template-areas:
+      "agenda"
+      "dilemma"
+      "inventory";
+  }
+
+  .council-main.has-context.has-agenda {
+    grid-template-columns: minmax(280px, 0.34fr) minmax(0, 1fr);
+    grid-template-rows: auto auto;
+    grid-template-areas:
+      "context agenda"
+      "inventory inventory";
+  }
+
+  .council-main.has-context.has-agenda.has-dilemma {
+    grid-template-areas:
+      "context agenda"
+      "dilemma dilemma"
+      "inventory inventory";
+  }
+
+  .council-main.has-agenda>.inventory-panel {
+    grid-column: auto;
+  }
+
+  .council-main.has-context.has-agenda>.council-context {
+    grid-area: context;
+    grid-column: auto;
+  }
+
+  .council-main.has-agenda>.agenda-section {
+    grid-area: agenda;
+    grid-column: auto;
+    align-self: start;
+  }
+}
+

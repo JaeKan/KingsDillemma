@@ -18,8 +18,10 @@ import {
   publishDilemmaRecord,
   registerSession,
   redactState,
+  saveAlignmentOrder,
   saveAlignmentReward,
   saveDilemmaRecord,
+  saveDilemmaRoles,
   saveDilemmaVote,
   saveDilemmaVoteOrder,
   saveHouseProgress,
@@ -63,6 +65,8 @@ assert.equal(createDefaultHouseProgress(now).narrativeAchievementCount, 0);
 assert.deepEqual(createDefaultHouseProgress(now).narrativeAchievementDetail, {
   conditionText: "",
   requiredCount: 1,
+  effectEntries: [],
+  effects: [],
   effectIcon: "",
   effectAmount: 0,
   effectText: "",
@@ -70,12 +74,22 @@ assert.deepEqual(createDefaultHouseProgress(now).narrativeAchievementDetail, {
 assert.deepEqual(createDefaultHouseProgress(now).houseAchievementDetails[0], {
   conditionText: "",
   requiredCount: 5,
+  effectEntries: [],
+  effects: [],
   effectIcon: "",
   effectAmount: 0,
   effectText: "",
 });
 assert.equal(createDefaultHouseProgress(now).alignmentAchievements.greedy, 0);
 assert.deepEqual(createDefaultHouseProgress(now).alignmentRewards.greedy, { crownType: "", count: 0 });
+assert.deepEqual(createDefaultHouseProgress(now).alignmentOrder, [
+  "extremist",
+  "opulent",
+  "moderate",
+  "rebel",
+  "opportunist",
+  "greedy",
+]);
 
 const anonymousInitial = redactState(initial, null);
 assert.equal(anonymousInitial.houses.length, 12);
@@ -129,9 +143,9 @@ selecting = setSeatCredential(selecting, "olwyn", credential, now);
 const draftReady = startDraftIfReady(selecting, now);
 
 assert.equal(draftReady.phase, "discard");
-assert.deepEqual(draftReady.draftOrder, ["natar", "gamam", "olwyn", "coden", "solad"]);
-assert.equal(draftReady.turn, "natar");
-assert.equal(redactState(draftReady, "natar").canDiscard, true);
+assert.deepEqual(draftReady.draftOrder, ["solad", "coden", "olwyn", "gamam", "natar"]);
+assert.equal(draftReady.turn, "solad");
+assert.equal(redactState(draftReady, "solad").canDiscard, true);
 assert.equal(redactState(draftReady, "gamam").canDiscard, false);
 assert.equal(redactState(draftReady, "solad").availableAgendas, undefined);
 
@@ -145,9 +159,9 @@ const migratedUnpickedDraft = normalizeState(
   },
   now,
 );
-assert.deepEqual(migratedUnpickedDraft.draftOrder, ["natar", "gamam", "olwyn", "coden", "solad"]);
-assert.equal(migratedUnpickedDraft.turn, "natar");
-assert.equal(migratedUnpickedDraft.version, 6);
+assert.deepEqual(migratedUnpickedDraft.draftOrder, ["solad", "coden", "olwyn", "gamam", "natar"]);
+assert.equal(migratedUnpickedDraft.turn, "solad");
+assert.equal(migratedUnpickedDraft.version, 9);
 
 const pickedLegacyDraft = normalizeState(
   {
@@ -169,7 +183,7 @@ prestigeSelecting = savePlayerInventory(prestigeSelecting, "coden", { ...createD
 prestigeSelecting = savePlayerInventory(prestigeSelecting, "olwyn", { ...createDefaultPlayerInventory(now), prestige: 1 }, now);
 prestigeSelecting = savePlayerInventory(prestigeSelecting, "natar", { ...createDefaultPlayerInventory(now), prestige: 5 }, now);
 const prestigeDraftReady = startDraftIfReady(prestigeSelecting, now);
-assert.deepEqual(prestigeDraftReady.draftOrder, ["gamam", "olwyn", "coden", "solad", "natar"]);
+assert.deepEqual(prestigeDraftReady.draftOrder, ["gamam", "coden", "olwyn", "solad", "natar"]);
 
 const playerSession = registerSession(draftReady, "solad", "token-a", now);
 const overwrittenSession = registerSession(playerSession, "solad", "token-b", now);
@@ -214,8 +228,12 @@ const normalizedInventoryState = normalizeState(
         narrativeAchievementDetail: {
           conditionText: "  Complete the family story.  ",
           requiredCount: 9,
-          effectIcon: "prestige",
-          effectAmount: 101,
+          effects: [
+            { icon: "instant" },
+            { icon: "coins", amount: 101 },
+            { icon: "crave", amount: 1 },
+            { icon: "finale", amount: 101 },
+          ],
           effectText: "Prestige +1",
         },
         houseAchievements: [1.8, 7, "bad"],
@@ -287,8 +305,14 @@ assert.equal(normalizedInventoryState.progress.gamam.narrativeAchievementCount, 
 assert.deepEqual(normalizedInventoryState.progress.gamam.narrativeAchievementDetail, {
   conditionText: "Complete the family story.",
   requiredCount: 5,
-  effectIcon: "prestige",
-  effectAmount: 99,
+  effectEntries: [
+    { icon: "instant", amount: 0, text: "Prestige +1" },
+  ],
+  effects: [
+    { icon: "instant", amount: 0 },
+  ],
+  effectIcon: "instant",
+  effectAmount: 0,
   effectText: "Prestige +1",
 });
 assert.deepEqual(normalizedInventoryState.progress.gamam.houseAchievements, [1, 1, 0]);
@@ -296,13 +320,17 @@ assert.deepEqual(normalizedInventoryState.progress.gamam.houseAchievementComplet
 assert.deepEqual(normalizedInventoryState.progress.gamam.houseAchievementDetails[0], {
   conditionText: "Spend 5 Power",
   requiredCount: 2,
-  effectIcon: "power",
-  effectAmount: 2,
+  effectEntries: [{ icon: "", amount: 0, text: "Gain 1 Coin" }],
+  effects: [],
+  effectIcon: "",
+  effectAmount: 0,
   effectText: "Gain 1 Coin",
 });
 assert.deepEqual(normalizedInventoryState.progress.gamam.houseAchievementDetails[1], {
   conditionText: "Too many rows",
   requiredCount: 1,
+  effectEntries: [{ icon: "", amount: 0, text: "Clamp to one" }],
+  effects: [],
   effectIcon: "",
   effectAmount: 0,
   effectText: "Clamp to one",
@@ -412,6 +440,19 @@ assert.throws(
   /성향을 선택하세요/,
 );
 
+const alignmentOrder = ["greedy", "opportunist", "rebel", "moderate", "opulent", "extremist"];
+const reorderedAlignmentState = saveAlignmentOrder(progressState, "gamam", alignmentOrder, now);
+assert.deepEqual(redactState(reorderedAlignmentState, "gamam").ownHouseProgress?.alignmentOrder, alignmentOrder);
+const sanitizedAlignmentOrderState = saveAlignmentOrder(progressState, "gamam", ["greedy", "unknown", "greedy"], now);
+assert.deepEqual(redactState(sanitizedAlignmentOrderState, "gamam").ownHouseProgress?.alignmentOrder, [
+  "greedy",
+  "extremist",
+  "opulent",
+  "moderate",
+  "rebel",
+  "opportunist",
+]);
+
 const preservedRewardState = saveHouseProgress(
   rewardState,
   "gamam",
@@ -432,33 +473,33 @@ assert.deepEqual(preservedRewardState.progress.gamam.alignmentRewards.greedy, {
 assert.equal(redactState(progressState, "natar").availableAgendas, undefined);
 const manualDiscardState = setRandomDiscardEnabled(progressState, false, now);
 assert.equal(manualDiscardState.randomDiscardEnabled, false);
-assert.equal(redactState(manualDiscardState, "natar").availableAgendas?.length, 6);
-assert.throws(() => applyDiscard(manualDiscardState, "natar", null, now, () => 0), /선택하세요/);
-const manuallyDiscarded = applyDiscard(manualDiscardState, "natar", "greedy", now, () => 0);
+assert.equal(redactState(manualDiscardState, "solad").availableAgendas?.length, 6);
+assert.throws(() => applyDiscard(manualDiscardState, "solad", null, now, () => 0), /선택하세요/);
+const manuallyDiscarded = applyDiscard(manualDiscardState, "solad", "greedy", now, () => 0);
 assert.equal(manuallyDiscarded.discarded, "greedy");
 assert.equal(manuallyDiscarded.pool.includes("greedy"), false);
 
-const discarded = applyDiscard(progressState, "natar", null, now, () => 0);
+const discarded = applyDiscard(progressState, "solad", null, now, () => 0);
 assert.equal(discarded.phase, "choose");
 assert.equal(discarded.discarded, AGENDAS[0].id);
 assert.equal(discarded.pool.length, 5);
-assert.equal(discarded.turn, "natar");
+assert.equal(discarded.turn, "solad");
 assert.equal(redactState(discarded, "gamam").availableAgendas, undefined);
-assert.equal(redactState(discarded, "natar").availableAgendas?.length, 5);
+assert.equal(redactState(discarded, "solad").availableAgendas?.length, 5);
 assert.throws(() => setRandomDiscardEnabled(discarded, false, now), /시작되기 전/);
 assert.throws(() => applyDiscard(draftReady, "gamam", null, now, () => 0), /not your turn/i);
 
-let state = applyChoose(discarded, "natar", "greedy", now);
-assert.equal(state.turn, "gamam");
+let state = applyChoose(discarded, "solad", "opulent", now);
+assert.equal(state.turn, "coden");
 assert.equal(state.pool.length, 4);
-assert.equal(redactState(state, "natar").ownChoice?.id, "greedy");
-assert.equal(redactState(state, "natar").availableAgendas, undefined);
-assert.throws(() => applyChoose(state, "natar", state.pool[0], now), /not your turn/i);
+assert.equal(redactState(state, "solad").ownChoice?.id, "opulent");
+assert.equal(redactState(state, "solad").availableAgendas, undefined);
+assert.throws(() => applyChoose(state, "solad", state.pool[0], now), /not your turn/i);
 
-state = applyChoose(state, "gamam", "opportunist", now);
-state = applyChoose(state, "olwyn", "rebel", now);
 state = applyChoose(state, "coden", "moderate", now);
-state = applyChoose(state, "solad", "opulent", now);
+state = applyChoose(state, "olwyn", "rebel", now);
+state = applyChoose(state, "gamam", "opportunist", now);
+state = applyChoose(state, "natar", "greedy", now);
 
 assert.equal(state.phase, "complete");
 assert.equal(state.pool.length, 0);
@@ -467,6 +508,17 @@ assert.equal(redactState(state, "natar").ownChoice?.id, state.choices.natar);
 assert.equal(redactState(state, "olwyn").availableAgendas, undefined);
 assert.throws(() => endSession(discarded, now), /비밀 의제/);
 assert.throws(() => beginDilemmaEdit(discarded, "natar", "draft-token", now), /완료/);
+state = registerSession(state, "gamam", "vote-session-gamam", now);
+state = registerSession(state, "solad", "vote-session-solad", now);
+state = registerSession(state, "natar", "vote-session-natar", now);
+state = registerSession(state, "coden", "vote-session-coden", now);
+state = registerSession(state, "olwyn", "vote-session-olwyn", now);
+assert.equal(redactState(state, "gamam").dilemmaLeader, null);
+assert.equal(redactState(state, "gamam").dilemmaModerator, null);
+assert.throws(() => beginDilemmaEdit(state, "gamam", "draft-token", now), /리더와 중재자/);
+state = saveDilemmaRoles(state, "gamam", { leaderHouseId: "gamam", moderatorHouseId: "solad" }, now);
+assert.equal(redactState(state, "gamam").dilemmaLeader, "gamam");
+assert.equal(redactState(state, "gamam").dilemmaModerator, "solad");
 
 let editingDilemma = beginDilemmaEdit(state, "gamam", "edit-token", now);
 assert.equal(editingDilemma.dilemma.editLock?.houseId, "gamam");
@@ -477,6 +529,18 @@ assert.throws(() => beginDilemmaEdit(editingDilemma, "solad", "other-token", now
 assert.throws(
   () => saveDilemmaRecord(editingDilemma, "solad", "edit-token", { question: "Should the council pay?" }, "history-1", now),
   /수정 중/,
+);
+assert.throws(
+  () =>
+    saveDilemmaRecord(
+      editingDilemma,
+      "gamam",
+      "edit-token",
+      { title: "Harbor levy", selectedOutcome: "aye" },
+      "history-1",
+      now,
+    ),
+  /모든 가문.*투표/,
 );
 
 state = saveDilemmaRecord(
@@ -500,9 +564,9 @@ state = saveDilemmaRecord(
       result: "Delay repairs and adjust morale.",
       resourceDeltas: { morale: -99, knowledge: "2", welfare: 0 },
     },
-    selectedOutcome: "aye",
+    selectedOutcome: "",
     voteNotes: "Aye won by 2 power.",
-    resolutionNotes: "Apply resource movement, check stability, then place card on time counter.",
+    resolutionNotes: "",
     photos: [
       {
         id: "photo-1",
@@ -527,17 +591,18 @@ assert.equal(state.dilemma.editLock, null);
 assert.equal(state.dilemma.historyId, "history-1");
 assert.equal(state.dilemma.updatedBy, "gamam");
 assert.equal(state.dilemma.updatedByName, "House Pinchay");
-assert.equal(state.dilemma.selectedOutcome, "aye");
+assert.equal(state.dilemma.selectedOutcome, "");
 assert.deepEqual(state.dilemma.aye.resourceDeltas, { wealth: -2, morale: 1 });
 assert.deepEqual(state.dilemma.nay.resourceDeltas, { morale: -9, knowledge: 2 });
 assert.equal(state.dilemma.photos.length, 1);
 assert.equal(state.dilemma.photos[0].addedBy, "gamam");
 assert.equal(state.dilemmaHistory.length, 0);
-assert.throws(() => publishDilemmaRecord(state, "gamam", "history-1", now), /모두 투표/);
+assert.throws(() => publishDilemmaRecord(state, "gamam", "history-1", now), /모든 가문.*투표/);
 state = {
   ...state,
   dilemma: {
     ...state.dilemma,
+    selectedOutcome: "aye",
     resolutionNotes: "",
     votes: {
       gamam: { side: "aye", powerTokens: 2, updatedAt: now, updatedByName: "House Pinchay" },
@@ -562,6 +627,8 @@ assert.equal(state.dilemmaHistory[0].historyId, "history-1");
 assert.deepEqual(state.dilemmaHistory[0].aye.resourceDeltas, { wealth: -2, morale: 1 });
 assert.equal(state.dilemmaHistory[0].photos.length, 1);
 assert.deepEqual(state.dilemma, createDefaultDilemmaRecord(now));
+assert.equal(state.dilemmaLeader, null);
+assert.equal(state.dilemmaModerator, null);
 assert.throws(() => publishDilemmaRecord(state, "gamam", "history-1", now), /게시할 딜레마/);
 assert.throws(() => deleteDilemmaHistoryEntry(state, "gamam", "missing-history", now), /찾을 수 없습니다/);
 assert.throws(() => deleteDilemmaHistoryEntry(state, "solad", "history-1", now), /게시한 가문/);
@@ -570,6 +637,7 @@ assert.equal(redactState(state, "solad").dilemma.question, "");
 assert.equal(redactState(state, "solad").dilemmaHistory.length, 1);
 assert.equal(redactState(state, "solad").dilemmaHistory[0].question, "Should the council fund the repairs?");
 
+state = saveDilemmaRoles(state, "gamam", { leaderHouseId: "gamam", moderatorHouseId: "solad" }, now);
 let votingState = beginDilemmaEdit(state, "gamam", "vote-edit-token", now);
 votingState = saveDilemmaRecord(
   votingState,
@@ -588,6 +656,7 @@ assert.throws(
   () => saveDilemmaVoteOrder(votingState, "gamam", ["gamam", "solad", "coden", "olwyn", "natar"], now),
   /진행 중/,
 );
+const customSeatingOrder = ["solad", "natar", "gamam", "coden", "olwyn"] as const;
 let customVoteOrderState = {
   ...votingState,
   dilemma: createDefaultDilemmaRecord(now),
@@ -595,23 +664,25 @@ let customVoteOrderState = {
 customVoteOrderState = saveDilemmaVoteOrder(
   customVoteOrderState,
   "gamam",
-  ["gamam", "solad", "coden", "olwyn", "natar"],
+  [...customSeatingOrder],
   now,
 );
 assert.deepEqual(redactState(customVoteOrderState, "gamam").dilemmaVoteOrder, [
-  "gamam",
   "solad",
+  "natar",
+  "gamam",
   "coden",
   "olwyn",
-  "natar",
 ]);
+assert.equal(redactState(customVoteOrderState, "gamam").dilemmaLeader, "gamam");
+assert.equal(redactState(customVoteOrderState, "gamam").dilemmaModerator, "solad");
 assert.throws(
   () => saveDilemmaVoteOrder(customVoteOrderState, "gamam", ["gamam", "solad", "coden"], now),
-  /다섯 가문/,
+  /로그인 중인 가문/,
 );
 assert.throws(
   () => saveDilemmaVoteOrder(customVoteOrderState, "gamam", ["gamam", "solad", "solad", "olwyn", "natar"], now),
-  /다섯 가문/,
+  /로그인 중인 가문/,
 );
 votingState = savePlayerInventory(votingState, "natar", { ...createDefaultPlayerInventory(now), powerTokens: 3 }, now);
 votingState = savePlayerInventory(votingState, "gamam", { ...createDefaultPlayerInventory(now), powerTokens: 8 }, now);
@@ -622,31 +693,43 @@ assert.equal(
   redactState({ ...votingState, dilemmaVoteOrder: customVoteOrderState.dilemmaVoteOrder }, "gamam").dilemmaVoteTurn,
   "gamam",
 );
+const customSeatingTurnState = saveDilemmaVote(
+  { ...votingState, dilemmaVoteOrder: customVoteOrderState.dilemmaVoteOrder },
+  "gamam",
+  { side: "aye", powerTokens: 1 },
+  now,
+);
+assert.equal(redactState(customSeatingTurnState, "coden").dilemmaVoteTurn, "coden");
+assert.equal(redactState(votingState, "gamam").dilemmaVoteTurn, "gamam");
+assert.equal(redactState(votingState, "gamam").canVoteDilemma, true);
+assert.equal(redactState(votingState, "natar").canVoteDilemma, false);
+assert.equal(redactState(votingState, "gamam").dilemmaLeader, "gamam");
+assert.equal(redactState(votingState, "gamam").dilemmaModerator, "solad");
+assert.throws(() => saveDilemmaVote(votingState, "gamam", { side: "aye", powerTokens: 9 }, now), /8개/);
+votingState = saveDilemmaVote(votingState, "gamam", { side: "aye", powerTokens: 2 }, now);
 assert.equal(redactState(votingState, "natar").dilemmaVoteTurn, "natar");
 assert.equal(redactState(votingState, "natar").canVoteDilemma, true);
-assert.equal(redactState(votingState, "gamam").canVoteDilemma, false);
-assert.throws(() => saveDilemmaVote(votingState, "natar", { side: "aye", powerTokens: 4 }, now), /3개/);
+assert.throws(() => saveDilemmaVote(votingState, "solad", { side: "aye", powerTokens: 2 }, now), /투표 차례/);
 votingState = saveDilemmaVote(votingState, "natar", { side: "aye", powerTokens: 3 }, now);
-assert.equal(redactState(votingState, "solad").dilemmaVoteTurn, "solad");
-assert.equal(redactState(votingState, "solad").canVoteDilemma, true);
-assert.throws(() => saveDilemmaVote(votingState, "gamam", { side: "aye", powerTokens: 2 }, now), /투표 차례/);
 votingState = saveDilemmaVote(votingState, "solad", { side: "nay", powerTokens: 1 }, now);
 votingState = saveDilemmaVote(votingState, "coden", { side: "pass", powerTokens: 6 }, now);
-votingState = saveDilemmaVote(votingState, "olwyn", { side: "nay", powerTokens: 2 }, now);
 assert.equal(votingState.dilemma.votes.coden?.powerTokens, 0);
-assert.throws(() => applyDilemmaVotes(votingState, "gamam", now), /모두/);
-const tieVotingState = saveDilemmaVote(votingState, "gamam", { side: "pass", powerTokens: 0 }, now);
-assert.throws(() => applyDilemmaVotes(tieVotingState, "gamam", now), /같습니다/);
-votingState = saveDilemmaVote(votingState, "gamam", { side: "aye", powerTokens: 2 }, now);
+assert.throws(() => applyDilemmaVotes(votingState, "gamam", now), /모든 가문/);
+const tieVotingState = saveDilemmaVote(votingState, "olwyn", { side: "pass", powerTokens: 0 }, now);
+const tiedTallyState = applyDilemmaVotes(tieVotingState, "gamam", now);
+assert.equal(tiedTallyState.dilemma.selectedOutcome, "");
+assert.match(tiedTallyState.dilemma.voteNotes, /찬성 5 \/ 반대 1 \/ 기권 2/);
+votingState = saveDilemmaVote(votingState, "olwyn", { side: "nay", powerTokens: 2 }, now);
+const inventoriesBeforeDilemmaApply = votingState.inventories;
 votingState = applyDilemmaVotes(votingState, "gamam", now);
-assert.equal(votingState.dilemma.selectedOutcome, "aye");
+assert.equal(votingState.dilemma.selectedOutcome, "");
 assert.match(votingState.dilemma.voteNotes, /찬성 5 \/ 반대 3 \/ 기권 1/);
-assert.equal(votingState.inventories.natar.powerTokens, 0);
-assert.equal(votingState.inventories.gamam.powerTokens, 6);
-assert.equal(votingState.inventories.olwyn.powerTokens, 4);
+assert.match(votingState.dilemma.voteNotes, /수기로 반영/);
+assert.throws(() => publishDilemmaRecord(votingState, "gamam", "history-manual", now), /직접 선택/);
+assert.deepEqual(votingState.inventories, inventoriesBeforeDilemmaApply);
 assert.equal(redactState(votingState, "natar").dilemmaVoteTurn, null);
 assert.equal(redactState(votingState, "natar").canVoteDilemma, false);
-assert.throws(() => saveDilemmaVote(votingState, "natar", { side: "nay", powerTokens: 0 }, now), /이미 적용/);
+assert.throws(() => saveDilemmaVote(votingState, "natar", { side: "nay", powerTokens: 0 }, now), /모든 가문.*투표/);
 
 editingDilemma = beginDilemmaEdit(state, "gamam", "edit-token-2", now);
 const canceledDilemma = cancelDilemmaEdit(editingDilemma, "gamam", "edit-token-2", now);
@@ -744,9 +827,9 @@ assert.deepEqual(
   finalScoring.rows.map((row) => [row.houseId, row.scores.total, row.ranks.total]),
   [
     ["olwyn", 23, 1],
-    ["coden", 20, 2],
-    ["solad", 18, 3],
-    ["gamam", 14, 4],
+    ["solad", 18, 2],
+    ["gamam", 14, 3],
+    ["coden", 13, 4],
     ["natar", 0, 5],
   ],
 );
@@ -775,8 +858,8 @@ assert.throws(
 const activeSessions = registerSession(registerSession(state, "solad", "token-a", now), "gamam", "token-b", now);
 const ended = endSession(activeSessions, now);
 assert.equal(ended.phase, "discard");
-assert.deepEqual(ended.draftOrder, ["natar", "olwyn", "coden", "solad", "gamam"]);
-assert.equal(ended.turn, "natar");
+assert.deepEqual(ended.draftOrder, ["solad", "coden", "olwyn", "natar", "gamam"]);
+assert.equal(ended.turn, "solad");
 assert.deepEqual(ended.choices, {});
 assert.equal(ended.discarded, null);
 assert.equal(ended.pool.length, AGENDAS.length);
@@ -785,12 +868,17 @@ assert.deepEqual(ended.dilemma, createDefaultDilemmaRecord(now));
 assert.equal(ended.dilemmaHistory.length, 1);
 assert.equal(ended.credentials.gamam, credential);
 assert.equal(ended.playerNames.gamam, "House Pinchay");
-assert.equal(ended.inventories.gamam.coins, 10);
-assert.equal(ended.inventories.gamam.powerTokens, 8);
+assert.equal(ended.inventories.gamam.coins, 3);
+assert.equal(ended.inventories.gamam.powerTokens, 9);
+assert.equal(ended.inventories.solad.coins, 20);
+assert.equal(ended.inventories.coden.coins, 15);
 assert.equal(ended.inventories.gamam.prestige, 2);
 assert.equal(ended.inventories.gamam.crave, 1);
 assert.equal(ended.inventories.gamam.resources.knowledge, 17);
-assert.deepEqual(ended.progress.gamam.openAgendaTokens, { positive: [], negative: [] });
+assert.deepEqual(ended.progress.gamam.openAgendaTokens, {
+  positive: ["influence", "wealth"],
+  negative: ["morale", "knowledge"],
+});
 assert.equal(ended.progress.gamam.narrativeAchievement, true);
 assert.equal(ended.progress.gamam.narrativeAchievementCount, 1);
 assert.equal(ended.progress.gamam.narrativeAchievementDetail.effectText, "Prestige +1, Crave +1");
@@ -798,7 +886,7 @@ assert.deepEqual(ended.progress.gamam.houseAchievements, [1, 2, 3]);
 assert.deepEqual(ended.progress.gamam.houseAchievementComplete, [false, false, false]);
 assert.equal(ended.progress.gamam.houseAchievementDetails[0].conditionText, "Open Agenda 2VP+");
 assert.equal(ended.progress.gamam.alignmentAchievements.greedy, 4);
-assert.equal(redactState(ended, "natar").canDiscard, true);
+assert.equal(redactState(ended, "solad").canDiscard, true);
 assert.equal(redactState(ended, "gamam").ownChoice, null);
 assert.deepEqual(normalizeState(ended, now).draftOrder, ended.draftOrder);
 

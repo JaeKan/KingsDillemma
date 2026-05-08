@@ -1,0 +1,193 @@
+import AddOutlinedIcon from "@mui/icons-material/AddOutlined";
+import AgricultureOutlinedIcon from "@mui/icons-material/AgricultureOutlined";
+import AnchorOutlinedIcon from "@mui/icons-material/AnchorOutlined";
+import ArticleOutlinedIcon from "@mui/icons-material/ArticleOutlined";
+import AutorenewOutlinedIcon from "@mui/icons-material/AutorenewOutlined";
+import BalanceOutlinedIcon from "@mui/icons-material/BalanceOutlined";
+import CastleOutlinedIcon from "@mui/icons-material/CastleOutlined";
+import CoronavirusOutlinedIcon from "@mui/icons-material/CoronavirusOutlined";
+import CrueltyFreeOutlinedIcon from "@mui/icons-material/CrueltyFreeOutlined";
+import DiamondOutlinedIcon from "@mui/icons-material/DiamondOutlined";
+import EditOutlinedIcon from "@mui/icons-material/EditOutlined";
+import FlagOutlinedIcon from "@mui/icons-material/FlagOutlined";
+import ForestOutlinedIcon from "@mui/icons-material/ForestOutlined";
+import FortOutlinedIcon from "@mui/icons-material/FortOutlined";
+import GrassOutlinedIcon from "@mui/icons-material/GrassOutlined";
+import HelpOutlineOutlinedIcon from "@mui/icons-material/HelpOutlineOutlined";
+import HistoryOutlinedIcon from "@mui/icons-material/HistoryOutlined";
+import HomeWorkOutlinedIcon from "@mui/icons-material/HomeWorkOutlined";
+import KeyOutlinedIcon from "@mui/icons-material/KeyOutlined";
+import LocalFireDepartmentOutlinedIcon from "@mui/icons-material/LocalFireDepartmentOutlined";
+import LocalFloristOutlinedIcon from "@mui/icons-material/LocalFloristOutlined";
+import LogoutOutlinedIcon from "@mui/icons-material/LogoutOutlined";
+import MenuBookOutlinedIcon from "@mui/icons-material/MenuBookOutlined";
+import MilitaryTechOutlinedIcon from "@mui/icons-material/MilitaryTechOutlined";
+import PaidOutlinedIcon from "@mui/icons-material/PaidOutlined";
+import PetsOutlinedIcon from "@mui/icons-material/PetsOutlined";
+import PestControlRodentOutlinedIcon from "@mui/icons-material/PestControlRodentOutlined";
+import PhotoCameraOutlinedIcon from "@mui/icons-material/PhotoCameraOutlined";
+import RemoveOutlinedIcon from "@mui/icons-material/RemoveOutlined";
+import DeleteOutlineOutlinedIcon from "@mui/icons-material/DeleteOutlineOutlined";
+import RestartAltOutlinedIcon from "@mui/icons-material/RestartAltOutlined";
+import SailingOutlinedIcon from "@mui/icons-material/SailingOutlined";
+import ScienceOutlinedIcon from "@mui/icons-material/ScienceOutlined";
+import ShieldOutlinedIcon from "@mui/icons-material/ShieldOutlined";
+import SaveOutlinedIcon from "@mui/icons-material/SaveOutlined";
+import OpenInNewOutlinedIcon from "@mui/icons-material/OpenInNewOutlined";
+import TableChartOutlinedIcon from "@mui/icons-material/TableChartOutlined";
+import MenuOutlinedIcon from "@mui/icons-material/MenuOutlined";
+import UndoOutlinedIcon from "@mui/icons-material/UndoOutlined";
+import VolumeOffOutlinedIcon from "@mui/icons-material/VolumeOffOutlined";
+import VolumeUpOutlinedIcon from "@mui/icons-material/VolumeUpOutlined";
+import VpnKeyOutlinedIcon from "@mui/icons-material/VpnKeyOutlined";
+import WarningAmberOutlinedIcon from "@mui/icons-material/WarningAmberOutlined";
+import WorkspacePremiumOutlinedIcon from "@mui/icons-material/WorkspacePremiumOutlined";
+import { specialAbilityIconUrls } from "../resources/gameResources";
+
+export function AchievementEffectOptionIcon({ option }) {
+  if (option.legendIcon) {
+    return <SpecialAbilityLegendIcon type={option.legendIcon} />;
+  }
+
+  return <TokenIcon type={option.icon || "seal"} />;
+}
+
+export function SpecialAbilityLegendIcon({ type }) {
+  if (type === "prestigeCrave") {
+    return (
+      <span className="legend-icon-group" aria-hidden="true">
+        <span className="legend-prefix">+X</span>
+        <RulebookAbilityImage className="legend-crown light" type="prestige" />
+        <span className="legend-divider">/</span>
+        <RulebookAbilityImage className="legend-crown dark" type="crave" />
+      </span>
+    );
+  }
+
+  if (type === "coins") {
+    return (
+      <span className="legend-icon-group" aria-hidden="true">
+        <span className="legend-prefix">+X</span>
+        <RulebookAbilityImage className="legend-token coin" type="coin" />
+      </span>
+    );
+  }
+
+  if (type === "power") {
+    return (
+      <span className="legend-icon-group" aria-hidden="true">
+        <span className="legend-prefix">+X</span>
+        <RulebookAbilityImage className="legend-token power" type="power" />
+      </span>
+    );
+  }
+
+  if (type === "finale") {
+    return (
+      <span className="legend-icon-group" aria-hidden="true">
+        <span className="legend-prefix">+X</span>
+        <RulebookAbilityImage className="legend-finale harmony" type="harmony" />
+        <span className="legend-divider">/</span>
+        <RulebookAbilityImage className="legend-finale discord" type="discord" />
+      </span>
+    );
+  }
+
+  return <RulebookAbilityImage className={`legend-rule-icon ${type}`} type={type} />;
+}
+
+export function RulebookAbilityImage({ className, type }) {
+  const src = specialAbilityIconUrls[type];
+
+  if (!src) {
+    return null;
+  }
+
+  return (
+    <span className={className} aria-hidden="true">
+      <img src={src} alt="" draggable="false" />
+    </span>
+  );
+}
+
+export function TokenIcon({ type }) {
+  if (type === "crown" || type === "prestige" || type === "crave") {
+    return <CrownIcon tone={type} />;
+  }
+
+  const Icon = {
+    balance: BalanceOutlinedIcon,
+    coin: PaidOutlinedIcon,
+    edit: EditOutlinedIcon,
+    exit: LogoutOutlinedIcon,
+    external: OpenInNewOutlinedIcon,
+    flame: LocalFireDepartmentOutlinedIcon,
+    gear: MenuOutlinedIcon,
+    help: HelpOutlineOutlinedIcon,
+    history: HistoryOutlinedIcon,
+    house: HomeWorkOutlinedIcon,
+    influence: FortOutlinedIcon,
+    key: VpnKeyOutlinedIcon,
+    knowledge: ArticleOutlinedIcon,
+    menu: MenuOutlinedIcon,
+    minus: RemoveOutlinedIcon,
+    morale: FlagOutlinedIcon,
+    plus: AddOutlinedIcon,
+    photo: PhotoCameraOutlinedIcon,
+    power: ShieldOutlinedIcon,
+    reset: RestartAltOutlinedIcon,
+    save: SaveOutlinedIcon,
+    scroll: ArticleOutlinedIcon,
+    seal: WorkspacePremiumOutlinedIcon,
+    sheet: TableChartOutlinedIcon,
+    soundOff: VolumeOffOutlinedIcon,
+    soundOn: VolumeUpOutlinedIcon,
+    tip: MenuBookOutlinedIcon,
+    turn: AutorenewOutlinedIcon,
+    trash: DeleteOutlineOutlinedIcon,
+    undo: UndoOutlinedIcon,
+    warning: WarningAmberOutlinedIcon,
+    wealth: DiamondOutlinedIcon,
+    welfare: GrassOutlinedIcon,
+  }[type] || AddOutlinedIcon;
+
+  return <Icon aria-hidden="true" focusable="false" />;
+}
+
+export function CrownIcon({ tone = "crown" }) {
+  const className =
+    tone === "prestige"
+      ? "crown-icon crown-icon-light"
+      : tone === "crave"
+        ? "crown-icon crown-icon-dark"
+        : "crown-icon";
+
+  return (
+    <svg className={className} viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <path
+        className="crown-fill"
+        d="M4.2 8.1 8.3 12l3.7-6.3 3.7 6.3 4.1-3.9-1.5 9.7H5.7L4.2 8.1Z"
+      />
+      <path className="crown-rim" d="M6.2 20h11.6" />
+    </svg>
+  );
+}
+
+export function HouseIcon({ motif }) {
+  const Icon = {
+    boar: PetsOutlinedIcon,
+    keys: KeyOutlinedIcon,
+    lobster: AnchorOutlinedIcon,
+    porcupine: PestControlRodentOutlinedIcon,
+    rooster: AgricultureOutlinedIcon,
+    rose: LocalFloristOutlinedIcon,
+    ship: SailingOutlinedIcon,
+    skull: CoronavirusOutlinedIcon,
+    snake: ScienceOutlinedIcon,
+    sword: MilitaryTechOutlinedIcon,
+    tree: ForestOutlinedIcon,
+    turtle: CrueltyFreeOutlinedIcon,
+  }[motif] || CastleOutlinedIcon;
+
+  return <Icon aria-hidden="true" focusable="false" />;
+}

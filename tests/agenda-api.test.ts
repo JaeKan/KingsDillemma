@@ -101,18 +101,22 @@ const saveProgress = await handleAgendaRequest(
         narrativeAchievementDetail: {
           conditionText: "Story event",
           requiredCount: 2,
-          effectIcon: "crave",
-          effectAmount: 1,
-          effectText: "Prestige +1",
+          effectEntries: [
+            { icon: "instant", text: "@재화 +2" },
+            { icon: "start", text: "@명망 +1" },
+            { icon: "bad", text: "ignored" },
+            { icon: "", text: "" },
+          ],
         },
         houseAchievements: [4, 2, 1],
         houseAchievementDetails: [
           {
             conditionText: "Coin threshold",
             requiredCount: 3,
-            effectIcon: "coins",
-            effectAmount: 2,
-            effectText: "Start with +1 coin",
+            effectEntries: [
+              { icon: "start", text: "@재화 +1" },
+              { icon: "condition", text: "@권력 +2" },
+            ],
           },
         ],
       },
@@ -124,15 +128,32 @@ const saveProgress = await handleAgendaRequest(
 );
 const saveProgressPayload = await saveProgress.json();
 assert.equal(saveProgress.status, 200);
-assert.equal(saveProgressPayload.state.ownHouseProgress.narrativeAchievementDetail.effectText, "Prestige +1");
-assert.equal(saveProgressPayload.state.ownHouseProgress.narrativeAchievementDetail.effectIcon, "crave");
-assert.equal(saveProgressPayload.state.ownHouseProgress.narrativeAchievementDetail.effectAmount, 1);
+assert.equal(saveProgressPayload.state.ownHouseProgress.narrativeAchievementDetail.effectText, "@재화 +2 · @명망 +1 · ignored");
+assert.deepEqual(saveProgressPayload.state.ownHouseProgress.narrativeAchievementDetail.effectEntries, [
+  { icon: "instant", amount: 0, text: "@재화 +2" },
+  { icon: "start", amount: 0, text: "@명망 +1" },
+  { icon: "", amount: 0, text: "ignored" },
+]);
+assert.deepEqual(saveProgressPayload.state.ownHouseProgress.narrativeAchievementDetail.effects, [
+  { icon: "instant", amount: 0 },
+  { icon: "start", amount: 0 },
+]);
+assert.equal(saveProgressPayload.state.ownHouseProgress.narrativeAchievementDetail.effectIcon, "instant");
+assert.equal(saveProgressPayload.state.ownHouseProgress.narrativeAchievementDetail.effectAmount, 0);
 assert.equal(saveProgressPayload.state.ownHouseProgress.narrativeAchievementCount, 2);
 assert.equal(saveProgressPayload.state.ownHouseProgress.narrativeAchievement, true);
 assert.equal(saveProgressPayload.state.ownHouseProgress.houseAchievements[0], 3);
 assert.equal(saveProgressPayload.state.ownHouseProgress.houseAchievementDetails[0].requiredCount, 3);
-assert.equal(saveProgressPayload.state.ownHouseProgress.houseAchievementDetails[0].effectIcon, "coins");
-assert.equal(saveProgressPayload.state.ownHouseProgress.houseAchievementDetails[0].effectAmount, 2);
+assert.deepEqual(saveProgressPayload.state.ownHouseProgress.houseAchievementDetails[0].effectEntries, [
+  { icon: "start", amount: 0, text: "@재화 +1" },
+  { icon: "condition", amount: 0, text: "@권력 +2" },
+]);
+assert.deepEqual(saveProgressPayload.state.ownHouseProgress.houseAchievementDetails[0].effects, [
+  { icon: "start", amount: 0 },
+  { icon: "condition", amount: 0 },
+]);
+assert.equal(saveProgressPayload.state.ownHouseProgress.houseAchievementDetails[0].effectIcon, "start");
+assert.equal(saveProgressPayload.state.ownHouseProgress.houseAchievementDetails[0].effectAmount, 0);
 
 const earlyDilemmaEdit = await handleAgendaRequest(jsonRequest({ action: "beginDilemmaEdit" }, setCookie), {}, store);
 const earlyDilemmaEditPayload = await earlyDilemmaEdit.json();
@@ -188,19 +209,48 @@ persisted = {
 };
 
 const saveVoteOrder = await handleAgendaRequest(
-  jsonRequest({ action: "saveDilemmaVoteOrder", voteOrder: ["gamam", "natar", "solad", "coden", "olwyn"] }, setCookie),
+  jsonRequest({ action: "saveDilemmaVoteOrder", voteOrder: ["gamam"] }, setCookie),
   {},
   store,
 );
 const saveVoteOrderPayload = await saveVoteOrder.json();
 assert.equal(saveVoteOrder.status, 200);
-assert.deepEqual(saveVoteOrderPayload.state.dilemmaVoteOrder, ["gamam", "natar", "solad", "coden", "olwyn"]);
+assert.deepEqual(saveVoteOrderPayload.state.dilemmaVoteOrder, ["gamam"]);
+
+const saveDilemmaRoles = await handleAgendaRequest(
+  jsonRequest({ action: "saveDilemmaRoles", roles: { leaderHouseId: "gamam", moderatorHouseId: "gamam" } }, setCookie),
+  {},
+  store,
+);
+const saveDilemmaRolesPayload = await saveDilemmaRoles.json();
+assert.equal(saveDilemmaRoles.status, 200);
+assert.equal(saveDilemmaRolesPayload.state.dilemmaLeader, "gamam");
+assert.equal(saveDilemmaRolesPayload.state.dilemmaModerator, "gamam");
 
 const beginDilemmaEdit = await handleAgendaRequest(jsonRequest({ action: "beginDilemmaEdit" }, setCookie), {}, store);
 const beginDilemmaEditPayload = await beginDilemmaEdit.json();
 assert.equal(beginDilemmaEdit.status, 200);
 assert.equal(beginDilemmaEditPayload.dilemmaEditToken.length, 36);
 assert.equal(beginDilemmaEditPayload.state.dilemma.editLock.token, undefined);
+
+const prematureDilemmaOutcome = await handleAgendaRequest(
+  jsonRequest(
+    {
+      action: "saveDilemma",
+      dilemmaEditToken: beginDilemmaEditPayload.dilemmaEditToken,
+      dilemma: {
+        title: "Harbor levy",
+        selectedOutcome: "nay",
+      },
+    },
+    setCookie,
+  ),
+  {},
+  store,
+);
+const prematureDilemmaOutcomePayload = await prematureDilemmaOutcome.json();
+assert.equal(prematureDilemmaOutcome.status, 409);
+assert.match(prematureDilemmaOutcomePayload.error, /모든 가문.*투표/);
 
 const saveDilemma = await handleAgendaRequest(
   jsonRequest(
@@ -210,14 +260,12 @@ const saveDilemma = await handleAgendaRequest(
       dilemma: {
         title: "Harbor levy",
         question: "Should the council fund the harbor?",
-        selectedOutcome: "nay",
         aye: {
           resourceDeltas: { wealth: 1 },
         },
         nay: {
           resourceDeltas: { morale: -1, knowledge: 2 },
         },
-        resolutionNotes: "Resolve harbor unrest and place the card.",
         photos: [
           {
             id: "photo-1",
@@ -237,6 +285,7 @@ const saveDilemma = await handleAgendaRequest(
 const saveDilemmaPayload = await saveDilemma.json();
 assert.equal(saveDilemma.status, 200);
 assert.equal(saveDilemmaPayload.state.dilemma.title, "Harbor levy");
+assert.equal(saveDilemmaPayload.state.dilemma.selectedOutcome, "");
 assert.deepEqual(saveDilemmaPayload.state.dilemma.nay.resourceDeltas, { morale: -1, knowledge: 2 });
 assert.equal(saveDilemmaPayload.state.dilemma.photos.length, 1);
 assert.equal(saveDilemmaPayload.state.dilemmaHistory.length, 0);
@@ -245,12 +294,14 @@ assert.equal(persisted?.dilemmaHistory.length, 0);
 const blockedPublishDilemma = await handleAgendaRequest(jsonRequest({ action: "publishDilemma" }, setCookie), {}, store);
 const blockedPublishDilemmaPayload = await blockedPublishDilemma.json();
 assert.equal(blockedPublishDilemma.status, 409);
-assert.match(blockedPublishDilemmaPayload.error, /모두 투표/);
+assert.match(blockedPublishDilemmaPayload.error, /모든 가문.*투표/);
 
 persisted = {
   ...persisted!,
   dilemma: {
     ...persisted!.dilemma,
+    selectedOutcome: "nay",
+    resolutionNotes: "Resolve harbor unrest and place the card.",
     votes: {
       gamam: { side: "aye", powerTokens: 2, updatedAt: "2026-05-07T00:00:00.000Z", updatedByName: "House Pinchay" },
       solad: { side: "nay", powerTokens: 1, updatedAt: "2026-05-07T00:00:00.000Z", updatedByName: "House Gambol" },
@@ -294,6 +345,13 @@ assert.equal(deleteDilemmaHistory.status, 200);
 assert.equal(deleteDilemmaHistoryPayload.state.dilemmaHistory.length, 0);
 assert.equal(persisted?.dilemmaHistory.length, 0);
 
+const saveVotingDilemmaRoles = await handleAgendaRequest(
+  jsonRequest({ action: "saveDilemmaRoles", roles: { leaderHouseId: "gamam", moderatorHouseId: "gamam" } }, setCookie),
+  {},
+  store,
+);
+assert.equal(saveVotingDilemmaRoles.status, 200);
+
 const beginVotingDilemmaEdit = await handleAgendaRequest(jsonRequest({ action: "beginDilemmaEdit" }, setCookie), {}, store);
 const beginVotingDilemmaEditPayload = await beginVotingDilemmaEdit.json();
 assert.equal(beginVotingDilemmaEdit.status, 200);
@@ -333,12 +391,16 @@ const saveDilemmaVotePayload = await saveDilemmaVote.json();
 assert.equal(saveDilemmaVote.status, 200);
 assert.equal(saveDilemmaVotePayload.state.dilemma.votes.gamam.side, "aye");
 assert.equal(saveDilemmaVotePayload.state.dilemma.votes.gamam.powerTokens, 2);
-assert.equal(saveDilemmaVotePayload.state.dilemmaVoteTurn, "natar");
+assert.equal(saveDilemmaVotePayload.state.dilemmaVoteTurn, null);
 assert.equal(saveDilemmaVotePayload.state.canVoteDilemma, false);
+const inventoryBeforeApply = structuredClone(persisted?.inventories);
 
 const earlyApplyDilemmaVotes = await handleAgendaRequest(jsonRequest({ action: "applyDilemmaVotes" }, setCookie), {}, store);
 const earlyApplyDilemmaVotesPayload = await earlyApplyDilemmaVotes.json();
-assert.equal(earlyApplyDilemmaVotes.status, 409);
-assert.match(earlyApplyDilemmaVotesPayload.error, /모두/);
+assert.equal(earlyApplyDilemmaVotes.status, 200);
+assert.equal(earlyApplyDilemmaVotesPayload.state.dilemma.selectedOutcome, "");
+assert.match(earlyApplyDilemmaVotesPayload.state.dilemma.voteNotes, /수기로 반영/);
+assert.equal(earlyApplyDilemmaVotesPayload.state.canVoteDilemma, false);
+assert.deepEqual(persisted?.inventories, inventoryBeforeApply);
 
 console.log("agenda-api tests passed");
