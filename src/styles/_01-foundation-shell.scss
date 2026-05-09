@@ -212,6 +212,33 @@ svg:not(.MuiSvgIcon-root) {
   stroke: none;
 }
 
+.token-icon-emoji {
+  display: inline-grid;
+  place-items: center;
+  line-height: 1;
+  font-size: 1.25rem;
+}
+
+.status-icon .token-icon-emoji {
+  font-size: 18px;
+}
+
+.vote-order-track-legend .token-icon-emoji {
+  font-size: 12px;
+}
+
+.dilemma-vote-role-grid small .token-icon-emoji {
+  font-size: 14px;
+}
+
+.dilemma-role-card > span .token-icon-emoji {
+  font-size: 18px;
+}
+
+.mention-token-icon .token-icon-emoji {
+  font-size: 13px;
+}
+
 .app-shell {
   position: relative;
   width: min(1440px, calc(100% - 8px));

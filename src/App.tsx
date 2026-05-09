@@ -2675,8 +2675,8 @@ function GamePanel({ state, busy, mutate, onOpenVoteOrderDialog, onOpenOpenAgend
               <StatusItem icon="scroll" label="현재 단계" value={councilStageLabel} />
               {state.phase === "complete" ? (
                 <>
-                  <StatusItem icon="crown" label="리더" value={leaderName || "미지정"} splitParenthetical />
-                  <StatusItem icon="balance" label="중재자" value={moderatorName || "미지정"} splitParenthetical />
+                  <StatusItem icon="leader" label="리더" value={leaderName || "미지정"} splitParenthetical />
+                  <StatusItem icon="moderator" label="중재자" value={moderatorName || "미지정"} splitParenthetical />
                   <StatusItem icon="seal" label="딜레마" value={dilemmaProgressLabel} />
                 </>
               ) : (
@@ -3158,9 +3158,10 @@ function HouseCrestBadge({ house, className = "", tooltipLabel, ariaLabel, disab
 function StatusItem({ icon, label, value, splitParenthetical = false }) {
   const parentheticalValue =
     splitParenthetical && typeof value === "string" ? splitParentheticalStatusValue(value) : null;
+  const leaderRow = icon === "leader";
 
   return (
-    <div className="status-item">
+    <div className={`status-item${leaderRow ? " status-item--leader" : ""}`}>
       <span className="status-icon" aria-hidden="true">
         <TokenIcon type={icon} />
       </span>
@@ -3261,9 +3262,15 @@ function VoteOrderTrack({ houses, leaderHouseId, moderatorHouseId, turn }) {
         })}
       </div>
       <div className="vote-order-track-legend">
-        <span><i className="leader" /> 리더</span>
-        <span><i className="moderator" /> 중재자</span>
-        <span><i className="current" /> 현재 차례</span>
+        <span className="leader">
+          <TokenIcon type="leader" /> 리더
+        </span>
+        <span className="moderator">
+          <TokenIcon type="moderator" /> 중재자
+        </span>
+        <span className="legend-current">
+          <i className="current" /> 현재 차례
+        </span>
       </div>
     </div>
   );
@@ -3398,8 +3405,18 @@ function DilemmaVotingPanel({ state, busy, mutate }) {
         </strong>
       </div>
       <div className="dilemma-vote-role-grid" aria-label="투표 역할과 선두">
-        <span><small>리더</small><strong>{leaderName || "미지정"}</strong></span>
-        <span><small>중재자</small><strong>{moderatorName || "미지정"}</strong></span>
+        <span className="role-cell role-cell--leader">
+          <small>
+            <TokenIcon type="leader" /> 리더
+          </small>
+          <strong>{leaderName || "미지정"}</strong>
+        </span>
+        <span>
+          <small>
+            <TokenIcon type="moderator" /> 중재자
+          </small>
+          <strong>{moderatorName || "미지정"}</strong>
+        </span>
         <span><small>찬성 선두</small><strong>{ayeLeader}</strong></span>
         <span><small>반대 선두</small><strong>{nayLeader}</strong></span>
         <span className="wide"><small>현재 우세</small><strong>{advantageText}</strong></span>
@@ -4120,31 +4137,80 @@ function PersonalInventoryPanel({
         </div>
       ) : null}
 
+      <div className="inventory-section inventory-challenge-section">
+        <section
+          className="achievement-primary-panel"
+          aria-labelledby="challenge-achievements-title"
+        >
+          <AchievementSectionHeading
+            id="challenge-achievements-title"
+            label="도전 과제"
+            tooltip={challengeAchievementTooltip}
+          />
+          <div className="achievement-primary-list">
+            <NarrativeAchievementRow
+              complete={narrativeAchievementComplete}
+              count={narrativeAchievementCount}
+              detail={progressDraft.narrativeAchievementDetail}
+              disabled={busy}
+              max={narrativeAchievementMax}
+              onDecrease={() => adjustNarrativeAchievement(-1)}
+              onEdit={(event) => openAchievementEditor(event, "narrative")}
+              onIncrease={() => adjustNarrativeAchievement(1)}
+              onToggle={toggleNarrativeAchievement}
+            />
+            <div className="achievement-track-list">
+              {houseAchievementRows.map((row) => (
+                <AchievementProgressRow
+                  key={row.id}
+                  label={row.label}
+                  value={progressDraft.houseAchievements[row.id] || 0}
+                  max={getAchievementRequiredCount(progressDraft.houseAchievementDetails[row.id])}
+                  challengeComplete={progressDraft.houseAchievementComplete[row.id] === true}
+                  detail={progressDraft.houseAchievementDetails[row.id]}
+                  disabled={busy}
+                  onDecrease={() => adjustHouseAchievement(row.id, -1)}
+                  onEdit={(event) => openAchievementEditor(event, "challenge", row.id)}
+                  onIncrease={() => adjustHouseAchievement(row.id, 1)}
+                  onToggleChallengeComplete={() => toggleHouseAchievementComplete(row.id)}
+                />
+              ))}
+            </div>
+          </div>
+        </section>
+      </div>
+
       <div className={`inventory-section inventory-agenda-section${ownChoice ? " has-secret-agenda" : ""}`}>
         <h3 className="agenda-section-title">
-          <span className="agenda-section-title-main">
-            <span>의제</span>
-            <Tooltip label="공개 의제 토큰 점수 설명">
-              <button
-                className="icon-help-button open-agenda-help-button"
-                type="button"
-                aria-label="공개 의제 토큰 점수 설명"
-                onClick={onOpenOpenAgendaGuide}
-              >
-                <TokenIcon type="help" />
-              </button>
-            </Tooltip>
-          </span>
-          <span className="agenda-type-legend" aria-hidden="true">
-            <span>
-              <i className="agenda-type-dot common" />
-              공통
+          <span className="agenda-section-title-lead">
+            <span className="agenda-section-title-main">
+              <span>의제</span>
             </span>
-            {ownChoice ? (
+            <span className="agenda-type-legend" aria-hidden="true">
               <span>
-                <i className="agenda-type-dot secret" />
-                비밀
+                <i className="agenda-type-dot common" />
+                공통
               </span>
+              {ownChoice ? (
+                <span>
+                  <i className="agenda-type-dot secret" />
+                  비밀
+                </span>
+              ) : null}
+            </span>
+          </span>
+          <span className="agenda-section-title-actions">
+            <AgendaScoreGuideButton
+              label="공개 의제 점수"
+              ariaLabel="공개 의제 점수 산정 방식 자세히 보기"
+              onClick={onOpenOpenAgendaGuide}
+            />
+            {ownChoice ? (
+              <AgendaScoreGuideButton
+                label="비밀 의제 점수"
+                ariaLabel="비밀 의제 점수 산정 방식 자세히 보기"
+                onClick={onOpenSecretAgendaGuide}
+              />
             ) : null}
           </span>
         </h3>
@@ -4164,74 +4230,35 @@ function PersonalInventoryPanel({
           </div>
           {ownChoice ? (
             <div className="agenda-progress-group inventory-secret-agenda" aria-label="비밀 의제">
-              <OwnChoice agenda={ownChoice} onOpenSecretAgendaGuide={onOpenSecretAgendaGuide} />
+              <OwnChoice agenda={ownChoice} />
             </div>
           ) : null}
         </div>
       </div>
 
       <div className="inventory-section progress-section">
-        <div className="achievement-progress-panel">
-          <div className="achievement-ledger">
-            <section className="achievement-primary-panel" aria-labelledby="challenge-achievements-title">
-              <AchievementSectionHeading
-                id="challenge-achievements-title"
-                label="도전 과제"
-                tooltip={challengeAchievementTooltip}
-              />
-              <div className="achievement-primary-list">
-                <NarrativeAchievementRow
-                  complete={narrativeAchievementComplete}
-                  count={narrativeAchievementCount}
-                  detail={progressDraft.narrativeAchievementDetail}
+        <div className="achievement-progress-panel achievement-alignment-only">
+          <section className="alignment-achievement-panel" aria-labelledby="alignment-achievements-title">
+            <AchievementSectionHeading
+              id="alignment-achievements-title"
+              label="업적"
+              tooltip={alignmentAchievementTooltip}
+            />
+            <div className="alignment-achievement-list" aria-label="성향 업적">
+              {orderedAlignmentRows.map((alignment) => (
+                <AlignmentProgressRow
+                  key={alignment.agendaId}
+                  alignment={alignment}
+                  value={progressDraft.alignmentAchievements[alignment.agendaId] || 0}
+                  max={houseAlignmentMarkMax}
+                  reward={progressDraft.alignmentRewards[alignment.agendaId]}
                   disabled={busy}
-                  max={narrativeAchievementMax}
-                  onDecrease={() => adjustNarrativeAchievement(-1)}
-                  onEdit={(event) => openAchievementEditor(event, "narrative")}
-                  onIncrease={() => adjustNarrativeAchievement(1)}
-                  onToggle={toggleNarrativeAchievement}
+                  onDecrease={() => adjustAlignmentAchievement(alignment.agendaId, -1)}
+                  onIncrease={() => adjustAlignmentAchievement(alignment.agendaId, 1)}
                 />
-                <div className="achievement-track-list">
-                  {houseAchievementRows.map((row) => (
-                    <AchievementProgressRow
-                      key={row.id}
-                      label={row.label}
-                      value={progressDraft.houseAchievements[row.id] || 0}
-                      max={getAchievementRequiredCount(progressDraft.houseAchievementDetails[row.id])}
-                      challengeComplete={progressDraft.houseAchievementComplete[row.id] === true}
-                      detail={progressDraft.houseAchievementDetails[row.id]}
-                      disabled={busy}
-                      onDecrease={() => adjustHouseAchievement(row.id, -1)}
-                      onEdit={(event) => openAchievementEditor(event, "challenge", row.id)}
-                      onIncrease={() => adjustHouseAchievement(row.id, 1)}
-                      onToggleChallengeComplete={() => toggleHouseAchievementComplete(row.id)}
-                    />
-                  ))}
-                </div>
-              </div>
-            </section>
-            <section className="alignment-achievement-panel" aria-labelledby="alignment-achievements-title">
-              <AchievementSectionHeading
-                id="alignment-achievements-title"
-                label="업적"
-                tooltip={alignmentAchievementTooltip}
-              />
-              <div className="alignment-achievement-list" aria-label="성향 업적">
-                {orderedAlignmentRows.map((alignment) => (
-                  <AlignmentProgressRow
-                    key={alignment.agendaId}
-                    alignment={alignment}
-                    value={progressDraft.alignmentAchievements[alignment.agendaId] || 0}
-                    max={houseAlignmentMarkMax}
-                    reward={progressDraft.alignmentRewards[alignment.agendaId]}
-                    disabled={busy}
-                    onDecrease={() => adjustAlignmentAchievement(alignment.agendaId, -1)}
-                    onIncrease={() => adjustAlignmentAchievement(alignment.agendaId, 1)}
-                  />
-                ))}
-              </div>
-            </section>
-          </div>
+              ))}
+            </div>
+          </section>
         </div>
       </div>
 
@@ -5295,8 +5322,10 @@ function DilemmaRoleDialog({
           </p>
           {activeHouses.length > 0 ? (
             <div className="dilemma-role-grid">
-              <label className="dilemma-role-card">
-                <span>리더 토큰</span>
+              <label className="dilemma-role-card dilemma-role-card--leader">
+                <span>
+                  <TokenIcon type="leader" /> 리더 토큰
+                </span>
                 <select
                   ref={leaderSelectRef}
                   value={leaderDraft}
@@ -5315,7 +5344,9 @@ function DilemmaRoleDialog({
                 <small>이번 딜레마 투표의 시작 기준입니다.</small>
               </label>
               <label className="dilemma-role-card">
-                <span>중재자</span>
+                <span>
+                  <TokenIcon type="moderator" /> 중재자
+                </span>
                 <select value={moderatorDraft} onChange={(event) => setModeratorDraft(event.target.value)} disabled={busy}>
                   <option value="" disabled>
                     중재자 선택
@@ -7830,7 +7861,7 @@ function arraysMatch(left = [], right = []) {
   return left.length === right.length && left.every((value, index) => value === right[index]);
 }
 
-function OwnChoice({ agenda, onOpenSecretAgendaGuide }) {
+function OwnChoice({ agenda }) {
   if (!agenda) {
     return null;
   }
@@ -7842,7 +7873,6 @@ function OwnChoice({ agenda, onOpenSecretAgendaGuide }) {
           <h3>
             <AgendaTitle agenda={agenda} />
           </h3>
-          <SecretAgendaScoreHelpButton onClick={onOpenSecretAgendaGuide} />
         </div>
         <AgendaScoringBoard agenda={agenda} />
       </div>
@@ -7970,7 +8000,7 @@ function AgendaCard({ agenda, busy, expanded, mode = "choose", mutate }) {
   );
 }
 
-function SecretAgendaScoreHelpButton({ onClick }) {
+function AgendaScoreGuideButton({ label, ariaLabel, onClick }) {
   if (!onClick) {
     return null;
   }
@@ -7979,11 +8009,11 @@ function SecretAgendaScoreHelpButton({ onClick }) {
     <button
       className="agenda-score-help-button"
       type="button"
-      aria-label="비밀 의제 점수 산정 방식 자세히 보기"
+      aria-label={ariaLabel}
       onClick={onClick}
     >
       <TokenIcon type="help" />
-      비밀 의제 점수
+      {label}
     </button>
   );
 }

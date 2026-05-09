@@ -499,9 +499,18 @@
 }
 
 .dilemma-vote-role-grid small {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   color: var(--muted);
   font-size: 0.64rem;
   font-weight: 900;
+}
+
+.dilemma-vote-role-grid small svg {
+  flex: 0 0 auto;
+  width: 14px;
+  height: 14px;
 }
 
 .dilemma-vote-role-grid strong {
@@ -510,6 +519,19 @@
   color: var(--ink-strong);
   font-size: 0.72rem;
   font-weight: 950;
+}
+
+.dilemma-vote-role-grid .role-cell--leader small {
+  font-size: 0.74rem;
+  font-weight: 920;
+}
+
+.dilemma-vote-role-grid .role-cell--leader strong {
+  font-size: 0.82rem;
+}
+
+.dilemma-vote-role-grid .role-cell--leader small .token-icon-emoji {
+  font-size: 15px;
 }
 
 .dilemma-vote-options {

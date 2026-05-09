@@ -56,11 +56,13 @@
 
   .inventory-panel {
     grid-area: inventory;
-    grid-template-columns: minmax(0, 1fr) minmax(320px, 0.72fr);
+    align-items: stretch;
+    grid-template-columns:
+      minmax(0, 0.88fr) minmax(0, 0.88fr) minmax(0, 1.12fr) minmax(0, 1.12fr);
     grid-template-areas:
-      "head actions"
-      "resources agenda"
-      "progress progress";
+      "head head head actions"
+      "resources resources challenge challenge"
+      "agenda agenda progress progress";
     align-self: start;
     justify-self: stretch;
     width: 100%;
@@ -68,11 +70,96 @@
   }
 
   .inventory-panel.has-house-profile {
-    grid-template-columns: minmax(320px, 0.8fr) minmax(260px, 0.45fr) minmax(420px, 1.05fr);
+    align-items: stretch;
+    grid-template-columns:
+      minmax(0, 0.9fr) minmax(0, 0.9fr) minmax(154px, 0.58fr) minmax(154px, 0.58fr) minmax(0, 1.18fr) minmax(0, 1.18fr);
     grid-template-areas:
-      "head head actions"
-      "resources house agenda"
-      "progress progress progress";
+      "head head head head head actions"
+      "resources resources house house challenge challenge"
+      "agenda agenda agenda progress progress progress";
+  }
+
+  .inventory-panel.has-house-profile .house-detail-section {
+    min-width: min(100%, 308px);
+  }
+
+  .inventory-panel .resource-section > .inventory-counter-group:first-child > h3,
+  .inventory-panel .house-detail-heading,
+  .inventory-panel .inventory-challenge-section .achievement-section-heading,
+  .inventory-panel .inventory-agenda-section > .agenda-section-title,
+  .inventory-panel .progress-section .achievement-section-heading {
+    min-height: 32px;
+    align-items: center;
+  }
+
+  .inventory-panel .progress-section {
+    justify-self: stretch;
+    grid-template-rows: minmax(0, 1fr);
+    min-height: 0;
+    align-self: stretch;
+  }
+
+  .inventory-panel .progress-section > .achievement-progress-panel {
+    min-height: 0;
+    height: 100%;
+    align-content: stretch;
+  }
+
+  .inventory-panel .progress-section .alignment-achievement-panel {
+    min-height: 0;
+    height: 100%;
+  }
+
+  .inventory-panel .progress-section .alignment-achievement-list {
+    min-height: 0;
+    align-content: start;
+    overflow: auto;
+  }
+
+  .inventory-panel .inventory-challenge-section {
+    min-width: 0;
+    align-self: stretch;
+    justify-self: stretch;
+  }
+
+  .inventory-panel .inventory-challenge-section > .achievement-primary-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    align-items: stretch;
+    min-height: 0;
+    align-self: stretch;
+  }
+
+  .inventory-panel .inventory-challenge-section .achievement-section-heading {
+    flex: 0 0 auto;
+  }
+
+  .inventory-panel .inventory-challenge-section .achievement-primary-list {
+    --achievement-challenge-list-height: 370px;
+    --achievement-challenge-gap: 6px;
+    box-sizing: border-box;
+    width: 100%;
+    height: var(--achievement-challenge-list-height);
+    flex-shrink: 0;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: repeat(4, minmax(0, 1fr));
+    gap: var(--achievement-challenge-gap);
+    align-content: stretch;
+    min-height: 0;
+  }
+
+  .inventory-panel .inventory-challenge-section .achievement-track-list {
+    display: contents;
+  }
+
+  .inventory-panel .inventory-challenge-section .achievement-primary-list > .achievement-toggle,
+  .inventory-panel .inventory-challenge-section .achievement-primary-list > .achievement-progress-row,
+  .inventory-panel .inventory-challenge-section .achievement-track-list > .achievement-progress-row {
+    min-height: 0;
+    align-self: stretch;
+    height: 100%;
   }
 
   .inventory-resource-grid {
@@ -152,12 +239,17 @@
 
 @media (min-width: 981px) and (max-width: 1279px) {
   .inventory-panel.has-house-profile {
-    grid-template-columns: minmax(0, 1fr) minmax(260px, 0.62fr);
+    align-items: stretch;
+    grid-template-columns:
+      minmax(0, 0.88fr) minmax(0, 0.88fr) minmax(148px, 0.56fr) minmax(148px, 0.56fr) minmax(0, 1.14fr) minmax(0, 1.14fr);
     grid-template-areas:
-      "head actions"
-      "resources house"
-      "agenda agenda"
-      "progress progress";
+      "head head head head head actions"
+      "resources resources house house challenge challenge"
+      "agenda agenda agenda progress progress progress";
+  }
+
+  .inventory-panel.has-house-profile .house-detail-section {
+    min-width: min(100%, 300px);
   }
 
   .house-detail-section .house-alignment-track {
@@ -338,11 +430,13 @@
 
   .inventory-panel {
     grid-area: inventory;
-    grid-template-columns: minmax(0, 1fr) minmax(360px, 0.72fr);
+    align-items: stretch;
+    grid-template-columns:
+      minmax(0, 0.88fr) minmax(0, 0.88fr) minmax(0, 1.12fr) minmax(0, 1.12fr);
     grid-template-areas:
-      "head actions"
-      "resources agenda"
-      "progress progress";
+      "head head head actions"
+      "resources resources challenge challenge"
+      "agenda agenda progress progress";
     align-content: start;
     align-self: start;
     justify-self: stretch;
@@ -353,15 +447,17 @@
   }
 
   .inventory-panel.has-house-profile {
-    grid-template-columns: minmax(360px, 0.86fr) minmax(280px, 0.52fr) minmax(520px, 1.12fr);
+    align-items: stretch;
+    grid-template-columns:
+      minmax(0, 0.9fr) minmax(0, 0.9fr) minmax(154px, 0.58fr) minmax(154px, 0.58fr) minmax(0, 1.18fr) minmax(0, 1.18fr);
     grid-template-areas:
-      "head head actions"
-      "resources house agenda"
-      "progress progress progress";
+      "head head head head head actions"
+      "resources resources house house challenge challenge"
+      "agenda agenda agenda progress progress progress";
   }
 
-  .inventory-section h3 {
-    font-size: 0.98rem;
+  .inventory-panel.has-house-profile .house-detail-section {
+    min-width: min(100%, 308px);
   }
 
   .inventory-grid,

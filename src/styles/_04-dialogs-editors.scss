@@ -72,9 +72,22 @@
 }
 
 .dilemma-role-card span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   color: var(--muted);
   font-size: 0.72rem;
   font-weight: 900;
+}
+
+.dilemma-role-card span svg {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+}
+
+.dilemma-role-card.dilemma-role-card--leader > span .token-icon-emoji {
+  font-size: 16px;
 }
 
 .dilemma-role-card select {

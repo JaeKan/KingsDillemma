@@ -544,6 +544,10 @@ label {
   font-size: 0.74rem;
 }
 
+.status-item--leader .status-icon .token-icon-emoji {
+  font-size: 18px;
+}
+
 .turn-track {
   display: grid;
   grid-template-columns: repeat(5, 1fr);
@@ -628,6 +632,29 @@ label {
   display: inline-flex;
   align-items: center;
   gap: 4px;
+}
+
+.vote-order-track-legend span.leader {
+  color: var(--gold-2);
+}
+
+.vote-order-track-legend span.leader .MuiSvgIcon-root {
+  color: inherit;
+}
+
+.vote-order-track-legend span.moderator {
+  color: #7aa4bb;
+}
+
+.vote-order-track-legend span.moderator .MuiSvgIcon-root {
+  color: inherit;
+  width: 12px;
+  height: 12px;
+  font-size: 12px;
+}
+
+.vote-order-track-legend .legend-current {
+  color: #6cc997;
 }
 
 .vote-order-track-legend i {

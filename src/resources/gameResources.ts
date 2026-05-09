@@ -107,7 +107,7 @@ export const valueMentionItems = [
   ...tokenCounters.map((counter) => ({ ...counter, category: "가문 값" })),
   ...scoreTrackCounters.map((counter) => ({ ...counter, category: "가문 값" })),
   ...resourceCounters.map((counter) => ({ ...counter, category: "왕국 자원", requiresAmount: false })),
-  { id: "stability", label: "안정도 트랙", max: 17, icon: "balance", tone: "stability", category: "왕국 상태", requiresAmount: false },
+  { id: "stability", label: "안정도 마커", max: 17, icon: "balance", tone: "stability", category: "왕국 상태", requiresAmount: false },
   { id: "momentum", label: "모멘텀", max: 9, icon: "turn", tone: "momentum", category: "왕국 상태", requiresAmount: false },
 ];
 

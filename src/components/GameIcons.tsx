@@ -13,6 +13,7 @@ import FactCheckOutlinedIcon from "@mui/icons-material/FactCheckOutlined";
 import FlagOutlinedIcon from "@mui/icons-material/FlagOutlined";
 import ForestOutlinedIcon from "@mui/icons-material/ForestOutlined";
 import FortOutlinedIcon from "@mui/icons-material/FortOutlined";
+import GavelOutlinedIcon from "@mui/icons-material/GavelOutlined";
 import GrassOutlinedIcon from "@mui/icons-material/GrassOutlined";
 import HelpOutlineOutlinedIcon from "@mui/icons-material/HelpOutlineOutlined";
 import HistoryOutlinedIcon from "@mui/icons-material/HistoryOutlined";
@@ -44,6 +45,11 @@ import VpnKeyOutlinedIcon from "@mui/icons-material/VpnKeyOutlined";
 import WarningAmberOutlinedIcon from "@mui/icons-material/WarningAmberOutlined";
 import WorkspacePremiumOutlinedIcon from "@mui/icons-material/WorkspacePremiumOutlined";
 import { specialAbilityIconUrls } from "../resources/gameResources";
+
+/** 리더 토큰 — 유니코드 주먹 (Raised Fist, U+270A) */
+const LEADER_FIST_EMOJI = "\u270A";
+
+const ModeratorTokenMuiIcon = GavelOutlinedIcon;
 
 export function AchievementEffectOptionIcon({ option }) {
   if (option.legendIcon) {
@@ -116,6 +122,14 @@ export function TokenIcon({ type }) {
     return <CrownIcon tone={type} />;
   }
 
+  if (type === "leader" || type === "fist") {
+    return (
+      <span className="token-icon-emoji" aria-hidden="true">
+        {LEADER_FIST_EMOJI}
+      </span>
+    );
+  }
+
   const Icon = {
     balance: BalanceOutlinedIcon,
     castle: CastleOutlinedIcon,
@@ -125,6 +139,7 @@ export function TokenIcon({ type }) {
     external: OpenInNewOutlinedIcon,
     flame: LocalFireDepartmentOutlinedIcon,
     gear: MenuOutlinedIcon,
+    hammer: ModeratorTokenMuiIcon,
     help: HelpOutlineOutlinedIcon,
     history: HistoryOutlinedIcon,
     house: HomeWorkOutlinedIcon,
@@ -133,6 +148,7 @@ export function TokenIcon({ type }) {
     knowledge: ArticleOutlinedIcon,
     menu: MenuOutlinedIcon,
     minus: RemoveOutlinedIcon,
+    moderator: ModeratorTokenMuiIcon,
     morale: FlagOutlinedIcon,
     plus: AddOutlinedIcon,
     photo: PhotoCameraOutlinedIcon,

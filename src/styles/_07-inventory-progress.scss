@@ -46,6 +46,7 @@
   grid-template-areas:
     "head actions"
     "resources resources"
+    "challenge challenge"
     "agenda agenda"
     "progress progress";
   align-content: start;
@@ -60,6 +61,7 @@
     "head actions"
     "resources resources"
     "house house"
+    "challenge challenge"
     "agenda agenda"
     "progress progress";
 }
@@ -784,6 +786,8 @@
   display: grid;
   gap: 6px;
   min-width: 0;
+  --inventory-title-font-size: 20px;
+  --inventory-title-line-height: 1.15;
 }
 
 .resource-section {
@@ -858,18 +862,20 @@
 }
 
 .house-detail-section .house-profile-heading {
-  align-items: center;
+  align-items: flex-start;
   gap: 8px;
   min-width: 0;
 }
 
 .house-detail-section .house-profile-heading h2 {
-  overflow: hidden;
+  min-width: 0;
+  flex: 1;
+  overflow: visible;
   margin-bottom: 0;
   font-size: 1.08rem;
-  line-height: 1.1;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  line-height: 1.25;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .house-detail-section .house-profile-number {
@@ -897,23 +903,49 @@
   grid-template-columns: 1fr;
 }
 
+.house-detail-section .house-profile-field {
+  justify-items: start;
+}
+
 .house-detail-section .house-profile-value-chip {
+  display: inline-grid;
+  justify-self: start;
+  box-sizing: border-box;
+  width: fit-content;
+  max-width: 100%;
+  min-width: 0;
   padding: 5px 7px;
 }
 
+.house-detail-section .house-profile-value-chip strong {
+  display: block;
+  overflow: visible;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.35;
+}
+
 .house-detail-section .house-alignment-panel {
-  align-self: start;
+  align-self: stretch;
+  width: 100%;
+  min-width: 0;
   align-content: start;
   margin-top: 8px;
 }
 
 .house-detail-section .house-alignment-track {
+  width: 100%;
+  min-width: 0;
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .house-detail-section .house-alignment-row {
   gap: 5px;
   padding: 5px 6px;
+}
+
+.house-detail-section .house-alignment-row .house-alignment-title {
+  white-space: nowrap;
 }
 
 .house-detail-section .house-alignment-reward-controls {
@@ -929,6 +961,21 @@
 .house-detail-section .alignment-reward-count {
   width: 32px;
   min-height: 22px;
+}
+
+.inventory-challenge-section {
+  grid-area: challenge;
+  min-width: 0;
+  min-height: 0;
+  color: var(--ink-strong);
+}
+
+.inventory-challenge-section .achievement-primary-panel {
+  min-height: 0;
+}
+
+.achievement-progress-panel.achievement-alignment-only {
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .inventory-agenda-section {
@@ -986,9 +1033,52 @@
   justify-content: space-between;
   gap: 8px;
   min-width: 0;
+  line-height: var(--inventory-title-line-height, 1.15);
 }
 
-.agenda-section-title>span:first-child,
+.agenda-section-title-lead {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex: 1 1 auto;
+  flex-wrap: nowrap;
+  overflow: hidden;
+}
+
+.agenda-section-title-actions {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: nowrap;
+  justify-content: flex-end;
+}
+
+.inventory-agenda-section .agenda-section-title .agenda-score-help-button {
+  box-sizing: border-box;
+  height: auto;
+  min-height: 26px;
+  max-height: none;
+  padding: 2px 8px;
+  gap: 5px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 5px;
+  font-size: 0.78rem;
+  font-weight: 950;
+  line-height: 1.1;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.inventory-agenda-section .agenda-section-title .agenda-score-help-button svg {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+
+.agenda-section-title-lead .agenda-section-title-main,
 .agenda-section-title-main {
   min-width: 0;
 }
@@ -1003,9 +1093,9 @@
   display: inline-flex;
   flex: 0 0 auto;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   color: var(--muted);
-  font-size: 0.66rem;
+  font-size: 0.78rem;
   font-weight: 900;
   line-height: 1;
 }
@@ -1080,11 +1170,60 @@
   margin-top: 8px;
 }
 
-.inventory-section h3 {
+.inventory-section .inventory-counter-group > h3,
+.inventory-section .house-detail-heading > h3,
+.inventory-section h3.agenda-section-title {
+  display: flex;
+  align-items: center;
   margin: 0;
+  box-sizing: border-box;
   color: var(--gold-2);
   font-family: Inter, ui-sans-serif, system-ui, sans-serif;
-  font-size: 0.86rem;
+  font-size: var(--inventory-title-font-size);
+  font-weight: 820;
+  line-height: var(--inventory-title-line-height);
+}
+
+.inventory-section h3.agenda-section-title {
+  justify-content: space-between;
+  gap: 6px;
+  flex-wrap: nowrap;
+  min-width: 0;
+}
+
+.inventory-section .achievement-section-heading {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 4px;
+  min-width: 0;
+  width: fit-content;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.inventory-section .achievement-section-heading h3 {
+  margin: 0;
+  flex: 0 0 auto;
+  color: var(--gold-2);
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+  font-size: var(--inventory-title-font-size);
+  font-weight: 820;
+  line-height: var(--inventory-title-line-height);
+  white-space: nowrap;
+}
+
+.inventory-section .achievement-section-heading .icon-help-button {
+  width: 26px;
+  min-width: 26px;
+  height: 26px;
+  min-height: 26px;
+  flex-shrink: 0;
+}
+
+.inventory-section .achievement-section-heading .icon-help-button svg {
+  width: 15px;
+  height: 15px;
 }
 
 .inventory-grid,
@@ -1860,7 +1999,7 @@ $score-ledger-group-padding: 4px;
 .achievement-track-list {
   display: grid;
   grid-template-columns: 1fr;
-  gap: 4px;
+  gap: 6px;
 }
 
 .achievement-progress-row {
