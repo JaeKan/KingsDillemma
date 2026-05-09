@@ -17,6 +17,7 @@ import {
   publishDilemmaRecord,
   redactState,
   registerSession,
+  resetDilemmaRecord,
   saveAlignmentOrder,
   saveDilemmaRecord,
   saveDilemmaRoles,
@@ -191,6 +192,12 @@ export async function handleAgendaRequest(
       return json({ ok: true, state: redactState(nextState, houseId) }, 200, NO_STORE_HEADERS);
     }
 
+    if (action === "resetDilemma") {
+      const nextState = resetDilemmaRecord(state, houseId);
+      await saveState(store, nextState);
+      return json({ ok: true, state: redactState(nextState, houseId) }, 200, NO_STORE_HEADERS);
+    }
+
     if (action === "deleteDilemmaHistory") {
       const nextState = deleteDilemmaHistoryEntry(state, houseId, body.historyId);
       await saveState(store, nextState);
@@ -266,6 +273,7 @@ function isKnownStateAction(action: string) {
     action === "cancelDilemmaEdit" ||
     action === "saveDilemma" ||
     action === "publishDilemma" ||
+    action === "resetDilemma" ||
     action === "deleteDilemmaHistory" ||
     action === "saveDilemmaVoteOrder" ||
     action === "saveDilemmaRoles" ||

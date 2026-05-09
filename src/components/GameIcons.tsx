@@ -1,14 +1,15 @@
 import AddOutlinedIcon from "@mui/icons-material/AddOutlined";
-import AgricultureOutlinedIcon from "@mui/icons-material/AgricultureOutlined";
 import AnchorOutlinedIcon from "@mui/icons-material/AnchorOutlined";
 import ArticleOutlinedIcon from "@mui/icons-material/ArticleOutlined";
 import AutorenewOutlinedIcon from "@mui/icons-material/AutorenewOutlined";
 import BalanceOutlinedIcon from "@mui/icons-material/BalanceOutlined";
+import BiotechOutlinedIcon from "@mui/icons-material/BiotechOutlined";
 import CastleOutlinedIcon from "@mui/icons-material/CastleOutlined";
-import CoronavirusOutlinedIcon from "@mui/icons-material/CoronavirusOutlined";
-import CrueltyFreeOutlinedIcon from "@mui/icons-material/CrueltyFreeOutlined";
+import CurrencyExchangeOutlinedIcon from "@mui/icons-material/CurrencyExchangeOutlined";
+import DangerousOutlinedIcon from "@mui/icons-material/DangerousOutlined";
 import DiamondOutlinedIcon from "@mui/icons-material/DiamondOutlined";
 import EditOutlinedIcon from "@mui/icons-material/EditOutlined";
+import FactCheckOutlinedIcon from "@mui/icons-material/FactCheckOutlined";
 import FlagOutlinedIcon from "@mui/icons-material/FlagOutlined";
 import ForestOutlinedIcon from "@mui/icons-material/ForestOutlined";
 import FortOutlinedIcon from "@mui/icons-material/FortOutlined";
@@ -23,14 +24,14 @@ import LogoutOutlinedIcon from "@mui/icons-material/LogoutOutlined";
 import MenuBookOutlinedIcon from "@mui/icons-material/MenuBookOutlined";
 import MilitaryTechOutlinedIcon from "@mui/icons-material/MilitaryTechOutlined";
 import PaidOutlinedIcon from "@mui/icons-material/PaidOutlined";
-import PetsOutlinedIcon from "@mui/icons-material/PetsOutlined";
 import PestControlRodentOutlinedIcon from "@mui/icons-material/PestControlRodentOutlined";
+import PetsOutlinedIcon from "@mui/icons-material/PetsOutlined";
 import PhotoCameraOutlinedIcon from "@mui/icons-material/PhotoCameraOutlined";
 import RemoveOutlinedIcon from "@mui/icons-material/RemoveOutlined";
 import DeleteOutlineOutlinedIcon from "@mui/icons-material/DeleteOutlineOutlined";
 import RestartAltOutlinedIcon from "@mui/icons-material/RestartAltOutlined";
+import RotateRightOutlinedIcon from "@mui/icons-material/RotateRightOutlined";
 import SailingOutlinedIcon from "@mui/icons-material/SailingOutlined";
-import ScienceOutlinedIcon from "@mui/icons-material/ScienceOutlined";
 import ShieldOutlinedIcon from "@mui/icons-material/ShieldOutlined";
 import SaveOutlinedIcon from "@mui/icons-material/SaveOutlined";
 import OpenInNewOutlinedIcon from "@mui/icons-material/OpenInNewOutlined";
@@ -117,6 +118,7 @@ export function TokenIcon({ type }) {
 
   const Icon = {
     balance: BalanceOutlinedIcon,
+    castle: CastleOutlinedIcon,
     coin: PaidOutlinedIcon,
     edit: EditOutlinedIcon,
     exit: LogoutOutlinedIcon,
@@ -136,12 +138,14 @@ export function TokenIcon({ type }) {
     photo: PhotoCameraOutlinedIcon,
     power: ShieldOutlinedIcon,
     reset: RestartAltOutlinedIcon,
+    rotateRight: RotateRightOutlinedIcon,
     save: SaveOutlinedIcon,
     scroll: ArticleOutlinedIcon,
     seal: WorkspacePremiumOutlinedIcon,
     sheet: TableChartOutlinedIcon,
     soundOff: VolumeOffOutlinedIcon,
     soundOn: VolumeUpOutlinedIcon,
+    status: FactCheckOutlinedIcon,
     tip: MenuBookOutlinedIcon,
     turn: AutorenewOutlinedIcon,
     trash: DeleteOutlineOutlinedIcon,
@@ -179,14 +183,14 @@ export function HouseIcon({ motif }) {
     keys: KeyOutlinedIcon,
     lobster: AnchorOutlinedIcon,
     porcupine: PestControlRodentOutlinedIcon,
-    rooster: AgricultureOutlinedIcon,
+    rooster: CurrencyExchangeOutlinedIcon,
     rose: LocalFloristOutlinedIcon,
     ship: SailingOutlinedIcon,
-    skull: CoronavirusOutlinedIcon,
-    snake: ScienceOutlinedIcon,
+    skull: DangerousOutlinedIcon,
+    snake: BiotechOutlinedIcon,
     sword: MilitaryTechOutlinedIcon,
     tree: ForestOutlinedIcon,
-    turtle: CrueltyFreeOutlinedIcon,
+    turtle: CastleOutlinedIcon,
   }[motif] || CastleOutlinedIcon;
 
   return <Icon aria-hidden="true" focusable="false" />;

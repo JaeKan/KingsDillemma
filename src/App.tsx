@@ -1,12 +1,12 @@
 ﻿import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { closestCenter, DndContext, DragOverlay, KeyboardSensor, PointerSensor, useDraggable, useSensor, useSensors } from "@dnd-kit/core";
-import { arrayMove, rectSortingStrategy, SortableContext, sortableKeyboardCoordinates, useSortable } from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
+import { DndContext, DragOverlay, PointerSensor, useDraggable, useSensor, useSensors } from "@dnd-kit/core";
+import { arrayMove } from "@dnd-kit/sortable";
 import { HOUSE_CATALOG, REQUIRED_HOUSE_COUNT } from "../shared/houses.mjs";
 import { agendaRequest, useAgendaMutations, useAgendaRefresh, useAgendaStateQuery } from "./app/agendaClient";
 import { Carrot as shakeCarrot } from "./Carrot";
 import { AchievementEffectOptionIcon, HouseIcon, SpecialAbilityLegendIcon, TokenIcon } from "./components/GameIcons";
+import { Tooltip } from "./components/Tooltip";
 import {
   achievementDetailTextMaxLength,
   achievementEffectAmountMax,
@@ -98,6 +98,87 @@ function readStoredBgmVolume() {
   }
 }
 
+function getPointerPoint(event) {
+  if (!event) {
+    return null;
+  }
+
+  if (typeof event.clientX === "number" && typeof event.clientY === "number") {
+    return { x: event.clientX, y: event.clientY };
+  }
+
+  const touch = event.touches?.[0] || event.changedTouches?.[0];
+
+  if (touch && typeof touch.clientX === "number" && typeof touch.clientY === "number") {
+    return { x: touch.clientX, y: touch.clientY };
+  }
+
+  return null;
+}
+
+function keepVoteOrderDragOverlayInsideRing({ activeNodeRect, activatorEvent, overlayNodeRect, transform }) {
+  if (!activeNodeRect || !overlayNodeRect) {
+    return transform;
+  }
+
+  const pointerPoint = getPointerPoint(activatorEvent);
+  let nextTransform = transform;
+
+  if (pointerPoint) {
+    nextTransform = {
+      ...transform,
+      x: transform.x + pointerPoint.x - activeNodeRect.left - overlayNodeRect.width / 2,
+      y: transform.y + pointerPoint.y - activeNodeRect.top - overlayNodeRect.height / 2,
+    };
+  }
+
+  if (typeof document === "undefined") {
+    return nextTransform;
+  }
+
+  const ringElement = document.querySelector(".vote-order-ring.is-dragging") || document.querySelector(".vote-order-dialog .vote-order-ring");
+  const ringRect = ringElement?.getBoundingClientRect();
+
+  if (!ringRect) {
+    return nextTransform;
+  }
+
+  const overlayRadius = Math.max(overlayNodeRect.width, overlayNodeRect.height) / 2;
+  const ringCenterX = ringRect.left + ringRect.width / 2;
+  const ringCenterY = ringRect.top + ringRect.height / 2;
+  const radiusX = Math.max(0, ringRect.width / 2 - overlayRadius - 1);
+  const radiusY = Math.max(0, ringRect.height / 2 - overlayRadius - 1);
+  const overlayCenterX = activeNodeRect.left + nextTransform.x + overlayNodeRect.width / 2;
+  const overlayCenterY = activeNodeRect.top + nextTransform.y + overlayNodeRect.height / 2;
+  const deltaX = overlayCenterX - ringCenterX;
+  const deltaY = overlayCenterY - ringCenterY;
+
+  if (!radiusX || !radiusY) {
+    return {
+      ...nextTransform,
+      x: nextTransform.x + ringCenterX - overlayCenterX,
+      y: nextTransform.y + ringCenterY - overlayCenterY,
+    };
+  }
+
+  const normalizedDistance = Math.hypot(deltaX / radiusX, deltaY / radiusY);
+
+  if (normalizedDistance <= 1) {
+    return nextTransform;
+  }
+
+  const clampedCenterX = ringCenterX + deltaX / normalizedDistance;
+  const clampedCenterY = ringCenterY + deltaY / normalizedDistance;
+
+  return {
+    ...nextTransform,
+    x: nextTransform.x + clampedCenterX - overlayCenterX,
+    y: nextTransform.y + clampedCenterY - overlayCenterY,
+  };
+}
+
+const voteOrderDragOverlayModifiers = [keepVoteOrderDragOverlayInsideRing];
+
 function writeStoredBgmMuted(muted) {
   if (typeof window === "undefined") {
     return;
@@ -136,6 +217,7 @@ function App() {
   const [finalScoring, setFinalScoring] = useState(null);
   const [finalScoringBusy, setFinalScoringBusy] = useState(false);
   const [scoreGuideOpen, setScoreGuideOpen] = useState(false);
+  const [openAgendaGuideOpen, setOpenAgendaGuideOpen] = useState(false);
   const [secretAgendaGuideOpen, setSecretAgendaGuideOpen] = useState(false);
   const [dilemmaHistoryOpen, setDilemmaHistoryOpen] = useState(false);
   const [voteOrderDialogOpen, setVoteOrderDialogOpen] = useState(false);
@@ -147,6 +229,7 @@ function App() {
   const tipsToggleRef = useRef(null);
   const dilemmaHistoryToggleRef = useRef(null);
   const voteOrderToggleRef = useRef(null);
+  const openAgendaGuideToggleRef = useRef(null);
   const secretAgendaGuideToggleRef = useRef(null);
   const finalBoardComplete = useMemo(() => isFinalBoardDraftComplete(finalBoardDraft), [finalBoardDraft]);
   const sessionEndChecklistComplete = useMemo(
@@ -441,12 +524,16 @@ function App() {
     setDilemmaHistoryOpen(false);
   }, []);
 
-  const handleOpenVoteOrderDialog = useCallback((event) => {
+  const handleOpenVoteOrderDialog = useCallback((eventOrOptions) => {
     setSettingsOpen(false);
     setTipsOpen(false);
-    if (event?.currentTarget) {
-      voteOrderToggleRef.current = event.currentTarget;
+
+    const restoreFocusTarget = eventOrOptions?.restoreFocusTarget || eventOrOptions?.currentTarget;
+
+    if (restoreFocusTarget) {
+      voteOrderToggleRef.current = restoreFocusTarget;
     }
+
     setVoteOrderDialogOpen(true);
   }, []);
 
@@ -478,6 +565,17 @@ function App() {
 
   const handleCloseScoreGuide = useCallback(() => {
     setScoreGuideOpen(false);
+  }, []);
+
+  const handleOpenOpenAgendaGuide = useCallback((event) => {
+    if (event?.currentTarget) {
+      openAgendaGuideToggleRef.current = event.currentTarget;
+    }
+    setOpenAgendaGuideOpen(true);
+  }, []);
+
+  const handleCloseOpenAgendaGuide = useCallback(() => {
+    setOpenAgendaGuideOpen(false);
   }, []);
 
   const handleOpenSecretAgendaGuide = useCallback((event) => {
@@ -628,6 +726,8 @@ function App() {
           state={state}
           busy={busy}
           mutate={mutate}
+          onOpenVoteOrderDialog={handleOpenVoteOrderDialog}
+          onOpenOpenAgendaGuide={handleOpenOpenAgendaGuide}
           onOpenSecretAgendaGuide={handleOpenSecretAgendaGuide}
         />
       )}
@@ -646,6 +746,11 @@ function App() {
         onToggle={handleToggleSessionEndCheck}
       />
       <ScoreGuideDialog open={scoreGuideOpen} onClose={handleCloseScoreGuide} restoreFocusRef={tipsToggleRef} />
+      <OpenAgendaScoreDialog
+        open={openAgendaGuideOpen}
+        onClose={handleCloseOpenAgendaGuide}
+        restoreFocusRef={openAgendaGuideToggleRef}
+      />
       <SecretAgendaScoreDialog
         open={secretAgendaGuideOpen}
         onClose={handleCloseSecretAgendaGuide}
@@ -971,13 +1076,9 @@ function FloatingSettings({
           </a>
           {authenticated ? (
             <>
-              <button
-                ref={voteOrderToggleRef}
-                className="ghost-button wide"
-                type="button"
-                onClick={onOpenVoteOrderDialog}
-                disabled={busy || !canEditVoteOrder}
-                title={
+              <Tooltip
+                className="settings-tooltip-anchor"
+                label={
                   voteOrderLocked
                     ? "현재 의제 선택 중에는 투표 순서를 바꿀 수 없습니다."
                     : canEditVoteOrder
@@ -985,28 +1086,40 @@ function FloatingSettings({
                       : "활성 가문 5명이 있어야 수정할 수 있습니다."
                 }
               >
-                <TokenIcon type="turn" />
-                투표 순서 설정
-              </button>
-              <button
-                className="ghost-button wide session-end-button"
-                type="button"
-                onClick={onEndSession}
-                disabled={busy || !canEndSession}
-                title={canEndSession ? "이번 세션을 종료하고 체크리스트를 엽니다." : sessionEndUnavailableMessage}
+                <button
+                  ref={voteOrderToggleRef}
+                  className="ghost-button wide"
+                  type="button"
+                  onClick={onOpenVoteOrderDialog}
+                  disabled={busy || !canEditVoteOrder}
+                >
+                  <TokenIcon type="turn" />
+                  투표 순서 설정
+                </button>
+              </Tooltip>
+              <Tooltip
+                className="settings-tooltip-anchor"
+                label={canEndSession ? "이번 세션을 종료하고 체크리스트를 엽니다." : sessionEndUnavailableMessage}
               >
-                <TokenIcon type="seal" />
-                세션 종료 준비
-              </button>
+                <button
+                  className="ghost-button wide session-end-button"
+                  type="button"
+                  onClick={onEndSession}
+                  disabled={busy || !canEndSession}
+                >
+                  <TokenIcon type="seal" />
+                  세션 종료 준비
+                </button>
+              </Tooltip>
               <button className="ghost-button wide" type="button" onClick={onLogout} disabled={busy}>
                 <TokenIcon type="exit" />
-                가문 나가기
+                의회 퇴장
               </button>
             </>
           ) : null}
           <button className="ghost-button wide" type="button" onClick={onReset} disabled={busy}>
             <TokenIcon type="reset" />
-            전체 초기화
+            왕국 초기화
           </button>
         </div>
       ) : null}
@@ -1029,29 +1142,63 @@ function VoteOrderDialog({ busy, open, state, onClose, onSave, restoreFocusRef }
   const closeTimerRef = useRef(null);
   const ringRef = useRef(null);
   const dragStartOrderRef = useRef([]);
+  const dragPointerOffsetRef = useRef({ x: 0, y: 0 });
+  const lastDragTargetIndexRef = useRef(-1);
   const houses = useMemo(() => getVoteOrderHouses(state), [state]);
   const initialOrder = useMemo(() => {
     return houses.map((house) => house.id);
   }, [houses]);
   const [draftOrder, setDraftOrder] = useState(initialOrder);
   const [activeDragId, setActiveDragId] = useState("");
+  const [dragTargetIndex, setDragTargetIndex] = useState(-1);
   const [saveStatus, setSaveStatus] = useState("");
+  const [dragAnnouncement, setDragAnnouncement] = useState("");
   const locked = Boolean(state && isVoteOrderSettingLocked(state));
   const canSave = !busy && !locked && draftOrder.length > 0;
   const houseById = useMemo(() => new Map(houses.map((house) => [house.id, house])), [houses]);
   const activeDragHouse = activeDragId ? houseById.get(activeDragId) : null;
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
-    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
-  );
+  const renderedOrder = useMemo(() => {
+    if (!activeDragId || dragTargetIndex < 0) {
+      return draftOrder;
+    }
+
+    const baseOrder = dragStartOrderRef.current.length ? dragStartOrderRef.current : draftOrder;
+    const oldIndex = baseOrder.indexOf(activeDragId);
+
+    if (oldIndex < 0 || oldIndex === dragTargetIndex) {
+      return baseOrder;
+    }
+
+    return arrayMove(baseOrder, oldIndex, dragTargetIndex);
+  }, [activeDragId, draftOrder, dragTargetIndex]);
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
 
   useEffect(() => {
     if (open) {
       setDraftOrder(initialOrder);
       setActiveDragId("");
+      setDragTargetIndex(-1);
       setSaveStatus("");
+      setDragAnnouncement("");
+      dragStartOrderRef.current = [];
+      dragPointerOffsetRef.current = { x: 0, y: 0 };
+      lastDragTargetIndexRef.current = -1;
     }
   }, [initialOrder, open]);
+
+  useEffect(() => {
+    const draggingClassName = "vote-order-dragging";
+
+    if (open && activeDragId) {
+      document.body.classList.add(draggingClassName);
+    } else {
+      document.body.classList.remove(draggingClassName);
+    }
+
+    return () => {
+      document.body.classList.remove(draggingClassName);
+    };
+  }, [activeDragId, open]);
 
   useEffect(() => {
     if (!open) {
@@ -1121,43 +1268,110 @@ function VoteOrderDialog({ busy, open, state, onClose, onSave, restoreFocusRef }
 
       const centerX = ringRect.left + ringRect.width / 2;
       const centerY = ringRect.top + ringRect.height / 2;
-      const angle = (Math.atan2(y - centerY, x - centerX) * 180) / Math.PI;
+      const deltaX = x - centerX;
+      const deltaY = y - centerY;
+
+      const angle = (Math.atan2(deltaY, deltaX) * 180) / Math.PI;
       const normalized = (angle + 90 + 360) % 360;
       const segment = 360 / draftOrder.length;
 
-      return Math.max(0, Math.min(draftOrder.length - 1, Math.round(normalized / segment) % draftOrder.length));
+      return Math.floor((normalized + segment / 2) / segment) % draftOrder.length;
     },
     [draftOrder.length],
   );
 
-  const moveActiveSeatToPoint = useCallback(
-    (activeId, x, y) => {
-      const targetIndex = getVoteOrderIndexFromPoint(x, y);
-
-      if (targetIndex < 0) {
+  const moveSeatToIndex = useCallback(
+    (seatId, targetIndex) => {
+      if (locked) {
         return;
       }
 
-      setDraftOrder((current) => {
-        const oldIndex = current.indexOf(activeId);
+      const oldIndex = draftOrder.indexOf(seatId);
+      const nextIndex = Math.max(0, Math.min(draftOrder.length - 1, targetIndex));
 
-        if (oldIndex < 0 || oldIndex === targetIndex) {
-          return current;
-        }
+      if (oldIndex < 0 || oldIndex === nextIndex) {
+        return;
+      }
 
-        return arrayMove(current, oldIndex, targetIndex);
-      });
+      setDraftOrder(arrayMove(draftOrder, oldIndex, nextIndex));
+      setDragAnnouncement(`${getHouseHoverLabel(houseById.get(seatId))} ${nextIndex + 1}번째 위치로 이동했습니다.`);
     },
-    [getVoteOrderIndexFromPoint],
+    [draftOrder, houseById, locked],
   );
+
+  const moveSeatByStep = useCallback(
+    (seatId, step) => {
+      const oldIndex = draftOrder.indexOf(seatId);
+
+      if (locked || oldIndex < 0 || draftOrder.length < 2) {
+        return;
+      }
+
+      const nextIndex = (oldIndex + step + draftOrder.length) % draftOrder.length;
+
+      if (oldIndex === nextIndex) {
+        return;
+      }
+
+      setDraftOrder(arrayMove(draftOrder, oldIndex, nextIndex));
+      setDragAnnouncement(`${getHouseHoverLabel(houseById.get(seatId))} ${nextIndex + 1}번째 위치로 이동했습니다.`);
+    },
+    [draftOrder, houseById, locked],
+  );
+
+  const getActivatorPoint = (event) => getPointerPoint(event?.activatorEvent);
+
+  const getCurrentDragPoint = (event) => {
+    const initialRect = event.active?.rect?.current?.initial;
+
+    if (!initialRect) {
+      return null;
+    }
+
+    const offset = dragPointerOffsetRef.current;
+    const delta = event.delta || { x: 0, y: 0 };
+
+    return {
+      x: initialRect.left + initialRect.width / 2 + delta.x + offset.x,
+      y: initialRect.top + initialRect.height / 2 + delta.y + offset.y,
+    };
+  };
+
+  const getDragTargetIndex = (event) => {
+    const dragPoint = getCurrentDragPoint(event);
+
+    if (!dragPoint) {
+      return -1;
+    }
+
+    return getVoteOrderIndexFromPoint(dragPoint.x, dragPoint.y);
+  };
 
   const handleDragStart = (event) => {
     if (locked) {
       return;
     }
 
+    const activeId = String(event.active.id);
+    const initialRect = event.active?.rect?.current?.initial;
+    const activatorPoint = getActivatorPoint(event);
+
+    if (initialRect && activatorPoint) {
+      dragPointerOffsetRef.current = {
+        x: activatorPoint.x - (initialRect.left + initialRect.width / 2),
+        y: activatorPoint.y - (initialRect.top + initialRect.height / 2),
+      };
+    } else {
+      dragPointerOffsetRef.current = { x: 0, y: 0 };
+    }
+
+    const startIndex = draftOrder.indexOf(activeId);
+
     dragStartOrderRef.current = draftOrder;
-    setActiveDragId(String(event.active.id));
+    lastDragTargetIndexRef.current = startIndex;
+    setDragTargetIndex(startIndex);
+    setActiveDragId(activeId);
+    setDragAnnouncement(`${getHouseHoverLabel(houseById.get(activeId))} 좌석을 이동합니다.`);
   };
 
   const handleDragMove = (event) => {
@@ -1165,21 +1379,37 @@ function VoteOrderDialog({ busy, open, state, onClose, onSave, restoreFocusRef }
       return;
     }
 
-    const initialRect = event.active.rect.current.initial;
+    const targetIndex = getDragTargetIndex(event);
 
-    if (!initialRect) {
+    if (targetIndex < 0) {
       return;
     }
 
-    moveActiveSeatToPoint(
-      String(event.active.id),
-      initialRect.left + initialRect.width / 2 + event.delta.x,
-      initialRect.top + initialRect.height / 2 + event.delta.y,
-    );
+    setDragTargetIndex(targetIndex);
+
+    if (targetIndex === lastDragTargetIndexRef.current) {
+      return;
+    }
+
+    lastDragTargetIndexRef.current = targetIndex;
+    setDragAnnouncement(`${getHouseHoverLabel(houseById.get(String(event.active.id)))} ${targetIndex + 1}번째 위치에 놓을 수 있습니다.`);
   };
 
-  const handleDragEnd = () => {
+  const handleDragEnd = (event) => {
+    const activeId = event.active?.id ? String(event.active.id) : "";
+    const targetIndex = getDragTargetIndex(event);
+    const baseOrder = dragStartOrderRef.current.length ? dragStartOrderRef.current : draftOrder;
+    const oldIndex = baseOrder.indexOf(activeId);
+
+    if (!locked && activeId && targetIndex >= 0 && oldIndex >= 0 && oldIndex !== targetIndex) {
+      setDraftOrder(arrayMove(baseOrder, oldIndex, targetIndex));
+      setDragAnnouncement(`${getHouseHoverLabel(houseById.get(activeId))} ${targetIndex + 1}번째 위치로 이동했습니다.`);
+    }
+
     dragStartOrderRef.current = [];
+    dragPointerOffsetRef.current = { x: 0, y: 0 };
+    lastDragTargetIndexRef.current = -1;
+    setDragTargetIndex(-1);
     setActiveDragId("");
   };
 
@@ -1189,6 +1419,10 @@ function VoteOrderDialog({ busy, open, state, onClose, onSave, restoreFocusRef }
     }
 
     dragStartOrderRef.current = [];
+    dragPointerOffsetRef.current = { x: 0, y: 0 };
+    lastDragTargetIndexRef.current = -1;
+    setDragTargetIndex(-1);
+    setDragAnnouncement("순서 변경을 취소했습니다.");
     setActiveDragId("");
   };
 
@@ -1221,7 +1455,7 @@ function VoteOrderDialog({ busy, open, state, onClose, onSave, restoreFocusRef }
     <div className="session-end-overlay" role="presentation">
       <section
         ref={dialogRef}
-        className="vote-order-dialog"
+        className={`vote-order-dialog${activeDragId ? " is-dragging-vote-order" : ""}`}
         aria-labelledby="vote-order-title"
         aria-modal="true"
         role="dialog"
@@ -1256,33 +1490,52 @@ function VoteOrderDialog({ busy, open, state, onClose, onSave, restoreFocusRef }
               onDragMove={handleDragMove}
               onDragStart={handleDragStart}
             >
+              <p className="vote-order-assistive" id="vote-order-keyboard-help">
+                좌석을 드래그하거나 좌석에 초점을 둔 뒤 방향키로 한 칸씩 이동합니다. Home은 첫 번째 위치, End는 마지막
+                위치로 이동합니다.
+              </p>
+              <ol className="vote-order-assistive" id="vote-order-summary" aria-label="현재 투표 순서">
+                {renderedOrder.map((houseId, index) => (
+                  <li key={houseId}>
+                    {index + 1}번째 {getHouseHoverLabel(houseById.get(houseId))}
+                  </li>
+                ))}
+              </ol>
+              <p className="vote-order-assistive" role="status" aria-live="polite" aria-atomic="true">
+                {dragAnnouncement}
+              </p>
               <div
                 className={`vote-order-ring${activeDragId ? " is-dragging" : ""}`}
                 aria-label="시계방향 투표 순서"
+                aria-describedby="vote-order-keyboard-help vote-order-summary"
                 ref={ringRef}
+                role="group"
                 style={{ "--seat-count": draftOrder.length }}
               >
                 <span className="vote-order-ring-center" aria-hidden="true">
-                  <TokenIcon type="turn" />
-                  <span>시계방향</span>
+                  <TokenIcon type="rotateRight" />
                 </span>
-                {draftOrder.map((houseId, index) => (
+                {renderedOrder.map((houseId, index) => (
                   <DraggableVoteOrderSeat
                     active={activeDragId === houseId}
                     disabled={busy || locked}
                     house={houseById.get(houseId)}
                     id={houseId}
                     index={index}
-                    total={draftOrder.length}
+                    previewTarget={activeDragId === houseId && dragTargetIndex === index}
+                    total={renderedOrder.length}
+                    instructionsId="vote-order-keyboard-help"
+                    onKeyboardMove={moveSeatByStep}
+                    onKeyboardMoveTo={moveSeatToIndex}
                     key={houseId}
                   />
                 ))}
               </div>
-              <DragOverlay dropAnimation={{ duration: 220, easing: "cubic-bezier(0.22, 1, 0.36, 1)" }}>
+              <DragOverlay dropAnimation={null} modifiers={voteOrderDragOverlayModifiers}>
                 {activeDragHouse ? (
                   <VoteOrderDragPreview
                     house={activeDragHouse}
-                    index={Math.max(0, draftOrder.indexOf(activeDragId))}
+                    index={Math.max(0, renderedOrder.indexOf(activeDragId))}
                   />
                 ) : null}
               </DragOverlay>
@@ -1290,25 +1543,8 @@ function VoteOrderDialog({ busy, open, state, onClose, onSave, restoreFocusRef }
           ) : (
             <p className="vote-order-warning">로그인 중인 가문이 있을 때 순서를 설정할 수 있습니다.</p>
           )}
-          {draftOrder.length > 0 ? (
-            <ol className="vote-order-readout" aria-label="저장할 투표 순서">
-              {draftOrder.map((houseId, index) => {
-                const house = houseById.get(houseId);
-                return (
-                  <li key={houseId}>
-                    <HouseCrestBadge
-                      house={house}
-                      className="vote-order-readout-crest"
-                      ariaLabel={`${index + 1}번째 ${getHouseHoverLabel(house)}`}
-                    />
-                    <strong>{getHouseKoreanName(house)}</strong>
-                  </li>
-                );
-              })}
-            </ol>
-          ) : null}
           {saveStatus ? <p className="vote-order-status" role="status">{saveStatus}</p> : null}
-          <div className="session-end-actions">
+          <div className="session-end-actions vote-order-actions">
             <button className="ghost-button" type="button" onClick={onClose} disabled={busy}>
               닫기
             </button>
@@ -1327,27 +1563,32 @@ function getVoteOrderSeatTransform(angle) {
   return `translate(-50%, -50%) rotate(${angle}deg) translate(var(--seat-radius)) rotate(${-angle}deg)`;
 }
 
-function VoteOrderSeatContents({ house, index }) {
-  const houseName = getHouseKoreanName(house);
-  const displayName = house?.hasCustomName && house.name ? house.name : houseName;
-
+function VoteOrderSeatContents({ house, index, disableTooltip = false }) {
   return (
-    <>
-      <HouseCrestBadge
-        house={house}
-        className="vote-order-rank"
-        ariaLabel={`${index + 1}번째 ${getHouseHoverLabel(house)}`}
-      />
-      <span className="vote-order-house">
-        <strong>{displayName}</strong>
-        <small>{houseName}</small>
-      </span>
-    </>
+    <HouseCrestBadge
+      house={house}
+      className="vote-order-rank"
+      tooltipLabel={`${index + 1}번째 ${getHouseHoverLabel(house)}`}
+      ariaLabel={`${index + 1}번째 ${getHouseHoverLabel(house)}`}
+      disableTooltip={disableTooltip}
+    />
   );
 }
 
-function DraggableVoteOrderSeat({ active, disabled, house, id, index, total }) {
+function DraggableVoteOrderSeat({
+  active,
+  disabled,
+  house,
+  id,
+  index,
+  previewTarget,
+  total,
+  instructionsId,
+  onKeyboardMove,
+  onKeyboardMoveTo,
+}) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id, disabled });
+  const { onKeyDown: handleDraggableKeyDown, ...dragListeners } = listeners || {};
   const angle = total > 0 ? -90 + (360 / total) * index : -90;
   const displayName = getHouseHoverLabel(house);
   const style = {
@@ -1356,18 +1597,50 @@ function DraggableVoteOrderSeat({ active, disabled, house, id, index, total }) {
     transform: getVoteOrderSeatTransform(angle),
   };
 
+  const handleKeyDown = (event) => {
+    if (!disabled) {
+      if (event.key === "ArrowLeft" || event.key === "ArrowUp") {
+        event.preventDefault();
+        onKeyboardMove?.(id, -1);
+        return;
+      }
+
+      if (event.key === "ArrowRight" || event.key === "ArrowDown") {
+        event.preventDefault();
+        onKeyboardMove?.(id, 1);
+        return;
+      }
+
+      if (event.key === "Home") {
+        event.preventDefault();
+        onKeyboardMoveTo?.(id, 0);
+        return;
+      }
+
+      if (event.key === "End") {
+        event.preventDefault();
+        onKeyboardMoveTo?.(id, total - 1);
+        return;
+      }
+    }
+
+    handleDraggableKeyDown?.(event);
+  };
+
   return (
     <button
       ref={setNodeRef}
-      className={`vote-order-seat${active || isDragging ? " dragging" : ""}${active ? " placeholder" : ""}${disabled ? " disabled" : ""}`}
+      className={`vote-order-seat${active || isDragging ? " placeholder" : ""}${previewTarget ? " drop-target" : ""}${disabled ? " disabled" : ""}`}
       style={style}
       type="button"
       disabled={disabled}
       aria-label={`${index + 1}번째 ${displayName} 시계방향 순서 이동`}
+      aria-describedby={instructionsId}
       {...attributes}
-      {...listeners}
+      {...dragListeners}
+      onKeyDown={handleKeyDown}
     >
-      <VoteOrderSeatContents house={house} index={index} />
+      <VoteOrderSeatContents house={house} index={index} disableTooltip={active || isDragging} />
     </button>
   );
 }
@@ -1375,7 +1648,127 @@ function DraggableVoteOrderSeat({ active, disabled, house, id, index, total }) {
 function VoteOrderDragPreview({ house, index }) {
   return (
     <div className="vote-order-seat vote-order-seat-preview">
-      <VoteOrderSeatContents house={house} index={index} />
+      <VoteOrderSeatContents house={house} index={index} disableTooltip />
+    </div>
+  );
+}
+
+function OpenAgendaScoreDialog({ open, onClose, restoreFocusRef }) {
+  const dialogRef = useRef(null);
+  const closeButtonRef = useRef(null);
+
+  useEffect(() => {
+    if (!open) {
+      return undefined;
+    }
+
+    const focusCloseButton = window.setTimeout(() => {
+      closeButtonRef.current?.focus();
+    }, 0);
+
+    const handleKeyDown = (event) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        onClose();
+        return;
+      }
+
+      if (event.key !== "Tab" || !dialogRef.current) {
+        return;
+      }
+
+      const focusable = Array.from(
+        dialogRef.current.querySelectorAll(
+          'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        ),
+      ).filter((element) => element instanceof HTMLElement && element.getClientRects().length > 0);
+
+      if (!focusable.length) {
+        event.preventDefault();
+        return;
+      }
+
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+
+    document.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      window.clearTimeout(focusCloseButton);
+      document.removeEventListener("keydown", handleKeyDown);
+      window.setTimeout(() => {
+        restoreFocusRef?.current?.focus();
+      }, 0);
+    };
+  }, [onClose, open, restoreFocusRef]);
+
+  if (!open) {
+    return null;
+  }
+
+  return (
+    <div className="session-end-overlay" role="presentation">
+      <section
+        ref={dialogRef}
+        className="score-guide-dialog open-agenda-guide-dialog"
+        aria-labelledby="open-agenda-guide-title"
+        aria-describedby="open-agenda-guide-copy"
+        aria-modal="true"
+        role="dialog"
+      >
+        <div className="session-end-heading">
+          <span className="session-end-seal" aria-hidden="true">
+            <TokenIcon type="scroll" />
+          </span>
+          <div>
+            <p className="section-label">점수 안내</p>
+            <h2 id="open-agenda-guide-title">공개 의제 토큰 점수</h2>
+          </div>
+        </div>
+        <p className="score-guide-copy" id="open-agenda-guide-copy">
+          공개 의제 토큰은 크로니클 스티커로 배정되는 공개 목표입니다. 게임 종료 시 해당 자원 마커의 최종 순위에 따라
+          긍정 토큰은 보너스, 부정 토큰은 감점을 줍니다.
+        </p>
+        <div className="score-guide-formula" aria-label="공개 의제 점수 공식">
+          <span className="score-guide-formula-item">긍정: 1위 +3 / 2위 +1</span>
+          <span className="score-guide-formula-operator">·</span>
+          <span className="score-guide-formula-item">부정: 최하위 -3 / 뒤에서 2위 -1</span>
+        </div>
+        <div className="score-guide-sections">
+          <section className="score-guide-section">
+            <h3>1. 토큰 배정</h3>
+            <ul>
+              <li>각 자원마다 가장 최근의 긍정 크로니클 스티커 서명자가 해당 긍정 공개 의제 토큰을 받습니다.</li>
+              <li>각 자원마다 가장 최근의 부정 크로니클 스티커 서명자가 해당 부정 공개 의제 토큰을 받습니다.</li>
+              <li>현재 게임에 참여하지 않는 가문의 서명은 배정할 때 무시합니다.</li>
+              <li>한 가문은 한 게임에서 긍정 최대 2개, 부정 최대 2개만 보유합니다. 초과분은 선택해서 버립니다.</li>
+            </ul>
+          </section>
+          <section className="score-guide-section">
+            <h3>2. 종료 시 점수</h3>
+            <ul>
+              <li>긍정 공개 의제는 해당 자원이 가장 높으면 +3, 두 번째로 높으면 +1입니다.</li>
+              <li>부정 공개 의제는 해당 자원이 가장 낮으면 -3, 두 번째로 낮으면 -1입니다.</li>
+              <li>동률이면 동률인 모든 자원이 같은 보너스 또는 패널티를 적용합니다.</li>
+              <li>같은 자원이 위에서 두 번째이면서 아래에서 두 번째일 수도 있으므로, 긍정/부정 토큰은 각각 따로 계산합니다.</li>
+            </ul>
+          </section>
+        </div>
+        <div className="score-guide-actions">
+          <button ref={closeButtonRef} className="primary-button" type="button" onClick={onClose}>
+            확인
+          </button>
+        </div>
+      </section>
     </div>
   );
 }
@@ -1457,7 +1850,7 @@ function SecretAgendaScoreDialog({ open, onClose, restoreFocusRef }) {
             <TokenIcon type="scroll" />
           </span>
           <div>
-            <p className="section-label">룰북 p.30</p>
+            <p className="section-label">점수 안내</p>
             <h2 id="secret-agenda-guide-title">비밀 의제 점수</h2>
           </div>
         </div>
@@ -1494,7 +1887,7 @@ function SecretAgendaScoreDialog({ open, onClose, restoreFocusRef }) {
             <ul>
               <li>코인 수가 같으면 동률인 모든 가문이 같은 순위를 공유합니다.</li>
               <li>동률인 가문들은 각자 자기 비밀 의제 카드의 해당 순위 점수를 받습니다.</li>
-              <li>자원 위치 동률은 룰북의 일반 동률 규칙처럼 묶인 자원이 같은 위치를 공유합니다.</li>
+              <li>자원 위치 동률은 묶인 자원이 같은 위치를 공유합니다.</li>
             </ul>
           </section>
         </div>
@@ -1774,7 +2167,7 @@ function ScoreGuideDialog({ open, onClose, restoreFocusRef }) {
             <TokenIcon type="balance" />
           </span>
           <div>
-            <p className="section-label">룰북 기준</p>
+            <p className="section-label">점수 안내</p>
             <h2 id="score-guide-title">점수 산정 방식</h2>
           </div>
         </div>
@@ -1824,7 +2217,7 @@ function ScoreGuideDialog({ open, onClose, restoreFocusRef }) {
           <section className="score-guide-section">
             <h3>4. 명망/갈망 기록</h3>
             <p>
-              이 앱은 득점 합계와 순위까지만 자동 계산합니다. 명망/갈망은 득점 순위와 종료 조건을 아래 룰북 표에 대입해
+              이 앱은 득점 합계와 순위까지만 자동 계산합니다. 명망/갈망은 득점 순위와 종료 조건을 아래 표에 대입해
               각 가문 값에 직접 반영합니다.
             </p>
             <div className="score-guide-table-wrap">
@@ -2210,7 +2603,7 @@ function getHouseTone(house, selectionClosed = false) {
   return "idle";
 }
 
-function GamePanel({ state, busy, mutate, onOpenSecretAgendaGuide }) {
+function GamePanel({ state, busy, mutate, onOpenVoteOrderDialog, onOpenOpenAgendaGuide, onOpenSecretAgendaGuide }) {
   const currentHouseName = getHouseDisplayName(state, state.currentHouseId);
   const voteOrderHouses = getDilemmaVoteParticipants(state);
   const currentVoteName = state.dilemmaVoteTurn ? getHouseDisplayName(state, state.dilemmaVoteTurn) : "";
@@ -2233,75 +2626,81 @@ function GamePanel({ state, busy, mutate, onOpenSecretAgendaGuide }) {
     (agendaId, reward) => mutate({ action: "saveAlignmentReward", agendaId, reward }),
     [mutate],
   );
-  const handleSaveAlignmentOrder = useCallback(
-    (alignmentOrder) => mutate({ action: "saveAlignmentOrder", alignmentOrder }),
-    [mutate],
-  );
 
   return (
     <section className="council-layout">
-      <aside className="council-sidebar" aria-live="polite">
-        <section className={`dilemma-stage phase-${state.phase}`} aria-labelledby="stage-title">
-          <div className="stage-copy">
-            <p className="section-label">의회 절차</p>
-            <h2 id="stage-title">{councilProcedureTitle}</h2>
-            <GameMessage state={state} />
-            {isWaitingForDraft(state) ? <CarrotWaitAction /> : null}
-            {state.phase === "complete" && !isDilemmaBlank(state.dilemma) ? (
-              <DilemmaVotingPanel state={state} busy={busy} mutate={mutate} />
-            ) : null}
-          </div>
-          <div className="stage-tableau" aria-hidden="true">
-            <div className="balance-rail">
-              <span />
-              <span />
-              <span />
+      <div className="council-sidebar-column">
+        <aside className="council-sidebar" aria-live="polite">
+          <section className="sidebar-status-section" aria-labelledby="sidebar-status-title">
+            <div className="sidebar-title-row compact">
+              <span className="sidebar-title-icon" aria-hidden="true">
+                <TokenIcon type="status" />
+              </span>
+              <h2 id="sidebar-status-title">현황</h2>
             </div>
-            <div className="tableau-token coin-token">
-              <TokenIcon type="coin" />
+            <section className={`dilemma-stage phase-${state.phase}`} aria-labelledby="stage-title">
+              <div className="stage-copy">
+                <p className="section-label">의회 절차</p>
+                <h2 id="stage-title">{councilProcedureTitle}</h2>
+                <GameMessage state={state} />
+                {state.phase === "complete" && !isDilemmaBlank(state.dilemma) ? (
+                  <DilemmaVotingPanel state={state} busy={busy} mutate={mutate} />
+                ) : null}
+              </div>
+              <div className="stage-tableau" aria-hidden="true">
+                <div className="balance-rail">
+                  <span />
+                  <span />
+                  <span />
+                </div>
+                <div className="tableau-token coin-token">
+                  <TokenIcon type="coin" />
+                </div>
+                <div className="tableau-token power-token">
+                  <TokenIcon type="power" />
+                </div>
+                <div className="tableau-token seal-token">
+                  <TokenIcon type="seal" />
+                </div>
+              </div>
+            </section>
+            <div className="status-stack">
+              <StatusItem icon="house" label="내 가문" value={currentHouseChosenName || "-"} />
+              <StatusItem
+                icon="turn"
+                label={state.phase === "complete" ? "투표 차례" : "차례"}
+                value={state.phase === "complete" ? currentVoteName || "대기" : draftTurnName}
+                splitParenthetical
+              />
+              <StatusItem icon="scroll" label="현재 단계" value={councilStageLabel} />
+              {state.phase === "complete" ? (
+                <>
+                  <StatusItem icon="crown" label="리더" value={leaderName || "미지정"} splitParenthetical />
+                  <StatusItem icon="balance" label="중재자" value={moderatorName || "미지정"} splitParenthetical />
+                  <StatusItem icon="seal" label="딜레마" value={dilemmaProgressLabel} />
+                </>
+              ) : (
+                <StatusItem
+                  icon="seal"
+                  label={state.phase === "house-select" ? "가문 선택" : "의제 선택"}
+                  value={
+                    state.phase === "house-select"
+                      ? `${state.claimedHouseCount} / ${state.requiredHouseCount}`
+                      : `${state.selectedCount} / ${state.draftOrder.length || REQUIRED_HOUSE_COUNT}`
+                  }
+                />
+              )}
             </div>
-            <div className="tableau-token power-token">
-              <TokenIcon type="power" />
-            </div>
-            <div className="tableau-token seal-token">
-              <TokenIcon type="seal" />
-            </div>
-          </div>
-        </section>
-        <div className="status-stack">
-          <StatusItem icon="house" label="내 가문" value={currentHouseChosenName || "-"} />
-          <StatusItem
-            icon="turn"
-            label={state.phase === "complete" ? "투표 차례" : "차례"}
-            value={state.phase === "complete" ? currentVoteName || "대기" : draftTurnName}
-            splitParenthetical
-          />
-          <StatusItem icon="scroll" label="현재 단계" value={councilStageLabel} />
-          {state.phase === "complete" ? (
-            <>
-              <StatusItem icon="crown" label="리더" value={leaderName || "미지정"} splitParenthetical />
-              <StatusItem icon="balance" label="중재자" value={moderatorName || "미지정"} splitParenthetical />
-              <StatusItem icon="seal" label="딜레마" value={dilemmaProgressLabel} />
-            </>
-          ) : (
-            <StatusItem
-              icon="seal"
-              label={state.phase === "house-select" ? "가문 선택" : "의제 선택"}
-              value={
-                state.phase === "house-select"
-                  ? `${state.claimedHouseCount} / ${state.requiredHouseCount}`
-                  : `${state.selectedCount} / ${state.draftOrder.length || REQUIRED_HOUSE_COUNT}`
-              }
-            />
-          )}
-        </div>
-        {state.phase === "complete" ? (
-          <VoteOrderTrack houses={voteOrderHouses} leaderHouseId={state.dilemmaLeader} moderatorHouseId={state.dilemmaModerator} turn={state.dilemmaVoteTurn} />
-        ) : (
-          <TurnTrack houses={state.houses} draftOrder={state.draftOrder} turn={state.turn} phase={state.phase} />
-        )}
-        <p className="privacy-note">비밀 의제는 자기 차례가 오기 전까지 보이지 않습니다.</p>
-      </aside>
+            {state.phase === "complete" ? (
+              <VoteOrderTrack houses={voteOrderHouses} leaderHouseId={state.dilemmaLeader} moderatorHouseId={state.dilemmaModerator} turn={state.dilemmaVoteTurn} />
+            ) : (
+              <TurnTrack houses={state.houses} draftOrder={state.draftOrder} turn={state.turn} phase={state.phase} />
+            )}
+            <p className="privacy-note">비밀 의제는 자기 차례가 오기 전까지 보이지 않습니다.</p>
+          </section>
+        </aside>
+        <CarrotWaitAction />
+      </div>
 
       <section
         className={`council-main${showAgendaList ? " has-agenda" : ""}${
@@ -2335,7 +2734,8 @@ function GamePanel({ state, busy, mutate, onOpenSecretAgendaGuide }) {
           busy={busy}
           mutate={mutate}
           onSaveAlignmentReward={handleSaveAlignmentReward}
-          onSaveAlignmentOrder={handleSaveAlignmentOrder}
+          onOpenVoteOrderDialog={onOpenVoteOrderDialog}
+          onOpenOpenAgendaGuide={onOpenOpenAgendaGuide}
           onOpenSecretAgendaGuide={onOpenSecretAgendaGuide}
         />
       </section>
@@ -2524,7 +2924,6 @@ function HouseProfileCard({
   showCrest = true,
   showSectionLabel = true,
   onSaveAlignmentReward,
-  onSaveAlignmentOrder,
 }) {
   const normalizedProgress = useMemo(() => normalizeHouseProgress(progress), [progress]);
 
@@ -2533,7 +2932,7 @@ function HouseProfileCard({
   }
 
   return (
-    <section className={`house-profile-card${showCrest ? "" : " no-crest"}`} aria-labelledby="house-profile-title">
+    <div className={`house-profile-card${showCrest ? "" : " no-crest"}`} aria-labelledby="house-profile-title">
       {showCrest ? (
         <div className="house-profile-crest" aria-hidden="true">
           <HouseIcon motif={house.motif} />
@@ -2564,124 +2963,51 @@ function HouseProfileCard({
           busy={busy}
           progress={normalizedProgress}
           onSaveAlignmentReward={onSaveAlignmentReward}
-          onSaveAlignmentOrder={onSaveAlignmentOrder}
         />
       </div>
-    </section>
+    </div>
   );
 }
 
-function HouseAlignmentTrack({ alignments, busy, progress, onSaveAlignmentReward, onSaveAlignmentOrder }) {
+function HouseAlignmentTrack({ alignments, busy, progress, onSaveAlignmentReward }) {
   const favoriteAlignments = new Set(alignments);
   const alignmentByAgendaId = useMemo(
     () => new Map(houseAlignmentRows.map((alignment) => [alignment.agendaId, alignment])),
     [],
   );
-  const savedOrder = useMemo(() => normalizeHouseAlignmentOrder(progress?.alignmentOrder), [progress?.alignmentOrder]);
-  const [localOrder, setLocalOrder] = useState(savedOrder);
-  const dragDisabled = busy || !onSaveAlignmentOrder;
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
-    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
-  );
-
-  useEffect(() => {
-    setLocalOrder((current) => (arraysMatch(current, savedOrder) ? current : savedOrder));
-  }, [savedOrder]);
-
-  const handleDragEnd = useCallback(
-    async (event) => {
-      const { active, over } = event;
-
-      if (dragDisabled || !over || active.id === over.id) {
-        return;
-      }
-
-      const oldIndex = localOrder.indexOf(active.id);
-      const newIndex = localOrder.indexOf(over.id);
-
-      if (oldIndex < 0 || newIndex < 0) {
-        return;
-      }
-
-      const nextOrder = arrayMove(localOrder, oldIndex, newIndex);
-      setLocalOrder(nextOrder);
-      const result = await onSaveAlignmentOrder?.(nextOrder);
-
-      if (!result) {
-        setLocalOrder(savedOrder);
-      }
-    },
-    [dragDisabled, localOrder, onSaveAlignmentOrder, savedOrder],
-  );
-
-  const rows = localOrder.map((agendaId) => alignmentByAgendaId.get(agendaId)).filter(Boolean);
+  const rows = defaultHouseAlignmentOrder.map((agendaId) => alignmentByAgendaId.get(agendaId)).filter(Boolean);
 
   return (
-    <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-      <SortableContext items={localOrder} strategy={rectSortingStrategy}>
-        <div className="house-alignment-track" aria-label="비밀 의제 성향별 달성 보상">
-          {rows.map((alignment) => (
-            <SortableHouseAlignmentRewardRow
-              alignment={alignment}
-              busy={busy}
-              disabled={dragDisabled}
-              key={alignment.agendaId}
-              preferred={favoriteAlignments.has(alignment.id)}
-              reward={progress?.alignmentRewards?.[alignment.agendaId]}
-              onSaveAlignmentReward={onSaveAlignmentReward}
-            />
-          ))}
-        </div>
-      </SortableContext>
-    </DndContext>
-  );
-}
-
-function SortableHouseAlignmentRewardRow({ alignment, busy, disabled, preferred, reward, onSaveAlignmentReward }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
-    id: alignment.agendaId,
-    disabled,
-  });
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-  };
-
-  return (
-    <HouseAlignmentRewardRow
-      alignment={alignment}
-      busy={busy}
-      dragProps={disabled ? null : { ...attributes, ...listeners }}
-      dragging={isDragging}
-      preferred={preferred}
-      refCallback={setNodeRef}
-      reward={reward}
-      style={style}
-      onSaveAlignmentReward={onSaveAlignmentReward}
-    />
+    <div className="house-alignment-panel">
+      <div className="house-alignment-heading">
+        <span>성향</span>
+      </div>
+      <div className="house-alignment-track" aria-label="비밀 의제 성향별 달성 보상">
+        {rows.map((alignment) => (
+          <HouseAlignmentRewardRow
+            alignment={alignment}
+            busy={busy}
+            key={alignment.agendaId}
+            preferred={favoriteAlignments.has(alignment.id)}
+            reward={progress?.alignmentRewards?.[alignment.agendaId]}
+            onSaveAlignmentReward={onSaveAlignmentReward}
+          />
+        ))}
+      </div>
+    </div>
   );
 }
 
 function HouseAlignmentRewardRow({
   alignment,
   busy,
-  dragProps,
-  dragging = false,
   preferred,
-  refCallback,
   reward,
-  style,
   onSaveAlignmentReward,
 }) {
   return (
     <div
-      className={`house-alignment-row${preferred ? " preferred" : ""}${dragging ? " dragging" : ""}${
-        dragProps ? " draggable" : ""
-      }`}
-      ref={refCallback}
-      style={style}
-      {...(dragProps || {})}
+      className={`house-alignment-row${preferred ? " preferred" : ""}`}
     >
       <span className="house-alignment-title">
         {alignment.koreanLabel}
@@ -2757,25 +3083,28 @@ function HouseAlignmentRewardControls({ alignment, busy, draft, setDraft }) {
     <div className="house-alignment-reward-controls" aria-label={`${alignment.koreanLabel} 왕관 보상`}>
       <div className="alignment-crown-toggle" role="group" aria-label={`${alignment.koreanLabel} 왕관 종류`}>
         {alignmentRewardTypes.map((rewardType) => (
-          <button
-            className={`alignment-crown-button tone-${rewardType.tone}${
-              draft.crownType === rewardType.id ? " selected" : ""
-            }`}
+          <Tooltip
             key={rewardType.id}
-            type="button"
-            title={rewardType.label}
-            aria-label={rewardType.label}
-            aria-pressed={draft.crownType === rewardType.id}
-            onClick={() =>
-              setDraft((current) => ({
-                ...current,
-                crownType: rewardType.id,
-              }))
-            }
-            disabled={busy}
+            label={rewardType.label}
           >
-            <TokenIcon type={rewardType.icon} />
-          </button>
+            <button
+              className={`alignment-crown-button tone-${rewardType.tone}${
+                draft.crownType === rewardType.id ? " selected" : ""
+              }`}
+              type="button"
+              aria-label={rewardType.label}
+              aria-pressed={draft.crownType === rewardType.id}
+              onClick={() =>
+                setDraft((current) => ({
+                  ...current,
+                  crownType: rewardType.id,
+                }))
+              }
+              disabled={busy}
+            >
+              <TokenIcon type={rewardType.icon} />
+            </button>
+          </Tooltip>
         ))}
       </div>
       <input
@@ -2800,26 +3129,29 @@ function HouseAlignmentRewardControls({ alignment, busy, draft, setDraft }) {
 function HouseProfileField({ label, value }) {
   return (
     <div className="house-profile-field">
-      <span>{label}</span>
-      <strong>{value || "-"}</strong>
+      <span className="house-profile-field-label">{label}</span>
+      <div className="house-profile-value-chip">
+        <strong>{value || "-"}</strong>
+      </div>
     </div>
   );
 }
 
-function HouseCrestBadge({ house, className = "", tooltipLabel, ariaLabel }) {
-  const label = tooltipLabel || getHouseHoverLabel(house);
+function HouseCrestBadge({ house, className = "", tooltipLabel, ariaLabel, disableTooltip = false }) {
+  const fallbackLabel = getHouseHoverLabel(house);
+  const label = disableTooltip ? "" : tooltipLabel || fallbackLabel;
+  const accessibleLabel = ariaLabel || tooltipLabel || fallbackLabel;
   const classes = ["house-crest-badge", className].filter(Boolean).join(" ");
 
   return (
-    <span
+    <Tooltip
       className={classes}
       role="img"
-      title={label}
-      data-house-tooltip={label}
-      aria-label={ariaLabel || label}
+      label={label}
+      ariaLabel={accessibleLabel}
     >
       <HouseIcon motif={house?.motif} />
-    </span>
+    </Tooltip>
   );
 }
 
@@ -3146,26 +3478,14 @@ function DilemmaVotingPanel({ state, busy, mutate }) {
   );
 }
 
-function isWaitingForDraft(state) {
-  if (!state) {
-    return false;
-  }
-
-  if (state.phase === "house-select") {
-    return Boolean(state.currentHouseId);
-  }
-
-  return Boolean((state.phase === "discard" || state.phase === "choose") && !state.canDiscard && !state.canChoose);
-}
-
 function CarrotWaitAction() {
   return (
     <div className="carrot-wait-action">
       <button className="carrot-button" type="button" onClick={shakeCarrot}>
         <span className="carrot-button-icon" aria-hidden="true">
-          !
+          🥕
         </span>
-        <span className="carrot-button-label">흔들거나 눌러주세요</span>
+        <span className="carrot-button-label">심심하면 당근이나 흔드세요.</span>
       </button>
     </div>
   );
@@ -3191,6 +3511,25 @@ function AgendaTitle({ agenda }) {
   );
 }
 
+const challengeAchievementTooltip =
+  "가문 화면의 업적은 조건을 만족할 때마다 칸 1개를 표시하고 모든 칸이 채워지면 능력이 해금됩니다. 서사 도전 과제는 특정 이야기 진행으로 열리는 장기 목표입니다.";
+
+const alignmentAchievementTooltip =
+  "가문 성향 업적은 매 게임 사용한 비밀 의제의 성향에 해당하는 칸을 1개 표시합니다. 모두 채우면 설정한 명망/갈망 보상을 반영합니다.";
+
+function AchievementSectionHeading({ id, label, tooltip }) {
+  return (
+    <div className="achievement-section-heading">
+      <h3 id={id}>{label}</h3>
+      <Tooltip label={tooltip}>
+        <button className="icon-help-button achievement-heading-help-button" type="button" aria-label={`${label} 설명`}>
+          <TokenIcon type="help" />
+        </button>
+      </Tooltip>
+    </div>
+  );
+}
+
 function PersonalInventoryPanel({
   inventory,
   progress,
@@ -3205,7 +3544,8 @@ function PersonalInventoryPanel({
   busy,
   mutate,
   onSaveAlignmentReward,
-  onSaveAlignmentOrder,
+  onOpenVoteOrderDialog,
+  onOpenOpenAgendaGuide,
   onOpenSecretAgendaGuide,
 }) {
   const serverInventory = useMemo(() => normalizeInventory(inventory), [inventory]);
@@ -3244,6 +3584,13 @@ function PersonalInventoryPanel({
   const inventoryDirty = useMemo(() => !inventoriesMatch(draft, serverInventory), [draft, serverInventory]);
   const progressDirty = useMemo(() => !progressMatches(progressDraft, serverProgress), [progressDraft, serverProgress]);
   const isDirty = inventoryDirty || progressDirty;
+  const orderedAlignmentRows = useMemo(() => {
+    const alignmentByAgendaId = new Map(houseAlignmentRows.map((alignment) => [alignment.agendaId, alignment]));
+
+    return normalizeHouseAlignmentOrder(progressDraft.alignmentOrder)
+      .map((agendaId) => alignmentByAgendaId.get(agendaId))
+      .filter(Boolean);
+  }, [progressDraft.alignmentOrder]);
 
   useEffect(() => {
     if (!inventoryDirty) {
@@ -3446,7 +3793,10 @@ function PersonalInventoryPanel({
       kind,
       index,
     title: kind === "narrative" ? "서사 도전 과제" : houseAchievementRows[index]?.label || "도전 과제",
-      draft: normalizeAchievementDetail(detail, kind === "narrative" ? 1 : houseAchievementMarkMax),
+      draft:
+        kind === "narrative"
+          ? normalizeNarrativeAchievementDetail(detail)
+          : normalizeAchievementDetail(detail, houseAchievementMarkMax),
     });
   };
 
@@ -3470,11 +3820,14 @@ function PersonalInventoryPanel({
       return;
     }
 
-    const nextDetail = normalizeAchievementDetail(achievementEditor.draft, achievementEditor.kind === "narrative" ? 1 : houseAchievementMarkMax);
+    const nextDetail =
+      achievementEditor.kind === "narrative"
+        ? normalizeNarrativeAchievementDetail(achievementEditor.draft)
+        : normalizeAchievementDetail(achievementEditor.draft, houseAchievementMarkMax);
 
     setProgressDraft((current) => {
       if (achievementEditor.kind === "narrative") {
-        const nextCount = clampCounter(current.narrativeAchievementCount || 0, nextDetail.requiredCount);
+        const nextCount = current.narrativeAchievement || current.narrativeAchievementCount > 0 ? 1 : 0;
 
         return {
           ...current,
@@ -3609,6 +3962,20 @@ function PersonalInventoryPanel({
     setDilemmaPhotoError("");
   }, []);
 
+  const resetDilemma = useCallback(async () => {
+    if (!window.confirm("현재 딜레마 기록, 리더, 중재자, 투표 내역을 모두 초기화할까요? 게시된 이력은 유지됩니다.")) {
+      return;
+    }
+
+    setDilemmaDialogOpen(false);
+    setDilemmaEditToken("");
+    setDilemmaDraft(createDilemmaDraft());
+    setDilemmaPhotoError("");
+    setDilemmaPhotoBusy(false);
+
+    await mutate({ action: "resetDilemma" });
+  }, [mutate]);
+
   const saveDilemma = useCallback(async () => {
     if (!dilemmaEditToken) {
       return;
@@ -3683,13 +4050,17 @@ function PersonalInventoryPanel({
           onEdit={beginDilemmaEdit}
           onOpenRoleDialog={openDilemmaRoleDialog}
           onPublish={publishDilemma}
+          onReset={resetDilemma}
         />
       ) : null}
 
       <section className={`inventory-panel${house ? " has-house-profile" : ""}`} aria-labelledby="inventory-title">
       <div className="inventory-header">
-        <div>
-          <h2 id="inventory-title">가문 자원</h2>
+        <div className="panel-title-row">
+          <span className="panel-title-icon" aria-hidden="true">
+            <TokenIcon type="castle" />
+          </span>
+          <h2 id="inventory-title">가문</h2>
         </div>
         <span className={ledgerStatusClassName} aria-live="polite">{ledgerStatusText}</span>
       </div>
@@ -3745,14 +4116,25 @@ function PersonalInventoryPanel({
             showCrest={false}
             showSectionLabel={false}
             onSaveAlignmentReward={onSaveAlignmentReward}
-            onSaveAlignmentOrder={onSaveAlignmentOrder}
           />
         </div>
       ) : null}
 
       <div className={`inventory-section inventory-agenda-section${ownChoice ? " has-secret-agenda" : ""}`}>
         <h3 className="agenda-section-title">
-          <span>의제</span>
+          <span className="agenda-section-title-main">
+            <span>의제</span>
+            <Tooltip label="공개 의제 토큰 점수 설명">
+              <button
+                className="icon-help-button open-agenda-help-button"
+                type="button"
+                aria-label="공개 의제 토큰 점수 설명"
+                onClick={onOpenOpenAgendaGuide}
+              >
+                <TokenIcon type="help" />
+              </button>
+            </Tooltip>
+          </span>
           <span className="agenda-type-legend" aria-hidden="true">
             <span>
               <i className="agenda-type-dot common" />
@@ -3790,54 +4172,65 @@ function PersonalInventoryPanel({
 
       <div className="inventory-section progress-section">
         <div className="achievement-progress-panel">
-          <div className="achievement-panel-heading">
-            <h3>업적</h3>
-          </div>
           <div className="achievement-ledger">
-            <div className="achievement-primary-list">
-              <NarrativeAchievementRow
-                complete={narrativeAchievementComplete}
-                count={narrativeAchievementCount}
-                detail={progressDraft.narrativeAchievementDetail}
-                disabled={busy}
-                max={narrativeAchievementMax}
-                onDecrease={() => adjustNarrativeAchievement(-1)}
-                onEdit={(event) => openAchievementEditor(event, "narrative")}
-                onIncrease={() => adjustNarrativeAchievement(1)}
-                onToggle={toggleNarrativeAchievement}
+            <section className="achievement-primary-panel" aria-labelledby="challenge-achievements-title">
+              <AchievementSectionHeading
+                id="challenge-achievements-title"
+                label="도전 과제"
+                tooltip={challengeAchievementTooltip}
               />
-              <div className="achievement-track-list">
-                {houseAchievementRows.map((row) => (
-                  <AchievementProgressRow
-                    key={row.id}
-                    label={row.label}
-                    value={progressDraft.houseAchievements[row.id] || 0}
-                    max={getAchievementRequiredCount(progressDraft.houseAchievementDetails[row.id])}
-                    challengeComplete={progressDraft.houseAchievementComplete[row.id] === true}
-                    detail={progressDraft.houseAchievementDetails[row.id]}
+              <div className="achievement-primary-list">
+                <NarrativeAchievementRow
+                  complete={narrativeAchievementComplete}
+                  count={narrativeAchievementCount}
+                  detail={progressDraft.narrativeAchievementDetail}
+                  disabled={busy}
+                  max={narrativeAchievementMax}
+                  onDecrease={() => adjustNarrativeAchievement(-1)}
+                  onEdit={(event) => openAchievementEditor(event, "narrative")}
+                  onIncrease={() => adjustNarrativeAchievement(1)}
+                  onToggle={toggleNarrativeAchievement}
+                />
+                <div className="achievement-track-list">
+                  {houseAchievementRows.map((row) => (
+                    <AchievementProgressRow
+                      key={row.id}
+                      label={row.label}
+                      value={progressDraft.houseAchievements[row.id] || 0}
+                      max={getAchievementRequiredCount(progressDraft.houseAchievementDetails[row.id])}
+                      challengeComplete={progressDraft.houseAchievementComplete[row.id] === true}
+                      detail={progressDraft.houseAchievementDetails[row.id]}
+                      disabled={busy}
+                      onDecrease={() => adjustHouseAchievement(row.id, -1)}
+                      onEdit={(event) => openAchievementEditor(event, "challenge", row.id)}
+                      onIncrease={() => adjustHouseAchievement(row.id, 1)}
+                      onToggleChallengeComplete={() => toggleHouseAchievementComplete(row.id)}
+                    />
+                  ))}
+                </div>
+              </div>
+            </section>
+            <section className="alignment-achievement-panel" aria-labelledby="alignment-achievements-title">
+              <AchievementSectionHeading
+                id="alignment-achievements-title"
+                label="업적"
+                tooltip={alignmentAchievementTooltip}
+              />
+              <div className="alignment-achievement-list" aria-label="성향 업적">
+                {orderedAlignmentRows.map((alignment) => (
+                  <AlignmentProgressRow
+                    key={alignment.agendaId}
+                    alignment={alignment}
+                    value={progressDraft.alignmentAchievements[alignment.agendaId] || 0}
+                    max={houseAlignmentMarkMax}
+                    reward={progressDraft.alignmentRewards[alignment.agendaId]}
                     disabled={busy}
-                    onDecrease={() => adjustHouseAchievement(row.id, -1)}
-                    onEdit={(event) => openAchievementEditor(event, "challenge", row.id)}
-                    onIncrease={() => adjustHouseAchievement(row.id, 1)}
-                    onToggleChallengeComplete={() => toggleHouseAchievementComplete(row.id)}
+                    onDecrease={() => adjustAlignmentAchievement(alignment.agendaId, -1)}
+                    onIncrease={() => adjustAlignmentAchievement(alignment.agendaId, 1)}
                   />
                 ))}
               </div>
-            </div>
-            <div className="alignment-achievement-list" aria-label="성향 업적">
-              {houseAlignmentRows.map((alignment) => (
-                <AlignmentProgressRow
-                  key={alignment.agendaId}
-                  alignment={alignment}
-                  value={progressDraft.alignmentAchievements[alignment.agendaId] || 0}
-                  max={houseAlignmentMarkMax}
-                  reward={progressDraft.alignmentRewards[alignment.agendaId]}
-                  disabled={busy}
-                  onDecrease={() => adjustAlignmentAchievement(alignment.agendaId, -1)}
-                  onIncrease={() => adjustAlignmentAchievement(alignment.agendaId, 1)}
-                />
-              ))}
-            </div>
+            </section>
           </div>
         </div>
       </div>
@@ -3859,6 +4252,7 @@ function PersonalInventoryPanel({
         open={dilemmaRoleDialogOpen}
         restoreFocusRef={dilemmaRoleButtonRef}
         onClose={closeDilemmaRoleDialog}
+        onOpenVoteOrderDialog={onOpenVoteOrderDialog}
         onSave={saveDilemmaRoles}
       />
       <DilemmaEditDialog
@@ -3994,6 +4388,7 @@ function AchievementEditDialog({
     editor.draft.effectAmount,
   );
   const canAddEffectEntry = effectEntries.length < achievementEffectEntryMax;
+  const showRequiredCountField = editor.kind !== "narrative";
   const setEffectEntryRef = (index) => (node) => {
     if (node) {
       effectEntryRefs.current.set(index, node);
@@ -4056,17 +4451,19 @@ function AchievementEditDialog({
               placeholder="달성 조건을 입력합니다."
             />
           </label>
-          <label className="dilemma-field achievement-required-field">
-            <span>달성에 필요한 카운트</span>
-            <input
-              type="number"
-              inputMode="numeric"
-              min="1"
-              max={houseAchievementMarkMax}
-              value={editor.draft.requiredCount}
-              onChange={(event) => onChange("requiredCount", event.target.valueAsNumber)}
-            />
-          </label>
+          {showRequiredCountField ? (
+            <label className="dilemma-field achievement-required-field">
+              <span>달성에 필요한 카운트</span>
+              <input
+                type="number"
+                inputMode="numeric"
+                min="1"
+                max={houseAchievementMarkMax}
+                value={editor.draft.requiredCount}
+                onChange={(event) => onChange("requiredCount", event.target.valueAsNumber)}
+              />
+            </label>
+          ) : null}
           <fieldset className="achievement-effect-fieldset">
             <legend>효과 메모</legend>
             <div className="achievement-effect-row-list">
@@ -4182,7 +4579,7 @@ function AchievementEffectEntrySummary({ entry }) {
   return (
     <span className="achievement-effect-entry-summary">
       {entry?.icon ? <AchievementEffectBadge effect={entry} /> : null}
-      <span className="achievement-effect-entry-label">{option.label}:</span>
+      <span className="achievement-effect-entry-label">{option.label} :</span>
       {hasText ? (
         <MentionTokenView text={entry.text} />
       ) : (
@@ -4273,16 +4670,20 @@ function MentionTokenChip({ mention, onClick }) {
 
   if (onClick) {
     return (
-      <button className="mention-token-chip editable" type="button" aria-label={label} title={label} onClick={onClick}>
-        {content}
-      </button>
+      <Tooltip label={label}>
+        <button className="mention-token-chip editable" type="button" aria-label={label} onClick={onClick}>
+          {content}
+        </button>
+      </Tooltip>
     );
   }
 
   return (
-    <span className="mention-token-chip" aria-label={label} title={label}>
-      {content}
-    </span>
+    <Tooltip label={label}>
+      <span className="mention-token-chip" aria-label={label}>
+        {content}
+      </span>
+    </Tooltip>
   );
 }
 
@@ -4340,8 +4741,8 @@ function SpecialAbilityLegendDialog({ open, restoreFocusRef, onClose }) {
           </div>
         </div>
         <figure className="rulebook-legend-figure">
-          <img src={specialAbilityLegendImageUrl} alt="룰북 14쪽 특수 능력 범례" />
-          <figcaption>룰북 p.14 특수 능력 범례</figcaption>
+          <img src={specialAbilityLegendImageUrl} alt="특수 능력 범례" />
+          <figcaption>특수 능력 범례</figcaption>
         </figure>
         <div className="score-guide-table-wrap">
           <table className="score-guide-table achievement-legend-table">
@@ -4390,6 +4791,7 @@ function DilemmaSummaryCard({
   onEdit,
   onOpenRoleDialog,
   onPublish,
+  onReset,
 }) {
   const locked = Boolean(dilemma.editLock);
   const lockedByOther = Boolean(dilemma.editLock && dilemma.editLock.houseId !== currentHouseId);
@@ -4405,6 +4807,7 @@ function DilemmaSummaryCard({
   const leaderHouse = houseById.get(leaderHouseId) || null;
   const moderatorHouse = houseById.get(moderatorHouseId) || null;
   const rolesReady = Boolean(leaderHouse && moderatorHouse);
+  const hasResettableDilemma = !isBlank || Boolean(leaderHouseId || moderatorHouseId);
   const voteComplete = isDilemmaVoteCompleteForPublish(dilemma, houses);
   const publishBlockReason = getDilemmaPublishBlockReason(dilemma, houses);
   const status = getDilemmaStatusLabel({
@@ -4419,69 +4822,89 @@ function DilemmaSummaryCard({
   const canSetRoles = Boolean(currentHouseId) && isBlank && !locked;
   const canEdit = Boolean(currentHouseId) && !lockedByOther && rolesReady;
   const canPublish = Boolean(currentHouseId) && !locked && !isBlank && !publishBlockReason;
+  const canReset = Boolean(currentHouseId) && !lockedByOther && hasResettableDilemma;
+  const roleTooltip = locked
+    ? "딜레마 편집을 저장하거나 취소해야 역할을 지정할 수 있습니다."
+    : !isBlank
+      ? "딜레마 작성 전 상태에서만 역할을 지정할 수 있습니다."
+      : "딜레마 작성 전에 리더 토큰과 중재자를 지정합니다.";
+  const editTooltip = lockedByOther
+    ? "다른 가문이 편집을 마칠 때까지 기다려야 합니다."
+    : !rolesReady
+      ? "리더와 중재자를 먼저 지정하세요."
+      : isBlank
+        ? "새 딜레마를 작성합니다."
+        : "딜레마 기록을 편집합니다.";
+  const publishTooltip = locked
+    ? "딜레마 편집을 저장하거나 취소해야 게시할 수 있습니다."
+    : isBlank
+      ? "게시할 딜레마 기록이 없습니다."
+      : publishBlockReason || "현재 저장된 딜레마를 딜레마 이력에 게시합니다.";
+  const resetTooltip = lockedByOther
+    ? "다른 가문이 편집을 마칠 때까지 초기화할 수 없습니다."
+    : !hasResettableDilemma
+      ? "초기화할 딜레마 기록이나 역할이 없습니다."
+      : "현재 딜레마 기록과 리더/중재자를 초기화합니다. 게시된 이력은 유지됩니다.";
 
   return (
     <section className="dilemma-ledger-card" aria-labelledby="dilemma-ledger-title">
       <div className="dilemma-summary-head">
-        <div>
+        <div className="panel-title-row">
+          <span className="panel-title-icon" aria-hidden="true">
+            <TokenIcon type="scroll" />
+          </span>
           <h3 id="dilemma-ledger-title">딜레마</h3>
         </div>
         <div className="dilemma-summary-actions">
           <span className={`dilemma-status-pill status-${status.tone}${dilemma.editLock ? " locked" : ""}`}>
             {status.text}
           </span>
-          <button
-            ref={roleButtonRef}
-            className="ghost-button dilemma-summary-button"
-            type="button"
-            onClick={onOpenRoleDialog}
-            disabled={busy || !canSetRoles}
-            title={
-              locked
-                ? "딜레마 편집을 저장하거나 취소해야 역할을 지정할 수 있습니다."
-                : !isBlank
-                  ? "딜레마 작성 전 상태에서만 역할을 지정할 수 있습니다."
-                  : "딜레마 작성 전에 리더 토큰과 중재자를 지정합니다."
-            }
-          >
-            <TokenIcon type="crown" />
-            역할
-          </button>
-          <button
-            ref={editButtonRef}
-            className="ghost-button dilemma-summary-button dilemma-edit-button"
-            type="button"
-            onClick={onEdit}
-            disabled={busy || !canEdit}
-            title={
-              lockedByOther
-                ? "다른 가문이 편집을 마칠 때까지 기다려야 합니다."
-                : !rolesReady
-                  ? "리더와 중재자를 먼저 지정하세요."
-                  : isBlank
-                    ? "새 딜레마를 작성합니다."
-                    : "딜레마 기록을 편집합니다."
-            }
-          >
-            <TokenIcon type="scroll" />
-            {editButtonLabel}
-          </button>
-          <button
-            className="ghost-button dilemma-summary-button"
-            type="button"
-            onClick={onPublish}
-            disabled={busy || !canPublish}
-            title={
-              locked
-                ? "딜레마 편집을 저장하거나 취소해야 게시할 수 있습니다."
-                : isBlank
-                  ? "게시할 딜레마 기록이 없습니다."
-                  : publishBlockReason || "현재 저장된 딜레마를 딜레마 이력에 게시합니다."
-            }
-          >
-            <TokenIcon type="history" />
-            게시
-          </button>
+          <Tooltip label={roleTooltip}>
+            <button
+              ref={roleButtonRef}
+              className="ghost-button dilemma-summary-button"
+              type="button"
+              onClick={onOpenRoleDialog}
+              disabled={busy || !canSetRoles}
+            >
+              <TokenIcon type="crown" />
+              역할
+            </button>
+          </Tooltip>
+          <Tooltip label={editTooltip}>
+            <button
+              ref={editButtonRef}
+              className="ghost-button dilemma-summary-button dilemma-edit-button"
+              type="button"
+              onClick={onEdit}
+              disabled={busy || !canEdit}
+            >
+              <TokenIcon type="scroll" />
+              {editButtonLabel}
+            </button>
+          </Tooltip>
+          <Tooltip label={resetTooltip}>
+            <button
+              className="ghost-button dilemma-summary-button danger-button"
+              type="button"
+              onClick={onReset}
+              disabled={busy || !canReset}
+            >
+              <TokenIcon type="reset" />
+              초기화
+            </button>
+          </Tooltip>
+          <Tooltip label={publishTooltip}>
+            <button
+              className="ghost-button dilemma-summary-button"
+              type="button"
+              onClick={onPublish}
+              disabled={busy || !canPublish}
+            >
+              <TokenIcon type="history" />
+              게시
+            </button>
+          </Tooltip>
         </div>
       </div>
 
@@ -4706,17 +5129,17 @@ function DilemmaResourceDeltaPreview({ deltas }) {
   return (
     <div className="dilemma-resource-delta-preview" aria-label="자원 변화">
       {entries.map((resource) => (
-        <span
+        <Tooltip
           className={`dilemma-resource-delta-chip tone-${resource.tone} ${
             resource.value > 0 ? "positive" : "negative"
           }`}
           key={resource.id}
-          title={`${resource.label} ${formatDilemmaResourceDelta(resource.value)}`}
+          label={`${resource.label} ${formatDilemmaResourceDelta(resource.value)}`}
         >
           <TokenIcon type={resource.icon} />
           <span>{resource.label}</span>
           <strong>{formatDilemmaResourceDelta(resource.value)}</strong>
-        </span>
+        </Tooltip>
       ))}
     </div>
   );
@@ -4730,9 +5153,11 @@ function DilemmaPhotoStrip({ photos = [] }) {
   return (
     <div className="dilemma-photo-strip" aria-label="딜레마사진">
       {photos.map((photo) => (
-        <a key={photo.id} href={photo.dataUrl} target="_blank" rel="noreferrer" title={photo.name}>
-          <img src={photo.dataUrl} alt={photo.name || "딜레마사진"} />
-        </a>
+        <Tooltip key={photo.id} label={photo.name}>
+          <a href={photo.dataUrl} target="_blank" rel="noreferrer">
+            <img src={photo.dataUrl} alt={photo.name || "딜레마사진"} />
+          </a>
+        </Tooltip>
       ))}
     </div>
   );
@@ -4746,10 +5171,13 @@ function DilemmaRoleDialog({
   open,
   restoreFocusRef,
   onClose,
+  onOpenVoteOrderDialog,
   onSave,
 }) {
   const dialogRef = useRef(null);
   const closeTimerRef = useRef(null);
+  const skipRestoreFocusRef = useRef(false);
+  const leaderSelectRef = useRef(null);
   const activeHouses = useMemo(() => getActiveDilemmaVoteHouses(houses), [houses]);
   const activeIds = useMemo(() => activeHouses.map((house) => house.id), [activeHouses]);
   const [leaderDraft, setLeaderDraft] = useState("");
@@ -4759,9 +5187,10 @@ function DilemmaRoleDialog({
 
   useEffect(() => {
     if (open) {
-      setLeaderDraft(activeIds.includes(leaderHouseId) ? leaderHouseId : activeIds[0] || "");
-      setModeratorDraft(activeIds.includes(moderatorHouseId) ? moderatorHouseId : activeIds[1] || activeIds[0] || "");
+      setLeaderDraft(activeIds.includes(leaderHouseId) ? leaderHouseId : "");
+      setModeratorDraft(activeIds.includes(moderatorHouseId) ? moderatorHouseId : "");
       setSaveStatus("");
+      skipRestoreFocusRef.current = false;
     }
   }, [activeIds, leaderHouseId, moderatorHouseId, open]);
 
@@ -4771,7 +5200,7 @@ function DilemmaRoleDialog({
     }
 
     const focusFirstControl = window.setTimeout(() => {
-      const firstControl = dialogRef.current?.querySelector(
+      const firstControl = leaderSelectRef.current || dialogRef.current?.querySelector(
         'button:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])',
       );
       firstControl?.focus();
@@ -4791,6 +5220,11 @@ function DilemmaRoleDialog({
       window.clearTimeout(closeTimerRef.current);
       document.removeEventListener("keydown", handleKeyDown);
       window.setTimeout(() => {
+        if (skipRestoreFocusRef.current) {
+          skipRestoreFocusRef.current = false;
+          return;
+        }
+
         restoreFocusRef?.current?.focus();
       }, 0);
     };
@@ -4819,6 +5253,12 @@ function DilemmaRoleDialog({
     setSaveStatus("리더와 중재자를 저장하지 못했습니다.");
   };
 
+  const openVoteOrderFromRoleDialog = (event) => {
+    skipRestoreFocusRef.current = true;
+    onOpenVoteOrderDialog?.({ restoreFocusTarget: restoreFocusRef?.current || event.currentTarget });
+    onClose();
+  };
+
   return (
     <div className="session-end-overlay" role="presentation">
       <section
@@ -4836,6 +5276,17 @@ function DilemmaRoleDialog({
             <p className="section-label">딜레마 준비</p>
             <h2 id="dilemma-role-title">리더·중재자 지정</h2>
           </div>
+          <Tooltip className="dilemma-role-order-action" label="리더와 중재자 지정 전에 시계방향 투표 순서를 확인합니다.">
+            <button
+              className="ghost-button dilemma-role-order-button"
+              type="button"
+              onClick={openVoteOrderFromRoleDialog}
+              disabled={busy || activeHouses.length === 0}
+            >
+              <TokenIcon type="rotateRight" />
+              투표 순서 지정
+            </button>
+          </Tooltip>
         </div>
         <form className="dilemma-role-form" onSubmit={submit}>
           <p className="dilemma-role-copy">
@@ -4846,7 +5297,15 @@ function DilemmaRoleDialog({
             <div className="dilemma-role-grid">
               <label className="dilemma-role-card">
                 <span>리더 토큰</span>
-                <select value={leaderDraft} onChange={(event) => setLeaderDraft(event.target.value)} disabled={busy}>
+                <select
+                  ref={leaderSelectRef}
+                  value={leaderDraft}
+                  onChange={(event) => setLeaderDraft(event.target.value)}
+                  disabled={busy}
+                >
+                  <option value="" disabled>
+                    리더 토큰 보유자 선택
+                  </option>
                   {activeHouses.map((house) => (
                     <option key={house.id} value={house.id}>
                       {getHouseKoreanName(house)}{house.hasCustomName ? ` (${house.name})` : ""}
@@ -4858,6 +5317,9 @@ function DilemmaRoleDialog({
               <label className="dilemma-role-card">
                 <span>중재자</span>
                 <select value={moderatorDraft} onChange={(event) => setModeratorDraft(event.target.value)} disabled={busy}>
+                  <option value="" disabled>
+                    중재자 선택
+                  </option>
                   {activeHouses.map((house) => (
                     <option key={house.id} value={house.id}>
                       {getHouseKoreanName(house)}{house.hasCustomName ? ` (${house.name})` : ""}
@@ -5084,7 +5546,6 @@ function DilemmaEditDialog({
             onChange={(value) => onFieldChange("resolutionNotes", value)}
             placeholder={resolutionDisabled ? "전원 투표 후 입력할 수 있습니다." : "자원/안정도/모멘텀, 스티커, 보드 투입, 카드 처리"}
             disabled={resolutionDisabled}
-            hint={resolutionDisabled ? "전원 투표가 끝난 뒤 입력할 수 있습니다." : ""}
           />
           <DilemmaPhotoEditor
             busy={busy || photoBusy}
@@ -5878,28 +6339,29 @@ function DilemmaResourceDeltaEditor({ label, deltas, onChange }) {
 
   return (
     <div className="dilemma-resource-delta-editor" role="group" aria-label={label}>
-      <div className="dilemma-resource-delta-heading">
-        <span>적용 변경</span>
-        <button
-          className="stepper-button compact"
-          type="button"
-          aria-label="reset"
-          title="reset"
-          onClick={clearDeltas}
-          disabled={!hasValues}
-        >
-          <TokenIcon type="reset" />
-        </button>
-      </div>
+      {hasValues ? (
+        <div className="dilemma-resource-delta-heading">
+          <Tooltip label="초기화">
+          <button
+            className="stepper-button compact"
+            type="button"
+            aria-label={`${label} 초기화`}
+            onClick={clearDeltas}
+          >
+            <TokenIcon type="reset" />
+          </button>
+          </Tooltip>
+        </div>
+      ) : null}
       <div className="dilemma-resource-delta-list">
         {resourceCounters.map((resource) => {
           const value = normalizedDeltas[resource.id] || 0;
 
           return (
             <div className={`dilemma-resource-delta-row tone-${resource.tone}`} key={resource.id}>
-              <span className="counter-icon" aria-hidden="true">
+              <Tooltip label={resource.label} className="counter-icon" ariaLabel={resource.label}>
                 <TokenIcon type={resource.icon} />
-              </span>
+              </Tooltip>
               <span className="counter-label">{resource.label}</span>
               <div className="counter-controls">
                 <button
@@ -5943,9 +6405,9 @@ function ScoreTrackRow({ label, value, max, icon, tone, disabled, onDecrease, on
   return (
     <div className={`score-track-row tone-${tone}`} style={{ "--track-progress": `${percent}%` }}>
       <div className="score-track-summary">
-        <span className="counter-icon" aria-hidden="true">
+        <Tooltip label={label} className="counter-icon" ariaLabel={label}>
           <TokenIcon type={icon} />
-        </span>
+        </Tooltip>
         <span className="counter-label">{label}</span>
         <output className="score-track-value" aria-label={`${label} 현재 값`}>
           {value}
@@ -6002,9 +6464,9 @@ function ScoreTrackRow({ label, value, max, icon, tone, disabled, onDecrease, on
 function CounterRow({ label, value, max, icon, tone, disabled, onDecrease, onIncrease }) {
   return (
     <div className={`counter-row tone-${tone}`}>
-      <span className="counter-icon" aria-hidden="true">
+      <Tooltip label={label} className="counter-icon" ariaLabel={label}>
         <TokenIcon type={icon} />
-      </span>
+      </Tooltip>
       <span className="counter-label">{label}</span>
       <div className="counter-controls">
         <button
@@ -6045,21 +6507,22 @@ function OpenAgendaTokenRow({ type, selectedTokens, disabled, onToggle }) {
         {resourceCounters.map((resource) => {
           const isSelected = selected.has(resource.id);
           const isDisabled = disabled || (!isSelected && selectedTokens.length >= openAgendaTokenLimit);
+          const tooltipLabel = `${type.shortLabel} ${resource.label}`;
 
           return (
-            <button
-              className={`resource-token-chip tone-${resource.tone}${isSelected ? " selected" : ""}`}
-              key={resource.id}
-              type="button"
-              aria-pressed={isSelected}
-              aria-label={`${type.shortLabel} ${resource.label} 공개 의제 토큰`}
-              title={`${type.shortLabel} ${resource.label}`}
-              onClick={() => onToggle(resource.id)}
-              disabled={isDisabled}
-            >
-              <TokenIcon type={resource.icon} />
-              <span className="resource-token-chip-label">{resource.label}</span>
-            </button>
+            <Tooltip key={resource.id} label={tooltipLabel}>
+              <button
+                className={`resource-token-chip tone-${resource.tone}${isSelected ? " selected" : ""}`}
+                type="button"
+                aria-pressed={isSelected}
+                aria-label={`${type.shortLabel} ${resource.label} 공개 의제 토큰`}
+                onClick={() => onToggle(resource.id)}
+                disabled={isDisabled}
+              >
+                <TokenIcon type={resource.icon} />
+                <span className="resource-token-chip-label">{resource.label}</span>
+              </button>
+            </Tooltip>
           );
         })}
       </div>
@@ -6117,26 +6580,29 @@ function NarrativeAchievementRow({
           <AchievementDetailPreview detail={normalizedDetail} />
         </span>
       </button>
-      <button
-        className={`achievement-challenge-status${complete ? " complete" : ""}`}
-        type="button"
-        tabIndex={-1}
-        aria-hidden="true"
-        disabled={disabled}
-        onClick={onToggle}
-      >
-        <small>{complete ? "달성" : ""}</small>
-      </button>
-      <button
-        className="achievement-edit-button"
-        type="button"
-        onClick={onEdit}
-        disabled={disabled}
-        title="수정"
-        aria-label="서사 도전 과제 조건과 효과 수정"
-      >
-        <TokenIcon type="edit" />
-      </button>
+      {complete ? (
+        <button
+          className="achievement-challenge-status complete"
+          type="button"
+          disabled={disabled}
+          onClick={onToggle}
+          aria-label="서사 도전 과제 달성 취소"
+        >
+          <small>달성</small>
+        </button>
+      ) : (
+        <Tooltip label="서사 도전 과제 조건과 효과 수정">
+          <button
+            className="achievement-edit-button"
+            type="button"
+            onClick={onEdit}
+            disabled={disabled}
+            aria-label="서사 도전 과제 조건과 효과 수정"
+          >
+            <TokenIcon type="edit" />
+          </button>
+        </Tooltip>
+      )}
     </div>
   );
 }
@@ -6161,9 +6627,6 @@ function AchievementDetailPreview({ detail }) {
       {hasCondition ? <MentionTokenView className="achievement-detail-condition" text={detail.conditionText} /> : null}
       {hasEffect ? (
         <span className="achievement-detail-segment">
-          <span className="achievement-detail-marker" aria-hidden="true">
-            ·
-          </span>
           <AchievementEffectMemo detail={detail} />
         </span>
       ) : null}
@@ -6235,29 +6698,28 @@ function AchievementProgressRow({
           <TokenIcon type="plus" />
         </button>
       </div>
-      {onToggleChallengeComplete ? (
+      {challengeComplete && onToggleChallengeComplete ? (
         <button
-          className={`achievement-challenge-status${challengeComplete ? " complete" : ""}`}
+          className="achievement-challenge-status complete"
           type="button"
-          tabIndex={-1}
-          aria-hidden="true"
           disabled={disabled}
           onClick={onToggleChallengeComplete}
+          aria-label={`${label} 달성 취소`}
         >
-          <small>{challengeComplete ? "달성" : ""}</small>
+          <small>달성</small>
         </button>
-      ) : null}
-      {onEdit ? (
-        <button
-          className="achievement-edit-button"
-          type="button"
-          onClick={onEdit}
-          disabled={disabled}
-          title="수정"
-          aria-label={`${label} 조건과 효과 수정`}
-        >
-          <TokenIcon type="edit" />
-        </button>
+      ) : onEdit ? (
+        <Tooltip label={`${label} 조건과 효과 수정`}>
+          <button
+            className="achievement-edit-button"
+            type="button"
+            onClick={onEdit}
+            disabled={disabled}
+            aria-label={`${label} 조건과 효과 수정`}
+          >
+            <TokenIcon type="edit" />
+          </button>
+        </Tooltip>
       ) : null}
     </div>
   );
@@ -6813,7 +7275,7 @@ function normalizeHouseProgress(value) {
   const houseAchievementComplete = Array.isArray(candidate.houseAchievementComplete)
     ? candidate.houseAchievementComplete
     : [];
-  const narrativeAchievementDetail = normalizeAchievementDetail(candidate.narrativeAchievementDetail, 1);
+  const narrativeAchievementDetail = normalizeNarrativeAchievementDetail(candidate.narrativeAchievementDetail);
   const houseAchievementDetails = Array.isArray(candidate.houseAchievementDetails)
     ? candidate.houseAchievementDetails.map((detail) => normalizeAchievementDetail(detail, houseAchievementMarkMax))
     : [];
@@ -6910,23 +7372,7 @@ function createDefaultHouseProgress() {
 }
 
 function normalizeHouseAlignmentOrder(value) {
-  const candidate = Array.isArray(value) ? value : defaultHouseAlignmentOrder;
-  const allowed = new Set(defaultHouseAlignmentOrder);
-  const next = [];
-
-  for (const item of candidate) {
-    if (typeof item === "string" && allowed.has(item) && !next.includes(item)) {
-      next.push(item);
-    }
-  }
-
-  for (const agendaId of defaultHouseAlignmentOrder) {
-    if (!next.includes(agendaId)) {
-      next.push(agendaId);
-    }
-  }
-
-  return next;
+  return [...defaultHouseAlignmentOrder];
 }
 
 function createGameStartDefaultsConfirmMessage() {
@@ -7019,6 +7465,13 @@ function normalizeAchievementDetail(value, fallbackRequiredCount) {
     effectIcon: primaryEffect.icon,
     effectAmount: primaryEffect.amount,
     effectText: hasEffectEntries ? formatAchievementEffectEntriesText(effectEntries) : legacyEffectText,
+  };
+}
+
+function normalizeNarrativeAchievementDetail(value) {
+  return {
+    ...normalizeAchievementDetail(value, 1),
+    requiredCount: 1,
   };
 }
 

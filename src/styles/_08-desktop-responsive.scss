@@ -179,12 +179,13 @@
     height: calc(100dvh - 16px);
   }
 
-  .council-sidebar {
+  .council-sidebar-column {
     top: 0;
-    max-height: calc(100vh - 16px);
-    max-height: calc(100dvh - 16px);
     gap: 10px;
-    padding: 14px;
+  }
+
+  .council-sidebar {
+    padding: 12px;
   }
 
   .status-item {
@@ -278,15 +279,15 @@
     gap: 8px;
   }
 
-  .council-context .house-profile-field {
+  .council-context .house-profile-value-chip {
     padding: 8px 10px;
   }
 
-  .council-context .house-profile-field span {
+  .council-context .house-profile-field-label {
     font-size: 0.68rem;
   }
 
-  .council-context .house-profile-field strong {
+  .council-context .house-profile-value-chip strong {
     font-size: 0.78rem;
   }
 
@@ -348,7 +349,7 @@
     width: 100%;
     height: auto;
     gap: 12px;
-    padding: 14px;
+    padding: 12px;
   }
 
   .inventory-panel.has-house-profile {
@@ -509,4 +510,3 @@
     align-self: start;
   }
 }
-

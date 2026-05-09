@@ -140,7 +140,8 @@ assert.deepEqual(saveProgressPayload.state.ownHouseProgress.narrativeAchievement
 ]);
 assert.equal(saveProgressPayload.state.ownHouseProgress.narrativeAchievementDetail.effectIcon, "instant");
 assert.equal(saveProgressPayload.state.ownHouseProgress.narrativeAchievementDetail.effectAmount, 0);
-assert.equal(saveProgressPayload.state.ownHouseProgress.narrativeAchievementCount, 2);
+assert.equal(saveProgressPayload.state.ownHouseProgress.narrativeAchievementDetail.requiredCount, 1);
+assert.equal(saveProgressPayload.state.ownHouseProgress.narrativeAchievementCount, 1);
 assert.equal(saveProgressPayload.state.ownHouseProgress.narrativeAchievement, true);
 assert.equal(saveProgressPayload.state.ownHouseProgress.houseAchievements[0], 3);
 assert.equal(saveProgressPayload.state.ownHouseProgress.houseAchievementDetails[0].requiredCount, 3);
@@ -402,5 +403,12 @@ assert.equal(earlyApplyDilemmaVotesPayload.state.dilemma.selectedOutcome, "");
 assert.match(earlyApplyDilemmaVotesPayload.state.dilemma.voteNotes, /수기로 반영/);
 assert.equal(earlyApplyDilemmaVotesPayload.state.canVoteDilemma, false);
 assert.deepEqual(persisted?.inventories, inventoryBeforeApply);
+
+const resetDilemma = await handleAgendaRequest(jsonRequest({ action: "resetDilemma" }, setCookie), {}, store);
+const resetDilemmaPayload = await resetDilemma.json();
+assert.equal(resetDilemma.status, 200);
+assert.equal(resetDilemmaPayload.state.dilemma.title, "");
+assert.equal(resetDilemmaPayload.state.dilemmaLeader, null);
+assert.equal(resetDilemmaPayload.state.dilemmaModerator, null);
 
 console.log("agenda-api tests passed");

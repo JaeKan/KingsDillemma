@@ -151,7 +151,6 @@
 
 .house-profile-main {
   display: grid;
-  gap: 6px;
   min-width: 0;
 }
 
@@ -186,7 +185,12 @@
 
 .house-profile-field {
   display: grid;
-  gap: 2px;
+  gap: 4px;
+  min-width: 0;
+}
+
+.house-profile-value-chip {
+  display: grid;
   min-width: 0;
   border: 1px solid rgba(31, 38, 33, 0.12);
   border-radius: var(--radius);
@@ -194,13 +198,16 @@
   padding: 5px 7px;
 }
 
-.house-profile-field span {
-  color: rgba(28, 33, 31, 0.58);
-  font-size: 0.62rem;
-  font-weight: 900;
+.house-profile-field-label {
+  display: inline-flex;
+  align-items: center;
+  color: rgba(28, 33, 31, 0.72);
+  font-size: 0.68rem;
+  font-weight: 950;
+  line-height: 1;
 }
 
-.house-profile-field strong {
+.house-profile-value-chip strong {
   min-width: 0;
   overflow: hidden;
   color: var(--surface-ink);
@@ -208,6 +215,49 @@
   line-height: 1.2;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.house-alignment-panel {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.house-alignment-heading {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 4px;
+  min-width: 0;
+}
+
+.house-alignment-heading>span {
+  color: rgba(28, 33, 31, 0.72);
+  font-size: 0.68rem;
+  font-weight: 950;
+  line-height: 1;
+}
+
+.house-alignment-heading .house-alignment-help-button {
+  width: 18px;
+  min-width: 18px;
+  height: 18px;
+  min-height: 18px;
+  border: 1px solid rgba(31, 38, 33, 0.2);
+  background: rgba(255, 249, 235, 0.48);
+  color: rgba(17, 25, 24, 0.9);
+}
+
+.house-alignment-heading .house-alignment-help-button:hover,
+.house-alignment-heading .house-alignment-help-button:focus-visible {
+  border-color: rgba(184, 133, 47, 0.46);
+  background: rgba(216, 178, 90, 0.22);
+  color: var(--surface-ink);
+}
+
+.house-alignment-heading .house-alignment-help-button svg {
+  width: 13px;
+  height: 13px;
 }
 
 .house-alignment-track {
@@ -619,7 +669,7 @@
   justify-content: flex-start;
   width: 100%;
   min-width: 0;
-  margin-top: 10px;
+  margin: 0;
 }
 
 .carrot-button {
@@ -764,4 +814,3 @@
   background: linear-gradient(145deg, #c04f45, #7f2321);
   color: #fff2db;
 }
-

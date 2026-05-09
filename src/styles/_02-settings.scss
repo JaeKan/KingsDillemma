@@ -77,6 +77,14 @@
   flex: 0 0 auto;
 }
 
+.settings-tooltip-anchor {
+  width: 100%;
+}
+
+.settings-tooltip-anchor>.ghost-button {
+  width: 100%;
+}
+
 .tips-menu {
   width: min(300px, 100%);
   grid-template-columns: 1fr;
@@ -266,4 +274,3 @@
 .settings-link svg:last-child {
   margin-left: auto;
 }
-

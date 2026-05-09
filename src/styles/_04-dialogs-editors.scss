@@ -13,7 +13,30 @@
 }
 
 .dilemma-role-dialog .session-end-heading {
+  align-items: flex-start;
+  flex-wrap: nowrap;
   margin-bottom: 18px;
+}
+
+.dilemma-role-dialog .session-end-heading>div {
+  min-width: 0;
+}
+
+.dilemma-role-order-action {
+  flex: 0 0 auto;
+  margin-left: auto;
+}
+
+.dilemma-role-order-button {
+  min-height: 38px;
+  padding: 8px 10px;
+  white-space: nowrap;
+}
+
+.dilemma-role-order-button svg {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
 }
 
 .dilemma-role-form,
@@ -442,7 +465,7 @@
 
 .achievement-effect-row {
   display: grid;
-  grid-template-columns: 34px minmax(126px, 0.38fr) minmax(0, 1fr) 32px;
+  grid-template-columns: 34px minmax(126px, 0.38fr) minmax(0, 1fr) 34px;
   align-items: start;
   gap: 8px;
   min-width: 0;
@@ -503,11 +526,12 @@
 .achievement-effect-remove-button {
   display: inline-grid;
   place-items: center;
-  align-self: center;
-  min-width: 32px;
-  min-height: 32px;
-  width: 32px;
-  height: 32px;
+  align-self: start;
+  min-width: 34px;
+  min-height: 34px;
+  width: 34px;
+  height: 34px;
+  margin-top: calc(0.64rem + 4px);
   border: 1px solid rgba(234, 223, 189, 0.14);
   border-radius: 7px;
   background: rgba(5, 9, 9, 0.2);
@@ -1166,20 +1190,8 @@
 .dilemma-resource-delta-heading {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 8px;
+  justify-content: flex-end;
   min-width: 0;
-}
-
-.dilemma-resource-delta-heading span {
-  min-width: 0;
-  overflow: hidden;
-  color: var(--muted);
-  font-size: 0.72rem;
-  font-weight: 930;
-  line-height: 1;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .dilemma-resource-delta-list {
@@ -1489,4 +1501,3 @@
   border-color: rgba(192, 79, 69, 0.66);
   background: rgba(192, 79, 69, 0.18);
 }
-

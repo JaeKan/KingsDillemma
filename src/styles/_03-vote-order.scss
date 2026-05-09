@@ -22,8 +22,7 @@
 
 .vote-order-form,
 .vote-order-copy,
-.vote-order-ring,
-.vote-order-readout {
+.vote-order-ring {
   display: grid;
   gap: 10px;
   min-width: 0;
@@ -59,32 +58,66 @@
   color: var(--gold-2);
 }
 
+.vote-order-assistive {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  border: 0;
+  overflow: hidden;
+  padding: 0;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+}
+
 .vote-order-ring {
-  --seat-width: 132px;
-  --seat-height: 58px;
-  --seat-radius: clamp(84px, 17vw, 120px);
+  --seat-size: 70px;
+  --seat-badge-size: 56px;
+  --seat-radius: clamp(116px, 19vw, 154px);
   position: relative;
   display: block;
   justify-self: center;
-  width: min(100%, calc((var(--seat-radius) * 2) + var(--seat-width) + 28px));
+  width: min(100%, calc((var(--seat-radius) * 2) + var(--seat-size) + 28px));
   height: auto;
   aspect-ratio: 1;
   border: 1px solid rgba(216, 178, 90, 0.2);
   border-radius: 50%;
   background:
-    radial-gradient(circle, rgba(216, 178, 90, 0.14) 0 34px, transparent 36px),
+    radial-gradient(circle, rgba(216, 178, 90, 0.14) 0 22px, transparent 24px),
     rgba(5, 9, 9, 0.2);
   overflow: visible;
+}
+
+.vote-order-dialog.is-dragging-vote-order,
+.vote-order-dialog.is-dragging-vote-order * {
+  cursor: grabbing !important;
+}
+
+body.vote-order-dragging,
+body.vote-order-dragging * {
+  cursor: grabbing !important;
 }
 
 .vote-order-ring-center {
   position: absolute;
   left: 50%;
   top: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
   transform: translate(-50%, -50%);
+  border-radius: 50%;
   color: var(--gold-2);
-  font-size: 0.72rem;
-  font-weight: 950;
+  line-height: 1;
+  pointer-events: none;
+}
+
+.vote-order-ring-center svg {
+  flex: 0 0 auto;
+  width: 20px;
+  height: 20px;
 }
 
 .vote-order-seat {
@@ -92,15 +125,18 @@
   left: 50%;
   top: 50%;
   display: grid;
-  grid-template-columns: 32px minmax(0, 1fr);
-  align-items: center;
-  gap: 7px;
-  width: var(--seat-width);
-  min-height: var(--seat-height);
+  place-items: center;
+  min-width: var(--seat-size);
+  min-height: var(--seat-size);
+  width: var(--seat-size);
+  height: var(--seat-size);
+  max-width: var(--seat-size);
+  max-height: var(--seat-size);
+  aspect-ratio: 1;
   border: 1px solid rgba(234, 223, 189, 0.18);
-  border-radius: 999px;
+  border-radius: 50%;
   background: rgba(18, 28, 25, 0.95);
-  padding: 8px;
+  padding: 0;
   touch-action: none;
   cursor: grab;
   z-index: 1;
@@ -119,6 +155,36 @@
   cursor: default;
 }
 
+.vote-order-seat.placeholder {
+  border-color: rgba(216, 178, 90, 0.24);
+  background: rgba(18, 28, 25, 0.48);
+  opacity: 0.42;
+}
+
+.vote-order-seat.drop-target {
+  border-color: rgba(255, 226, 146, 0.7);
+  background: rgba(216, 178, 90, 0.16);
+  box-shadow:
+    0 0 0 4px rgba(216, 178, 90, 0.13),
+    inset 0 0 0 1px rgba(255, 226, 146, 0.26);
+  opacity: 0.88;
+}
+
+.vote-order-seat-preview {
+  --seat-size: 70px;
+  --seat-badge-size: 56px;
+  position: static;
+  left: auto;
+  top: auto;
+  transform: none;
+  pointer-events: none;
+  cursor: grabbing;
+  border-color: rgba(216, 178, 90, 0.72);
+  background: rgba(36, 55, 49, 0.98);
+  box-shadow: 0 18px 36px rgba(0, 0, 0, 0.34);
+  opacity: 0.98;
+}
+
 .house-crest-badge {
   position: relative;
   display: grid;
@@ -134,115 +200,36 @@
   height: 68%;
 }
 
-.house-crest-badge::after {
-  position: absolute;
-  left: 50%;
-  top: calc(100% + 8px);
-  z-index: 20;
-  max-width: 180px;
-  border: 1px solid rgba(234, 223, 189, 0.22);
-  border-radius: 999px;
-  background: rgba(17, 25, 24, 0.98);
-  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.28);
-  color: var(--ink-strong);
-  content: attr(data-house-tooltip);
-  font-size: 0.72rem;
-  font-weight: 900;
-  line-height: 1.1;
-  opacity: 0;
-  overflow: hidden;
-  padding: 7px 9px;
-  pointer-events: none;
-  text-overflow: ellipsis;
-  transform: translate(-50%, -4px);
-  transition:
-    opacity 140ms ease,
-    transform 140ms ease;
-  white-space: nowrap;
-}
-
-.house-crest-badge:hover::after,
-.house-crest-badge:focus-visible::after,
-.vote-order-seat:focus-visible .house-crest-badge::after,
-.vote-order-seat:hover .house-crest-badge::after {
-  opacity: 1;
-  transform: translate(-50%, 0);
-}
-
 .vote-order-rank {
   display: grid;
   place-items: center;
-  width: 32px;
-  height: 32px;
+  min-width: var(--seat-badge-size);
+  min-height: var(--seat-badge-size);
+  width: var(--seat-badge-size);
+  height: var(--seat-badge-size);
+  max-width: var(--seat-badge-size);
+  max-height: var(--seat-badge-size);
+  aspect-ratio: 1;
   border-radius: 50%;
-  background: rgba(216, 178, 90, 0.16);
+  background: rgba(216, 178, 90, 0.18);
   color: var(--gold-2);
-  box-shadow: inset 0 0 0 1px rgba(216, 178, 90, 0.32);
+  box-shadow:
+    inset 0 0 0 1px rgba(216, 178, 90, 0.38),
+    0 10px 20px rgba(0, 0, 0, 0.2);
 }
 
-.vote-order-house {
-  display: grid;
-  gap: 3px;
-  min-width: 0;
-}
-
-.vote-order-house strong,
-.vote-order-house small {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.vote-order-house strong {
-  color: var(--ink-strong);
-  font-size: 0.92rem;
-  font-weight: 950;
-}
-
-.vote-order-house small {
-  color: var(--muted);
-  font-size: 0.74rem;
-  font-weight: 820;
-}
-
-.vote-order-readout {
-  grid-template-columns: repeat(auto-fit, minmax(88px, 1fr));
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.vote-order-readout li {
-  display: flex;
+.vote-order-actions {
   align-items: center;
-  gap: 6px;
-  min-width: 0;
-  border: 1px solid rgba(234, 223, 189, 0.14);
-  border-radius: 999px;
-  background: rgba(234, 223, 189, 0.06);
-  padding: 5px 8px;
+  justify-content: flex-end;
+  padding-top: 2px;
 }
 
-.vote-order-readout-crest {
-  display: grid;
-  place-items: center;
-  flex: 0 0 22px;
-  width: 22px;
-  height: 22px;
-  border-radius: 50%;
-  background: rgba(216, 178, 90, 0.14);
-  color: var(--gold-2);
-  box-shadow: inset 0 0 0 1px rgba(216, 178, 90, 0.24);
+.vote-order-actions button {
+  width: auto;
+  min-width: 104px;
+  padding-inline: 18px;
 }
 
-.vote-order-readout strong {
-  min-width: 0;
-  overflow: hidden;
-  color: var(--ink-strong);
-  font-size: 0.78rem;
-  font-weight: 900;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.vote-order-actions .primary-button {
+  min-width: 132px;
 }
-

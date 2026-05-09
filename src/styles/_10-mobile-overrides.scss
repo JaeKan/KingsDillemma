@@ -31,8 +31,10 @@
     font-size: 1.74rem;
   }
 
-  .council-sidebar {
+  .council-sidebar-column {
     position: static;
+    height: auto;
+    max-height: none;
   }
 
   .council-layout,
@@ -219,32 +221,26 @@
   }
 
   .vote-order-ring {
-    --seat-width: 106px;
-    --seat-height: 52px;
-    --seat-radius: clamp(58px, 20vw, 82px);
-    width: min(100%, calc((var(--seat-radius) * 2) + var(--seat-width) + 20px));
+    --seat-size: 54px;
+    --seat-badge-size: 44px;
+    --seat-radius: clamp(82px, 25vw, 106px);
+    width: min(100%, calc((var(--seat-radius) * 2) + var(--seat-size) + 20px));
+  }
+
+  .vote-order-seat-preview {
+    --seat-size: 54px;
+    --seat-badge-size: 44px;
   }
 
   .vote-order-seat {
-    grid-template-columns: 26px minmax(0, 1fr);
-    gap: 5px;
-    width: var(--seat-width);
-    min-height: var(--seat-height);
-    padding: 6px;
+    width: var(--seat-size);
+    height: var(--seat-size);
   }
 
   .vote-order-rank {
-    width: 26px;
-    height: 26px;
+    width: var(--seat-badge-size);
+    height: var(--seat-badge-size);
     font-size: 0.62rem;
-  }
-
-  .vote-order-house strong {
-    font-size: 0.74rem;
-  }
-
-  .vote-order-house small {
-    display: none;
   }
 
   .dilemma-history-list {
@@ -274,11 +270,11 @@
   }
 
   .achievement-progress-row--challenge .achievement-challenge-status {
-    justify-self: start;
+    justify-self: end;
   }
 
   .achievement-effect-row {
-    grid-template-columns: 34px minmax(0, 1fr) 32px;
+    grid-template-columns: 34px minmax(0, 1fr) 34px;
   }
 
   .achievement-effect-row-icon {
@@ -385,6 +381,22 @@
   .inventory-actions>div,
   .session-end-actions {
     flex-direction: column;
+  }
+
+  .vote-order-dialog .vote-order-actions {
+    flex-direction: row;
+    justify-content: flex-end;
+    gap: 8px;
+  }
+
+  .vote-order-dialog .vote-order-actions button {
+    width: auto;
+    flex: 0 0 auto;
+    min-width: 104px;
+  }
+
+  .vote-order-dialog .vote-order-actions .primary-button {
+    min-width: 132px;
   }
 }
 

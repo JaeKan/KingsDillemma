@@ -52,7 +52,7 @@
   align-items: stretch;
   gap: 7px 9px;
   background: rgba(17, 25, 24, 0.94);
-  padding: 9px;
+  padding: 12px;
 }
 
 .inventory-panel.has-house-profile {
@@ -103,7 +103,7 @@
   background:
     linear-gradient(135deg, rgba(216, 178, 90, 0.08), rgba(192, 79, 69, 0.055)),
     rgba(234, 223, 189, 0.055);
-  padding: 11px;
+  padding: 12px;
 }
 
 .dilemma-summary-head {
@@ -115,6 +115,35 @@
 }
 
 .dilemma-summary-head>div:first-child {
+  min-width: 0;
+}
+
+.panel-title-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.panel-title-icon {
+  display: inline-grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border: 1px solid rgba(216, 178, 90, 0.32);
+  border-radius: 50%;
+  background: rgba(216, 178, 90, 0.1);
+  color: var(--gold-2);
+}
+
+.panel-title-icon svg {
+  width: 24px;
+  height: 24px;
+}
+
+.panel-title-row h2,
+.panel-title-row h3 {
   min-width: 0;
 }
 
@@ -132,6 +161,10 @@
   align-items: center;
   justify-content: flex-end;
   gap: 7px;
+}
+
+.dilemma-summary-actions>.app-tooltip-anchor {
+  flex: 0 0 auto;
 }
 
 .dilemma-status-pill {
@@ -487,6 +520,12 @@
   border-radius: var(--radius);
   background: rgba(5, 9, 9, 0.3);
   aspect-ratio: 4 / 3;
+}
+
+.dilemma-photo-strip>.app-tooltip-anchor,
+.dilemma-photo-strip>.app-tooltip-anchor>a {
+  display: block;
+  min-width: 0;
 }
 
 .dilemma-photo-strip img,
@@ -850,6 +889,7 @@
 }
 
 .house-detail-section .house-profile-story {
+  margin-top: 6px;
   margin-bottom: auto;
 }
 
@@ -857,15 +897,18 @@
   grid-template-columns: 1fr;
 }
 
-.house-detail-section .house-profile-field {
+.house-detail-section .house-profile-value-chip {
   padding: 5px 7px;
+}
+
+.house-detail-section .house-alignment-panel {
+  align-self: start;
+  align-content: start;
+  margin-top: 8px;
 }
 
 .house-detail-section .house-alignment-track {
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  align-self: start;
-  align-content: start;
-  margin-top: 8px;
 }
 
 .house-detail-section .house-alignment-row {
@@ -922,7 +965,7 @@
 }
 
 .progress-section.has-own-choice .progress-choice-layout {
-  grid-template-columns: minmax(420px, 1fr) minmax(320px, 360px);
+  grid-template-columns: minmax(0, 1fr) minmax(0, min(360px, 42%));
   align-items: start;
 }
 
@@ -945,8 +988,15 @@
   min-width: 0;
 }
 
-.agenda-section-title>span:first-child {
+.agenda-section-title>span:first-child,
+.agenda-section-title-main {
   min-width: 0;
+}
+
+.agenda-section-title-main {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .agenda-type-legend {
@@ -1415,7 +1465,9 @@ $score-ledger-group-padding: 4px;
 
 .open-agenda-ledger,
 .achievement-ledger,
-.achievement-primary-list {
+.achievement-primary-panel,
+.achievement-primary-list,
+.alignment-achievement-panel {
   display: grid;
   gap: 6px;
   min-width: 0;
@@ -1426,8 +1478,18 @@ $score-ledger-group-padding: 4px;
 }
 
 .achievement-ledger {
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 360px), 1fr));
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   align-items: stretch;
+}
+
+.achievement-primary-panel,
+.alignment-achievement-panel {
+  align-content: start;
+  min-height: 0;
+}
+
+.alignment-achievement-panel {
+  grid-template-rows: auto minmax(0, 1fr);
 }
 
 .achievement-panel-heading {
@@ -1439,6 +1501,40 @@ $score-ledger-group-padding: 4px;
 
 .achievement-panel-heading h3 {
   margin: 0;
+}
+
+.achievement-section-heading {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 6px;
+  min-width: 0;
+}
+
+.achievement-section-heading h3 {
+  margin: 0;
+}
+
+.icon-help-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 22px;
+  min-width: 22px;
+  height: 22px;
+  min-height: 22px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--gold-2);
+  cursor: pointer;
+  padding: 0;
+}
+
+.icon-help-button svg {
+  width: 15px;
+  height: 15px;
 }
 
 .achievement-help-button {
@@ -1493,16 +1589,22 @@ $score-ledger-group-padding: 4px;
 }
 
 .open-agenda-token-heading {
-  display: grid;
-  gap: 2px;
+  display: inline-flex;
+  flex-direction: row;
+  align-items: baseline;
+  gap: 0.45em;
+  white-space: nowrap;
   color: var(--ink-strong);
-  font-size: 0.7rem;
+  font-size: clamp(0.84rem, 2.4vw, 0.98rem);
   font-weight: 900;
+  line-height: 1.15;
 }
 
 .open-agenda-token-heading strong {
   color: var(--agenda-tone);
-  font-size: 0.68rem;
+  font-size: 1em;
+  font-weight: 950;
+  font-variant-numeric: tabular-nums;
 }
 
 .resource-token-list {
@@ -1511,6 +1613,14 @@ $score-ledger-group-padding: 4px;
   gap: 4px 5px;
   justify-self: end;
   max-width: 100%;
+}
+
+.resource-token-list>.app-tooltip-anchor {
+  width: 100%;
+}
+
+.resource-token-list .resource-token-chip {
+  width: 100%;
 }
 
 .resource-token-chip {
@@ -1562,11 +1672,16 @@ $score-ledger-group-padding: 4px;
   min-height: var(--achievement-row-min-height, 56px);
   color: var(--ink-strong);
   text-align: left;
-  padding: 5px 6px;
+  padding: 5px 12px 5px 6px;
 }
 
 .achievement-toggle-row {
-  grid-template-columns: minmax(0, 1fr) minmax(52px, max-content) max-content;
+  grid-template-columns: minmax(0, 1fr) max-content;
+}
+
+.achievement-toggle-row>.app-tooltip-anchor,
+.achievement-progress-row>.app-tooltip-anchor {
+  justify-self: end;
 }
 
 .achievement-toggle-main {
@@ -1676,11 +1791,6 @@ $score-ledger-group-padding: 4px;
   max-width: 100%;
 }
 
-.achievement-detail-marker {
-  color: rgba(234, 223, 189, 0.72);
-  font-weight: 950;
-}
-
 .achievement-detail-preview .achievement-effect-badge {
   width: 22px;
   height: 18px;
@@ -1731,6 +1841,11 @@ $score-ledger-group-padding: 4px;
   background: rgba(216, 178, 90, 0.14);
 }
 
+.icon-help-button:hover {
+  background: rgba(216, 178, 90, 0.12);
+  color: var(--gold);
+}
+
 .achievement-help-button:hover:not(:disabled) {
   border-color: rgba(151, 72, 58, 0.5);
   background: rgba(242, 214, 134, 0.78);
@@ -1756,11 +1871,11 @@ $score-ledger-group-padding: 4px;
   gap: 8px;
   min-width: 0;
   min-height: var(--achievement-row-min-height, 56px);
-  padding: 5px 6px;
+  padding: 5px 12px 5px 6px;
 }
 
 .achievement-progress-row--challenge {
-  grid-template-columns: minmax(0, 1fr) max-content max-content minmax(52px, max-content) max-content;
+  grid-template-columns: minmax(0, 1fr) max-content max-content max-content;
 }
 
 .achievement-progress-row--challenge-complete {
@@ -1812,7 +1927,8 @@ $score-ledger-group-padding: 4px;
 }
 
 .achievement-toggle-main:focus-visible,
-.achievement-edit-button:focus-visible {
+.achievement-edit-button:focus-visible,
+.icon-help-button:focus-visible {
   outline: 2px solid rgba(216, 178, 90, 0.68);
   outline-offset: 2px;
 }
@@ -1846,16 +1962,18 @@ $score-ledger-group-padding: 4px;
   border: 0;
   border-radius: 4px;
   background: transparent;
-  color: inherit;
+  color: var(--muted);
   cursor: pointer;
   font: inherit;
+  min-width: 0;
+  padding: 0;
 }
 
 .achievement-challenge-status small {
   display: block;
   color: var(--muted);
-  font-size: 0.66rem;
-  font-weight: 850;
+  font-size: 0.82rem;
+  font-weight: 980;
   text-align: right;
   white-space: nowrap;
 }
@@ -1915,23 +2033,23 @@ $score-ledger-group-padding: 4px;
 
 .alignment-achievement-list {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   grid-auto-rows: minmax(0, 1fr);
   gap: 4px;
-  height: 100%;
+  min-height: 0;
 }
 
 .progress-section.has-own-choice .alignment-achievement-list {
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .alignment-progress-row {
   display: grid;
-  grid-template-columns: minmax(72px, 1fr) max-content max-content;
+  grid-template-columns: minmax(0, 1fr) max-content max-content;
   align-items: center;
   gap: 5px;
   min-width: 0;
-  padding: 5px 6px;
+  padding: 5px 12px 5px 6px;
 }
 
 .alignment-progress-row.complete {
@@ -1989,4 +2107,3 @@ $score-ledger-group-padding: 4px;
   min-height: 34px;
   font-size: 0.82rem;
 }
-

@@ -377,6 +377,8 @@ export const AGENDAS: Agenda[] = [
   },
 ];
 
+const FIXED_ALIGNMENT_ORDER = ["extremist", "rebel", "opulent", "opportunist", "moderate", "greedy"];
+
 export const PERSONAL_RESOURCE_TRACKS = [
   { id: "influence", label: "영향력" },
   { id: "wealth", label: "부" },
@@ -602,7 +604,7 @@ export function createDefaultHouseProgress(now = new Date().toISOString()): Hous
 }
 
 function getDefaultAlignmentOrder() {
-  return AGENDAS.map((agenda) => agenda.id);
+  return [...FIXED_ALIGNMENT_ORDER];
 }
 
 function createDefaultAlignmentReward(): AlignmentReward {
@@ -1092,6 +1094,29 @@ export function publishDilemmaRecord(
     dilemmaLeader: null,
     dilemmaModerator: null,
     dilemmaHistory: upsertDilemmaHistory(state.dilemmaHistory, nextDilemma, houseId, getHouseLabel(state, houseId), now),
+    version: state.version + 1,
+    updatedAt: now,
+  };
+}
+
+export function resetDilemmaRecord(
+  state: GameState,
+  houseId: HouseId,
+  now = new Date().toISOString(),
+): GameState {
+  assertCanEditDilemma(state);
+
+  const currentDilemma = sanitizeDilemmaRecord(state.dilemma, now);
+
+  if (currentDilemma.editLock && currentDilemma.editLock.houseId !== houseId) {
+    throw new AgendaStateError(`${currentDilemma.editLock.houseName} 가문이 딜레마를 수정 중입니다.`, 409);
+  }
+
+  return {
+    ...state,
+    dilemma: createDefaultDilemmaRecord(now),
+    dilemmaLeader: null,
+    dilemmaModerator: null,
     version: state.version + 1,
     updatedAt: now,
   };
@@ -2532,7 +2557,7 @@ function sanitizeHouseProgress(value: unknown, now: string): HouseProgress {
   const houseAchievementComplete = Array.isArray(candidate.houseAchievementComplete)
     ? candidate.houseAchievementComplete
     : [];
-  const narrativeAchievementDetail = sanitizeAchievementDetail(candidate.narrativeAchievementDetail, 1);
+  const narrativeAchievementDetail = sanitizeNarrativeAchievementDetail(candidate.narrativeAchievementDetail);
   const narrativeAchievementCount = sanitizeCounter(
     candidate.narrativeAchievementCount,
     narrativeAchievementDetail.requiredCount,
@@ -2595,24 +2620,7 @@ function sanitizeHouseProgress(value: unknown, now: string): HouseProgress {
 }
 
 function sanitizeAlignmentOrder(value: unknown) {
-  const defaultOrder = getDefaultAlignmentOrder();
-  const allowed = new Set(defaultOrder);
-  const candidate = Array.isArray(value) ? value : defaultOrder;
-  const next: string[] = [];
-
-  for (const item of candidate) {
-    if (typeof item === "string" && allowed.has(item) && !next.includes(item)) {
-      next.push(item);
-    }
-  }
-
-  for (const agendaId of defaultOrder) {
-    if (!next.includes(agendaId)) {
-      next.push(agendaId);
-    }
-  }
-
-  return next;
+  return getDefaultAlignmentOrder();
 }
 
 function sanitizeAlignmentReward(value: unknown, fallback: AlignmentReward): AlignmentReward {
@@ -2648,6 +2656,13 @@ function sanitizeAchievementDetail(value: unknown, fallbackRequiredCount: number
     effectIcon: primaryEffect.icon,
     effectAmount: primaryEffect.amount,
     effectText: hasEffectEntries ? formatAchievementEffectEntriesText(effectEntries) : legacyEffectText,
+  };
+}
+
+function sanitizeNarrativeAchievementDetail(value: unknown): AchievementDetail {
+  return {
+    ...sanitizeAchievementDetail(value, 1),
+    requiredCount: 1,
   };
 }
 

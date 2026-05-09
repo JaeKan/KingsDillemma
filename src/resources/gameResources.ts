@@ -76,10 +76,10 @@ export const inventoryCounterMax = Object.fromEntries(inventoryCounters.map((cou
 
 export const houseAlignmentRows = [
   { id: "Extremist", agendaId: "extremist", label: "Extremist", koreanLabel: "극단주의자" },
-  { id: "Opulent", agendaId: "opulent", label: "Opulent", koreanLabel: "재력가" },
-  { id: "Moderate", agendaId: "moderate", label: "Moderate", koreanLabel: "중도주의자" },
   { id: "Rebel", agendaId: "rebel", label: "Rebel", koreanLabel: "반역자" },
+  { id: "Opulent", agendaId: "opulent", label: "Opulent", koreanLabel: "재력가" },
   { id: "Opportunist", agendaId: "opportunist", label: "Opportunist", koreanLabel: "기회주의자" },
+  { id: "Moderate", agendaId: "moderate", label: "Moderate", koreanLabel: "중도주의자" },
   { id: "Greedy", agendaId: "greedy", label: "Greedy", koreanLabel: "탐욕가" },
 ];
 
@@ -107,9 +107,8 @@ export const valueMentionItems = [
   ...tokenCounters.map((counter) => ({ ...counter, category: "가문 값" })),
   ...scoreTrackCounters.map((counter) => ({ ...counter, category: "가문 값" })),
   ...resourceCounters.map((counter) => ({ ...counter, category: "왕국 자원", requiresAmount: false })),
-  { id: "balance", label: "저울", max: 99, icon: "balance", tone: "balance", category: "딜레마 투표" },
-  { id: "stability", label: "안정도", max: 17, icon: "balance", tone: "stability", category: "왕국 상태" },
-  { id: "momentum", label: "모멘텀", max: 9, icon: "turn", tone: "momentum", category: "왕국 상태" },
+  { id: "stability", label: "안정도 트랙", max: 17, icon: "balance", tone: "stability", category: "왕국 상태", requiresAmount: false },
+  { id: "momentum", label: "모멘텀", max: 9, icon: "turn", tone: "momentum", category: "왕국 상태", requiresAmount: false },
 ];
 
 export const openAgendaTokenTypes = [
