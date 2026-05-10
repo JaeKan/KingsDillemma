@@ -161,6 +161,10 @@ export const HOUSE_CATALOG = [
 
 export const HOUSE_BY_ID = new Map(HOUSE_CATALOG.map((house) => [house.id, house]));
 
+/**
+ * @param {unknown} value
+ * @returns {value is string}
+ */
 export function isHouseId(value) {
   return typeof value === "string" && HOUSE_BY_ID.has(value);
 }

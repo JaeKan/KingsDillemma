@@ -675,6 +675,36 @@
   padding-top: 0;
 }
 
+.achievement-condition-field .achievement-condition-preview {
+  min-width: 0;
+  max-width: 100%;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: keep-all;
+}
+
+.achievement-condition-field .mention-rendered-preview {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.mention-rendered-preview {
+  display: block;
+  min-width: 0;
+}
+
+.dilemma-field .mention-rendered-preview {
+  min-width: 0;
+}
+
+.dilemma-mention-token-preview {
+  min-width: 0;
+  max-width: 100%;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: keep-all;
+}
+
 .mention-token-view {
   display: inline-flex;
   align-items: center;

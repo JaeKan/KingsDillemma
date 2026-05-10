@@ -30,7 +30,7 @@ const store: AgendaStateStore = {
 app.disable("x-powered-by");
 app.set("trust proxy", true);
 
-app.get("/api/agenda/events", async (req, res) => {
+app.get("/api/agenda/events", async (req: express.Request, res: express.Response) => {
   try {
     const state = normalizeState(await store.get());
     const houseId = getAuthenticatedHouse(await toWebRequest(req), {}, state);
@@ -47,7 +47,7 @@ app.get("/api/agenda/events", async (req, res) => {
   }
 });
 
-app.all("/api/agenda", async (req, res) => {
+app.all("/api/agenda", async (req: express.Request, res: express.Response) => {
   try {
     const response = await handleAgendaRequest(
       await toWebRequest(req),
@@ -81,7 +81,7 @@ app.use(
 app.use(
   express.static(distDir, {
     index: false,
-    setHeaders(res, filePath) {
+    setHeaders(res: express.Response, filePath: string) {
       if (filePath.endsWith(".html")) {
         res.setHeader("Cache-Control", "public, max-age=0, must-revalidate");
       }
@@ -89,7 +89,7 @@ app.use(
   }),
 );
 
-app.use((req, res, next) => {
+app.use((req: express.Request, res: express.Response, next: express.NextFunction) => {
   if (req.path.startsWith("/api/")) {
     res.status(404).json({ ok: false, error: "Not found." });
     return;
@@ -101,7 +101,7 @@ app.use((req, res, next) => {
   }
 
   res.setHeader("Cache-Control", "public, max-age=0, must-revalidate");
-  res.sendFile(indexHtmlPath, (error) => {
+  res.sendFile(indexHtmlPath, (error: any) => {
     if (error) {
       next(error);
     }
@@ -214,7 +214,7 @@ async function toWebRequest(req: express.Request) {
   };
 
   if (req.method !== "GET" && req.method !== "HEAD") {
-    init.body = await readBody(req);
+    init.body = (await readBody(req)) as any;
   }
 
   return new Request(`${protocol}://${requestHost}${req.originalUrl}`, init);

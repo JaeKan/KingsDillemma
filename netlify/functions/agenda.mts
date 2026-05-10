@@ -62,7 +62,9 @@ function getAgendaStore(deployContext: string | undefined): AgendaStateStore {
 
   return {
     get: () => blobStore.get(STORE_KEY, { type: "json" }),
-    set: (state) => blobStore.setJSON(STORE_KEY, state),
+    set: async (state) => {
+      await blobStore.setJSON(STORE_KEY, state);
+    },
   };
 }
 

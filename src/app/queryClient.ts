@@ -1,7 +1,7 @@
 import { QueryClient } from "@tanstack/react-query";
 
 export const queryClient =
-  globalThis.__KINGS_DILEMMA_QUERY_CLIENT__ ??
+  (globalThis as any).__KINGS_DILEMMA_QUERY_CLIENT__ ??
   new QueryClient({
     defaultOptions: {
       queries: {
@@ -11,4 +11,4 @@ export const queryClient =
     },
   });
 
-globalThis.__KINGS_DILEMMA_QUERY_CLIENT__ = queryClient;
+(globalThis as any).__KINGS_DILEMMA_QUERY_CLIENT__ = queryClient;

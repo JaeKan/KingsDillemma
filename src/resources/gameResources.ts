@@ -12,6 +12,9 @@ export const phaseCopy = {
   complete: "리더와 중재자가 지정한 값으로 이번 라운드의 딜레마를 작성합니다.",
 };
 
+/** 가문 목록·인원수는 `shared/houses.mjs`가 원본입니다. 앱에서는 여기서만 가져가세요. */
+export { HOUSE_BY_ID, HOUSE_CATALOG, REQUIRED_HOUSE_COUNT } from "../../shared/houses.mjs";
+
 export const defaultNamePattern = /^player\s*[1-5]$/i;
 export const sessionEndUnavailableMessage = "비밀 의제 배정이 끝난 뒤 회기를 종료할 수 있습니다.";
 export const sessionEndChecklistItems = [
@@ -188,10 +191,10 @@ export const specialAbilityLegendRows = [
 export const achievementEffectAmountMax = 99;
 export const achievementEffectEntryMax = 8;
 export const achievementEffectOptions = [
-  { id: "", label: "시점 없음", icon: "seal", memo: "적용 시점 미지정" },
-  { id: "instant", label: "즉시", legendIcon: "instant", memo: "작성 후 즉시 처리" },
-  { id: "start", label: "각 게임 시작 시", legendIcon: "start", memo: "각 게임 시작 때 처리" },
-  { id: "condition", label: "특정 조건 만족 시", legendIcon: "condition", memo: "조건 충족 또는 종료 때 처리" },
+  { id: "", label: "시점 없음", icon: "seal", memo: "적용 시점 미지정", amount: false },
+  { id: "instant", label: "즉시", legendIcon: "instant", memo: "작성 후 즉시 처리", amount: true },
+  { id: "start", label: "각 게임 시작 시", legendIcon: "start", memo: "각 게임 시작 때 처리", amount: true },
+  { id: "condition", label: "특정 조건 만족 시", legendIcon: "condition", memo: "조건 충족 또는 종료 때 처리", amount: true },
 ];
 export const achievementEffectSelectableOptions = achievementEffectOptions.filter((option) => option.id);
 export const achievementEffectOptionById = Object.fromEntries(achievementEffectOptions.map((option) => [option.id, option]));
@@ -215,3 +218,166 @@ export const agendaScoringZones = {
     { from: 13, to: 17 },
   ],
 };
+
+// ── 점수 안내 다이얼로그 (ScoreGuides) ─────────────────────────────────
+
+export const scoreGuideDialogLabels = {
+  sectionLabel: "점수 안내",
+  confirm: "확인",
+} as const;
+
+export type ScoreGuideFormulaPart =
+  | { kind: "item"; text: string }
+  | { kind: "op"; text: string }
+  | { kind: "result"; text: string };
+
+export type ScoreGuideListSection = {
+  heading: string;
+  items: readonly string[];
+};
+
+export type ScoreGuideTableSection = {
+  heading: string;
+  paragraph?: string;
+  table: {
+    headers: readonly string[];
+    rows: readonly { rowHeader: string; cells: readonly string[] }[];
+  };
+};
+
+export type ScoreGuideSection = ScoreGuideListSection | ScoreGuideTableSection;
+
+export const openAgendaScoreGuideContent = {
+  sealToken: "scroll" as const,
+  title: "공개 의제 토큰 점수",
+  copy:
+    "공개 의제 토큰은 크로니클 스티커로 배정되는 공개 목표입니다. 게임 종료 시 해당 자원 마커의 최종 순위에 따라 긍정 토큰은 보너스, 부정 토큰은 감점을 줍니다.",
+  formulaAriaLabel: "공개 의제 점수 공식",
+  formula: [
+    { kind: "item" as const, text: "긍정: 1위 +3 / 2위 +1" },
+    { kind: "op" as const, text: "·" },
+    { kind: "item" as const, text: "부정: 최하위 -3 / 뒤에서 2위 -1" },
+  ] satisfies readonly ScoreGuideFormulaPart[],
+  sections: [
+    {
+      heading: "1. 토큰 배정",
+      items: [
+        "각 자원마다 가장 최근의 긍정 크로니클 스티커 서명자가 해당 긍정 공개 의제 토큰을 받습니다.",
+        "각 자원마다 가장 최근의 부정 크로니클 스티커 서명자가 해당 부정 공개 의제 토큰을 받습니다.",
+        "현재 게임에 참여하지 않는 가문의 서명은 배정할 때 무시합니다.",
+        "한 가문은 한 게임에서 긍정 최대 2개, 부정 최대 2개만 보유합니다. 초과분은 선택해서 버립니다.",
+      ],
+    },
+    {
+      heading: "2. 종료 시 점수",
+      items: [
+        "긍정 공개 의제는 해당 자원이 가장 높으면 +3, 두 번째로 높으면 +1입니다.",
+        "부정 공개 의제는 해당 자원이 가장 낮으면 -3, 두 번째로 낮으면 -1입니다.",
+        "동률이면 동률인 모든 자원이 같은 보너스 또는 패널티를 적용합니다.",
+        "같은 자원이 위에서 두 번째이면서 아래에서 두 번째일 수도 있으므로, 긍정/부정 토큰은 각각 따로 계산합니다.",
+      ],
+    },
+  ] satisfies readonly ScoreGuideSection[],
+};
+
+export const secretAgendaScoreGuideContent = {
+  sealToken: "scroll" as const,
+  title: "비밀 의제 점수",
+  copy:
+    "비밀 의제 카드는 게임 종료 시 각 가문의 득점 원천입니다. 카드의 자원 목표 점수와 코인 순위 점수를 각각 계산해서 더한 값을 비밀 의제 점수로 기록합니다.",
+  formulaAriaLabel: "비밀 의제 점수 공식",
+  formula: [
+    { kind: "item" as const, text: "자원 목표 점수" },
+    { kind: "op" as const, text: "+" },
+    { kind: "item" as const, text: "코인 순위 점수" },
+    { kind: "result" as const, text: "= 비밀 의제 점수" },
+  ] satisfies readonly ScoreGuideFormulaPart[],
+  sections: [
+    {
+      heading: "1. 자원 목표 점수",
+      items: [
+        "게임이 끝난 시점의 공용 보드 5개 자원 마커 최종 위치를 봅니다.",
+        "자신의 비밀 의제 카드에 표시된 자원 목표 표와 그 위치를 대조합니다.",
+        "표가 요구하는 구역 안에 들어간 자원 마커 수에 따라 카드의 해당 득점을 받습니다.",
+      ],
+    },
+    {
+      heading: "2. 코인 순위 점수",
+      items: [
+        "각 가문이 게임 종료 시 가문 스크린 뒤에 숨긴 코인 수를 비교합니다.",
+        "비밀 의제 카드 하단의 코인 순위 표에서 1위, 2위, 3위에 해당하는 점수를 받습니다.",
+        "카드마다 코인 순위 점수가 다르므로 같은 순위라도 비밀 의제에 따라 받는 점수가 달라집니다.",
+        "1위부터 3위 안에 들지 못하면 카드에 표시된 코인 순위 점수가 없으므로 0점으로 처리합니다.",
+      ],
+    },
+    {
+      heading: "3. 동률 처리",
+      items: [
+        "코인 수가 같으면 동률인 모든 가문이 같은 순위를 공유합니다.",
+        "동률인 가문들은 각자 자기 비밀 의제 카드의 해당 순위 점수를 받습니다.",
+        "자원 위치 동률은 묶인 자원이 같은 위치를 공유합니다.",
+      ],
+    },
+  ] satisfies readonly ScoreGuideSection[],
+};
+
+export const mainScoreGuideContent = {
+  sealToken: "balance" as const,
+  title: "점수 산정 방식",
+  copy:
+    "왕이 사망하거나 안정도 트랙 끝에 도달해 게임이 종료되면 점수를 계산합니다. 중간 저장으로 세션만 멈춘 경우에는 점수를 산정하지 않습니다.",
+  formulaAriaLabel: "최종 득점 공식",
+  formula: [
+    { kind: "item" as const, text: "비밀 의제: 자원 목표 + 코인 순위" },
+    { kind: "op" as const, text: "+" },
+    { kind: "item" as const, text: "공개 의제" },
+    { kind: "op" as const, text: "+" },
+    { kind: "item" as const, text: "권력 보너스" },
+    { kind: "result" as const, text: "= 합계" },
+  ] satisfies readonly ScoreGuideFormulaPart[],
+  sections: [
+    {
+      heading: "1. 득점 합산",
+      items: [
+        "비밀 의제는 자원 목표 점수와 코인 순위 점수를 더해 산정합니다.",
+        "자원 목표는 공용 보드의 최종 자원 위치를 비밀 의제 카드의 자원 조건과 대조합니다.",
+        "코인 순위는 남은 코인이 1위, 2위, 3위인지에 따라 카드 하단의 순위 점수를 받습니다.",
+        "긍정 공개 의제는 해당 자원이 가장 높으면 +3, 두 번째로 높으면 +1입니다.",
+        "부정 공개 의제는 해당 자원이 가장 낮으면 -3, 두 번째로 낮으면 -1입니다.",
+        "권력 보너스는 남은 권력이 가장 많은 가문이 +2, 두 번째 가문이 +1입니다.",
+      ],
+    },
+    {
+      heading: "2. 비밀 의제 점수",
+      items: [
+        "각 비밀 의제 카드는 자원 목표와 코인 순위 목표 두 가지 점수 조건을 가집니다.",
+        "자원 목표는 게임 종료 시 공용 보드의 자원 마커 위치를 카드의 자원 구간/표와 대조해 계산합니다.",
+        "코인 순위 목표는 남은 코인이 다른 가문과 비교해 몇 위인지 보고 카드 하단의 1위, 2위, 3위 점수를 받습니다.",
+        "코인 순위가 동률이면 동률인 모든 가문이 같은 순위 점수를 받습니다.",
+      ],
+    },
+    {
+      heading: "3. 순위와 동률",
+      items: [
+        "자원 위치와 코인/권력 수량이 동률이면 묶인 대상이 같은 순위 보너스 또는 패널티를 받습니다.",
+        "득점 합계가 가장 높은 가문이 이번 게임의 승자입니다. 득점 동률이면 승리를 공유합니다.",
+        "마지막 순위는 항상 존재합니다. 5인 게임에서 4인 동률 뒤에 아무도 없으면 그 동률을 Last로 봅니다.",
+      ],
+    },
+    {
+      heading: "4. 명망/갈망 기록",
+      paragraph:
+        "이 앱은 득점 합계와 순위까지만 자동 계산합니다. 명망/갈망은 득점 순위와 종료 조건을 아래 표에 대입해 각 가문 값에 직접 반영합니다.",
+      table: {
+        headers: ["조건", "1위", "2위", "3위", "4위", "Last"],
+        rows: [
+          { rowHeader: "왕 사망", cells: ["명망 5", "명망 4", "명망 2, 갈망 1", "명망 2, 갈망 1", "갈망 2"] },
+          { rowHeader: "상단 안정도", cells: ["명망 3", "명망 2", "명망 1", "명망 1", "갈망 2"] },
+          { rowHeader: "하단 안정도", cells: ["갈망 3", "갈망 2", "갈망 1", "갈망 1", "명망 2"] },
+        ],
+      },
+    },
+  ] satisfies readonly ScoreGuideSection[],
+};
+
+export { ko, type Ko } from "./ko";

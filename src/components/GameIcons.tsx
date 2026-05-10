@@ -51,7 +51,7 @@ const LEADER_FIST_EMOJI = "\u270A";
 
 const ModeratorTokenMuiIcon = GavelOutlinedIcon;
 
-export function AchievementEffectOptionIcon({ option }) {
+export function AchievementEffectOptionIcon({ option }: { option: any }) {
   if (option.legendIcon) {
     return <SpecialAbilityLegendIcon type={option.legendIcon} />;
   }
@@ -59,7 +59,7 @@ export function AchievementEffectOptionIcon({ option }) {
   return <TokenIcon type={option.icon || "seal"} />;
 }
 
-export function SpecialAbilityLegendIcon({ type }) {
+export function SpecialAbilityLegendIcon({ type }: { type: string }) {
   if (type === "prestigeCrave") {
     return (
       <span className="legend-icon-group" aria-hidden="true">
@@ -103,8 +103,8 @@ export function SpecialAbilityLegendIcon({ type }) {
   return <RulebookAbilityImage className={`legend-rule-icon ${type}`} type={type} />;
 }
 
-export function RulebookAbilityImage({ className, type }) {
-  const src = specialAbilityIconUrls[type];
+export function RulebookAbilityImage({ className, type }: { className: string; type: string }) {
+  const src = (specialAbilityIconUrls as any)[type];
 
   if (!src) {
     return null;
@@ -117,7 +117,7 @@ export function RulebookAbilityImage({ className, type }) {
   );
 }
 
-export function TokenIcon({ type }) {
+export function TokenIcon({ type }: { type: string }) {
   if (type === "crown" || type === "prestige" || type === "crave") {
     return <CrownIcon tone={type} />;
   }
@@ -130,7 +130,7 @@ export function TokenIcon({ type }) {
     );
   }
 
-  const Icon = {
+  const Icon = ({
     balance: BalanceOutlinedIcon,
     castle: CastleOutlinedIcon,
     coin: PaidOutlinedIcon,
@@ -169,7 +169,7 @@ export function TokenIcon({ type }) {
     warning: WarningAmberOutlinedIcon,
     wealth: DiamondOutlinedIcon,
     welfare: GrassOutlinedIcon,
-  }[type] || AddOutlinedIcon;
+  } as any)[type] || AddOutlinedIcon;
 
   return <Icon aria-hidden="true" focusable="false" />;
 }
@@ -193,8 +193,8 @@ export function CrownIcon({ tone = "crown" }) {
   );
 }
 
-export function HouseIcon({ motif }) {
-  const Icon = {
+export function HouseIcon({ motif }: { motif?: string }) {
+  const Icon = ({
     boar: PetsOutlinedIcon,
     keys: KeyOutlinedIcon,
     lobster: AnchorOutlinedIcon,
@@ -207,7 +207,7 @@ export function HouseIcon({ motif }) {
     sword: MilitaryTechOutlinedIcon,
     tree: ForestOutlinedIcon,
     turtle: CastleOutlinedIcon,
-  }[motif] || CastleOutlinedIcon;
+  } as any)[motif || ""] || CastleOutlinedIcon;
 
   return <Icon aria-hidden="true" focusable="false" />;
 }

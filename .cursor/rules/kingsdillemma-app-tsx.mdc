@@ -1,0 +1,12 @@
+---
+description: src/App.tsx 대용량 — 검색 후 부분 읽기만
+globs: src/App.tsx
+alwaysApply: false
+---
+
+# `src/App.tsx` (~3766줄)
+
+- 토큰·반복 비용을 줄이려면 **전체 파일 로드를 피한다.**
+- **절차**: `grep` / 레포·시맨틱 검색으로 심벌·핸들러·문자열 위치를 찾는다 → 해당 구간만 **부분 읽기**(`offset`/`limit`, 도구에서 지원 시) → 최소 diff로 수정.
+- 새 블록이 크면 **별도 컴포넌트 파일**(`src/components/` 등)로 빼는 것을 선호한다. 대규모 구조 분할은 명시된 태스크가 아니면 하지 않는다.
+- 상위 안내: [`AGENTS.md`](../../AGENTS.md) Part A 2번, 에이전트 코어: [`kingsdillemma-agent-core.mdc`](kingsdillemma-agent-core.mdc).

@@ -1,4 +1,5 @@
 import Matter from 'matter-js';
+import { ko } from './resources/gameResources';
 
 const RandomValue = Math.random;
 
@@ -18,7 +19,9 @@ interface ICarrot {
 }
 
 interface IParticle {
-  hue: number;
+  h: number;
+  s: number;
+  l: number;
   life: number;
   maxLife: number;
   size: number;
@@ -104,7 +107,7 @@ const lastClickTimes = new Float64Array(CARROT_MAX);
 
 let engine: Matter.Engine | null = null;
 let world: Matter.World | null = null;
-let bodies: (ICarrot | null)[] = new Array(CARROT_MAX).fill(null);
+const bodies: (ICarrot | null)[] = new Array(CARROT_MAX).fill(null);
 let count = 0;
 let frameId: number | null = null;
 let isInitialized = false;
@@ -121,7 +124,7 @@ let dragConstraint: Matter.Constraint | null = null;
 let dragStartPos = { x: 0, y: 0 };
 let isDragging = false;
 let suppressNextClick = false;
-let carrotInvokeCount = 0;
+let _carrotInvokeCount = 0;
 
 // Particles & Effects
 const particles: IParticle[] = [];
@@ -297,38 +300,92 @@ const refreshGlyphCache = (): void => {
 };
 
 // ═══════════════════════════════════════════════════════════════
-//  Particle System
+//  Particle System (당근 가루: 주황 톤, 지터, delta 스케일)
 // ═══════════════════════════════════════════════════════════════
 
-const spawnParticle = (x: number, y: number, vx: number, vy: number, hue: number, size = 3, life = 60): void => {
-  if (particles.length >= PARTICLE_MAX) particles.shift();
-  particles.push({ x, y, vx, vy, life, maxLife: life, size, hue });
+/** 당근/가루 색: 무지개가 아니라 주황~황토 범위로 클램프 + 분산 */
+const carrotDustHsl = (baseHue: number | undefined): { h: number; s: number; l: number } => {
+  const spread = 26;
+  const center =
+    baseHue != null && Number.isFinite(baseHue) ? baseHue % 360 : 26 + RandomValue() * 18;
+  let h = center + (RandomValue() - RandomValue()) * spread;
+  h = ((h % 360) + 360) % 360;
+  const s = 52 + RandomValue() * 34;
+  const l = 42 + RandomValue() * 28;
+  return { h, s, l };
 };
 
-const spawnExplosionParticles = (x: number, y: number, n = 25): void => {
+const spawnParticle = (
+  x: number,
+  y: number,
+  vx: number,
+  vy: number,
+  opts: { h: number; s: number; l: number; size?: number; life?: number },
+): void => {
+  const size = opts.size ?? 3;
+  const life = opts.life ?? 60;
+  if (particles.length >= PARTICLE_MAX) particles.shift();
+  particles.push({
+    x,
+    y,
+    vx,
+    vy,
+    h: opts.h,
+    s: opts.s,
+    l: opts.l,
+    size,
+    life,
+    maxLife: life,
+  });
+};
+
+const spawnExplosionParticles = (x: number, y: number, n = 25, baseHue?: number): void => {
+  const jitter = 9;
   for (let i = 0; i < n; i++) {
     const angle = RandomValue() * TWO_PI;
-    const speed = 1 + RandomValue() * 6;
-    spawnParticle(x, y, fastCos(angle) * speed, fastSin(angle) * speed, RandomValue() * 360, 2 + RandomValue() * 4, 40 + RandomValue() * 40);
+    const speed = 0.38 + RandomValue() ** 1.68 * 7.2;
+    const { h, s, l } = carrotDustHsl(baseHue);
+    spawnParticle(
+      x + (RandomValue() - 0.5) * jitter,
+      y + (RandomValue() - 0.5) * jitter,
+      fastCos(angle) * speed,
+      fastSin(angle) * speed,
+      {
+        h,
+        s,
+        l,
+        size: 1.05 + RandomValue() * 3.5,
+        life: 30 + RandomValue() * 52,
+      },
+    );
   }
 };
 
 const spawnClickParticles = (x: number, y: number, hue: number): void => {
-  for (let i = 0; i < 6; i++) {
+  const jitter = 5;
+  for (let i = 0; i < 7; i++) {
     const angle = RandomValue() * TWO_PI;
-    const speed = 1 + RandomValue() * 3;
-    spawnParticle(x, y, fastCos(angle) * speed, fastSin(angle) * speed, hue, 2, 25);
+    const speed = 0.55 + RandomValue() ** 1.45 * 4.2;
+    const { h, s, l } = carrotDustHsl(hue);
+    spawnParticle(
+      x + (RandomValue() - 0.5) * jitter,
+      y + (RandomValue() - 0.5) * jitter,
+      fastCos(angle) * speed,
+      fastSin(angle) * speed,
+      { h, s, l, size: 1.35 + RandomValue() * 2.4, life: 22 + RandomValue() * 30 },
+    );
   }
 };
 
-const updateParticles = (): void => {
+const updateParticles = (deltaMs: number): void => {
+  const k = Math.min(Math.max(deltaMs / 16.6667, 0.25), 4);
   for (let i = particles.length - 1; i >= 0; i--) {
     const p = particles[i];
-    p.x += p.vx;
-    p.y += p.vy;
-    p.vy += 0.08;
-    p.vx *= 0.98;
-    p.life--;
+    p.x += p.vx * k;
+    p.y += p.vy * k;
+    p.vy += 0.082 * k;
+    p.vx *= Math.pow(0.984, k);
+    p.life -= k;
     if (p.life <= 0) particles.splice(i, 1);
   }
 };
@@ -336,11 +393,13 @@ const updateParticles = (): void => {
 const renderParticles = (): void => {
   if (!ctx) return;
   for (const p of particles) {
-    const alpha = p.life / p.maxLife;
-    ctx.globalAlpha = alpha;
-    ctx.fillStyle = `hsl(${p.hue}, 100%, 60%)`;
+    const t = Math.max(0, Math.min(1, p.life / p.maxLife));
+    const fade = t * t * (3 - 2 * t);
+    ctx.globalAlpha = Math.min(1, fade * 1.06) * 0.9;
+    ctx.fillStyle = `hsl(${p.h}, ${p.s}%, ${p.l}%)`;
+    const r = p.size * (0.46 + 0.54 * Math.sqrt(t));
     ctx.beginPath();
-    ctx.arc(p.x, p.y, p.size * alpha, 0, TWO_PI);
+    ctx.arc(p.x, p.y, Math.max(0.35, r), 0, TWO_PI);
     ctx.fill();
   }
   ctx.globalAlpha = 1;
@@ -580,9 +639,9 @@ const explodeCarrot = (index: number): void => {
   const { x, y } = originalCarrot.body.position;
   removeCarrotFast(index);
 
-  spawnExplosionParticles(x, y, 30);
+  spawnExplosionParticles(x, y, 34, originalCarrot.hue);
   triggerShake(12);
-  spawnFloatingText(x, y - 50, '💥 BOOM!', 28);
+  spawnFloatingText(x, y - 50, ko.carrot.boom, 28);
 
   const splitCount = Math.max(combo, 1);
   for (let i = 0; i < splitCount; i++) {
@@ -701,7 +760,7 @@ const setGravityDirection = (x: number, y: number): void => {
     const carrot = bodies[i];
     if (carrot && flags[i] & CARROT_FLAGS.ACTIVE) Matter.Sleeping.set(carrot.body, false);
   }
-  spawnFloatingText(window.innerWidth / 2, window.innerHeight / 2, `Gravity (${x.toFixed(1)}, ${y.toFixed(1)})`, 18);
+  spawnFloatingText(window.innerWidth / 2, window.innerHeight / 2, ko.carrot.gravityCenter(x.toFixed(1), y.toFixed(1)), 18);
 };
 
 // ═══════════════════════════════════════════════════════════════
@@ -737,7 +796,7 @@ const spawnWithPattern = (): void => {
         const spd = 3 + RandomValue() * 3;
         createCarrot(fx, { y: fy, velocity: { x: Math.cos(a) * spd, y: Math.sin(a) * spd } });
       }
-      spawnExplosionParticles(fx, fy, 15);
+      spawnExplosionParticles(fx, fy, 22, 28 + RandomValue() * 20);
       break;
     }
     case 'follow': {
@@ -757,7 +816,7 @@ const getPatternDisplayName = (pattern: SpawnPattern): string => (pattern === 's
 const startPattern = (pattern: SpawnPattern): void => {
   stopPattern();
   currentPattern = pattern;
-  spawnFloatingText(window.innerWidth / 2, 80, `Pattern: ${getPatternDisplayName(pattern)}`, 20);
+  spawnFloatingText(window.innerWidth / 2, 80, ko.carrot.patternLabel(getPatternDisplayName(pattern)), 20);
   if (pattern === 'single') return;
   let interval: number;
   if (pattern === 'firework') interval = 600;
@@ -789,7 +848,7 @@ const freezeAll = (): void => {
     const carrot = bodies[i];
     if (carrot && flags[i] & CARROT_FLAGS.ACTIVE) Matter.Sleeping.set(carrot.body, true);
   }
-  spawnFloatingText(window.innerWidth / 2, window.innerHeight / 2, '❄️ FROZEN', 32);
+  spawnFloatingText(window.innerWidth / 2, window.innerHeight / 2, ko.carrot.freezeFloating, 32);
 };
 
 const unfreezeAll = (): void => {
@@ -798,7 +857,7 @@ const unfreezeAll = (): void => {
     const carrot = bodies[i];
     if (carrot && flags[i] & CARROT_FLAGS.ACTIVE) Matter.Sleeping.set(carrot.body, false);
   }
-  spawnFloatingText(window.innerWidth / 2, window.innerHeight / 2, '🔥 UNFROZEN', 32);
+  spawnFloatingText(window.innerWidth / 2, window.innerHeight / 2, ko.carrot.unfreezeFloating, 32);
 };
 
 // ═══════════════════════════════════════════════════════════════
@@ -953,13 +1012,13 @@ const renderStats = (): void => {
   const activeCount = bodies.reduce((n, c, i) => n + (c && flags[i] & CARROT_FLAGS.ACTIVE ? 1 : 0), 0);
   const maxActiveCombo = getMaxActiveCarrotCombo();
   const lines = [
-    `FPS: ${fps}`,
-    `Carrots: ${activeCount}`,
-    `Particles: ${particles.length}`,
-    `Carrot combo: ${maxActiveCombo} (Best: ${maxCombo})`,
-    `Pattern: ${getPatternDisplayName(currentPattern)}`,
-    `Gravity: (${gravityX.toFixed(1)}, ${gravityY.toFixed(1)})`,
-    `Frozen: ${isFrozen ? 'YES' : 'NO'}`,
+    ko.carrot.stats.fps(fps),
+    ko.carrot.stats.carrots(activeCount),
+    ko.carrot.stats.particles(particles.length),
+    ko.carrot.stats.combo(maxActiveCombo, maxCombo),
+    ko.carrot.stats.pattern(getPatternDisplayName(currentPattern)),
+    ko.carrot.stats.gravity(gravityX.toFixed(1), gravityY.toFixed(1)),
+    ko.carrot.stats.frozen(isFrozen),
   ];
   context.save();
   drawRoundRect(context, 10, 10, 220, lines.length * 20 + 20, 8);
@@ -973,21 +1032,7 @@ const renderStats = (): void => {
   context.restore();
 };
 
-const HELP_SHORTCUTS: [string, string][] = [
-  ['ESC', 'Clear all & stop'],
-  ['H', 'Toggle this help'],
-  ['S', 'Toggle stats'],
-  ['G', 'Flip gravity'],
-  ['0', 'Zero gravity'],
-  ['←↑→↓', 'Tilt gravity'],
-  ['F', 'Freeze / unfreeze'],
-  ['SPACE', 'Burst spawn (x20)'],
-  ['1-6', 'Spawn patterns'],
-  ['Shift+Move', 'Attract carrots'],
-  ['Alt+Move', 'Repel carrots'],
-  ['Ctrl+Click', 'Create gravity well'],
-  ['Click x10', 'Boom!'],
-];
+const HELP_SHORTCUTS: [string, string][] = ko.carrot.shortcuts.map((row) => [...row] as [string, string]);
 
 const renderHelp = (): void => {
   const context = ctx;
@@ -1007,7 +1052,7 @@ const renderHelp = (): void => {
   context.font = `700 16px ${FONT_FAMILY}`;
   context.textAlign = 'center';
   context.textBaseline = 'top';
-  context.fillText('Carrot Shortcuts', boxX + HELP_BOX_W / 2, boxY + 14);
+  context.fillText(ko.carrot.helpTitle, boxX + HELP_BOX_W / 2, boxY + 14);
   context.font = '13px monospace';
   context.textAlign = 'left';
   HELP_SHORTCUTS.forEach(([key, desc], i) => {
@@ -1061,7 +1106,7 @@ const applyCarrotClick = (carrotIndex: number, mp: { x: number; y: number }): vo
 
   if (combo >= 2) {
     const size = Math.min(16 + combo * 2, 48);
-    spawnFloatingText(mp.x, mp.y - 40, `${combo}x COMBO!`, size);
+    spawnFloatingText(mp.x, mp.y - 40, ko.carrot.comboFloating(combo), size);
   }
 
   const scaleFactor = 1.05;
@@ -1322,7 +1367,7 @@ const loop = (time: number): void => {
     updateTrails();
   }
 
-  updateParticles();
+  updateParticles(delta);
   updateFloatingTexts();
   checkCarrotExplosions();
 
@@ -1437,11 +1482,22 @@ const initPhysicsEngine = (): void => {
   Matter.Events.on(engine, 'collisionStart', (event) => {
     let pCount = 0;
     for (const pair of event.pairs) {
-      if (pCount >= 5) break;
+      if (pCount >= 14) break;
       const midX = (pair.bodyA.position.x + pair.bodyB.position.x) / 2;
       const midY = (pair.bodyA.position.y + pair.bodyB.position.y) / 2;
-      spawnParticle(midX, midY, (RandomValue() - 0.5) * 2, -RandomValue() * 2, RandomValue() * 360, 1.5, 15);
-      pCount++;
+      for (let b = 0; b < 3 && pCount < 14; b++) {
+        const angle = RandomValue() * TWO_PI;
+        const speed = 0.32 + RandomValue() * 2.4;
+        const { h, s, l } = carrotDustHsl(undefined);
+        spawnParticle(
+          midX + (RandomValue() - 0.5) * 7,
+          midY + (RandomValue() - 0.5) * 7,
+          fastCos(angle) * speed,
+          fastSin(angle) * speed - 0.15 - RandomValue() * 1.4,
+          { h, s, l, size: 0.8 + RandomValue() * 1.7, life: 20 + RandomValue() * 36 },
+        );
+        pCount++;
+      }
     }
   });
 
@@ -1473,7 +1529,7 @@ const setupEventDelegation = (): void => {
 // ═══════════════════════════════════════════════════════════════
 
 export const Carrot = (): void => {
-  carrotInvokeCount += 1;
+  _carrotInvokeCount += 1;
   if (!isInitialized) {
     initPhysicsEngine();
     setupEventDelegation();
@@ -1502,7 +1558,7 @@ const cleanup = (): void => {
   engine = null;
   world = null;
   count = 0;
-  carrotInvokeCount = 0;
+  _carrotInvokeCount = 0;
   maxCombo = 0;
   isFrozen = false;
   particles.length = 0;

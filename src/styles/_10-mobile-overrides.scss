@@ -236,8 +236,12 @@
   }
 
   .vote-order-seat {
-    width: var(--seat-size);
-    height: var(--seat-size);
+    max-width: min(7rem, 36vw);
+    min-height: 0;
+  }
+
+  .vote-order-house {
+    font-size: 0.62rem;
   }
 
   .vote-order-rank {

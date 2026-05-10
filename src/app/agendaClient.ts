@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef } from "react";
 import { useIsMutating, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { ko } from "../resources/gameResources";
 
 const agendaQueryKey = ["agenda"];
 const agendaMutationKey = ["agenda", "mutation"];
@@ -11,7 +12,7 @@ const nonBlockingAgendaActions = new Set([
   "saveAlignmentOrder",
 ]);
 
-export async function agendaRequest(options = {}) {
+export async function agendaRequest(options: any = {}) {
   const { headers, ...requestOptions } = options;
   const requestHeaders = options.body ? { "Content-Type": "application/json", ...headers } : headers;
   const response = await fetch("/api/agenda", {
@@ -22,13 +23,13 @@ export async function agendaRequest(options = {}) {
   const result = await response.json().catch(() => ({}));
 
   if (!response.ok || result.ok === false) {
-    throw new Error(result.error || "요청을 처리하지 못했습니다.");
+    throw new Error(result.error || ko.agenda.requestFailed);
   }
 
   return result;
 }
 
-function mergeAgendaQueryResult(previous, result) {
+function mergeAgendaQueryResult(previous: any, result: any) {
   return {
     authenticated: Boolean(result.authenticated ?? previous?.authenticated ?? false),
     realtimeEnabled: Boolean(result.realtimeEnabled ?? previous?.realtimeEnabled ?? false),
@@ -36,11 +37,11 @@ function mergeAgendaQueryResult(previous, result) {
   };
 }
 
-function isNonBlockingAgendaAction(payload) {
-  return Boolean(payload && nonBlockingAgendaActions.has(payload.action));
+function isNonBlockingAgendaAction(payload: any) {
+  return Boolean(payload && (nonBlockingAgendaActions as any).has(payload.action));
 }
 
-export function useAgendaStateQuery(setError) {
+export function useAgendaStateQuery(setError: (msg: string) => void) {
   const query = useQuery({
     queryKey: agendaQueryKey,
     queryFn: () => agendaRequest(),
@@ -50,7 +51,7 @@ export function useAgendaStateQuery(setError) {
 
   useEffect(() => {
     if (query.error) {
-      setError(query.error.message);
+      setError((query.error as any).message);
       return;
     }
 
@@ -62,7 +63,7 @@ export function useAgendaStateQuery(setError) {
   return query;
 }
 
-export function useAgendaMutations(setError) {
+export function useAgendaMutations(setError: (msg: string) => void) {
   const queryClient = useQueryClient();
   const mutationCount = useIsMutating({ mutationKey: agendaMutationKey });
   const mutationInFlight = useRef(false);
@@ -72,21 +73,21 @@ export function useAgendaMutations(setError) {
   }, [mutationCount]);
 
   const handleSuccess = useCallback(
-    (result) => {
-      queryClient.setQueryData(agendaQueryKey, (previous) => mergeAgendaQueryResult(previous, result));
+    (result: any) => {
+      queryClient.setQueryData(agendaQueryKey, (previous: any) => mergeAgendaQueryResult(previous, result));
       setError("");
     },
     [queryClient, setError],
   );
   const handleError = useCallback(
-    (requestError) => {
+    (requestError: any) => {
       setError(requestError.message);
     },
     [setError],
   );
-  const mutationConfig = {
+  const mutationConfig: any = {
     mutationKey: agendaMutationKey,
-    mutationFn: (payload) =>
+    mutationFn: (payload: any) =>
       agendaRequest({
         method: "POST",
         body: JSON.stringify(payload),
@@ -98,7 +99,7 @@ export function useAgendaMutations(setError) {
   const { isPending: blockingPending, mutateAsync: runBlockingMutation } = useMutation(mutationConfig);
   const { mutateAsync: runAutosaveMutation } = useMutation(mutationConfig);
   const mutate = useCallback(
-    async (payload) => {
+    async (payload: any) => {
       const runMutation = isNonBlockingAgendaAction(payload) ? runAutosaveMutation : runBlockingMutation;
 
       try {
@@ -117,9 +118,11 @@ export function useAgendaMutations(setError) {
   };
 }
 
-export function useAgendaRefresh(setError, mutationInFlight) {
+export function useAgendaRefresh(setError: (msg: string) => void, mutationInFlight: any) {
   const queryClient = useQueryClient();
 
+  // Ref identity is stable; .current is read intentionally inside the callback.
+  // eslint-disable-next-line react-hooks/preserve-manual-memoization -- mutationInFlight is a ref object; deps [mutationInFlight] are correct
   return useCallback(async () => {
     if (mutationInFlight.current || queryClient.isFetching({ queryKey: agendaQueryKey }) > 0) {
       return null;
@@ -133,7 +136,7 @@ export function useAgendaRefresh(setError, mutationInFlight) {
       });
       setError("");
       return result;
-    } catch (requestError) {
+    } catch (requestError: any) {
       setError(requestError.message);
       return null;
     }

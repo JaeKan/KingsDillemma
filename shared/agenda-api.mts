@@ -18,6 +18,7 @@ import {
   redactState,
   registerSession,
   resetDilemmaRecord,
+  resolveModeratorDecision,
   saveAlignmentOrder,
   saveDilemmaRecord,
   saveDilemmaRoles,
@@ -29,6 +30,7 @@ import {
   setRandomDiscardEnabled,
   setHouseCredential,
   setHouseName,
+  startDraftPhase,
   startDraftIfReady,
   type GameState,
   type HouseId,
@@ -228,8 +230,20 @@ export async function handleAgendaRequest(
       return json({ ok: true, state: redactState(nextState, houseId) }, 200, NO_STORE_HEADERS);
     }
 
+    if (action === "resolveModeratorDecision") {
+      const nextState = resolveModeratorDecision(state, houseId, body.decision);
+      await saveState(store, nextState);
+      return json({ ok: true, state: redactState(nextState, houseId) }, 200, NO_STORE_HEADERS);
+    }
+
     if (action === "setRandomDiscardEnabled") {
       const nextState = setRandomDiscardEnabled(state, body.enabled);
+      await saveState(store, nextState);
+      return json({ ok: true, state: redactState(nextState, houseId) }, 200, NO_STORE_HEADERS);
+    }
+
+    if (action === "startDraftPhase") {
+      const nextState = startDraftPhase(state);
       await saveState(store, nextState);
       return json({ ok: true, state: redactState(nextState, houseId) }, 200, NO_STORE_HEADERS);
     }
@@ -278,7 +292,9 @@ function isKnownStateAction(action: string) {
     action === "saveDilemmaVoteOrder" ||
     action === "saveDilemmaRoles" ||
     action === "saveDilemmaVote" ||
+    action === "startDraftPhase" ||
     action === "applyDilemmaVotes" ||
+    action === "resolveModeratorDecision" ||
     action === "setRandomDiscardEnabled" ||
     action === "calculateFinalScores" ||
     action === "endSession"

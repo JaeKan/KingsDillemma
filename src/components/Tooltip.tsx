@@ -1,15 +1,21 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 const tooltipGap = 9;
 const tooltipMaxWidth = 280;
 const tooltipViewportMargin = 12;
 
-function clamp(value, min, max) {
+function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max);
 }
 
-function getTooltipPosition(anchor, placement, tooltip) {
+interface Position {
+  x: number;
+  y: number;
+  placement: "top" | "bottom";
+}
+
+function getTooltipPosition(anchor: HTMLElement, placement: string, tooltip: HTMLElement | null): Position {
   const rect = anchor.getBoundingClientRect();
   const viewportWidth = window.innerWidth || document.documentElement.clientWidth;
   const viewportHeight = window.innerHeight || document.documentElement.clientHeight;
@@ -40,6 +46,16 @@ function getTooltipPosition(anchor, placement, tooltip) {
   return { x, y, placement: actualPlacement };
 }
 
+interface TooltipProps extends React.HTMLAttributes<HTMLSpanElement> {
+  label: React.ReactNode;
+  children: React.ReactNode;
+  className?: string;
+  placement?: "top" | "bottom" | "auto";
+  role?: string;
+  tabIndex?: number;
+  ariaLabel?: string;
+}
+
 export function Tooltip({
   label,
   children,
@@ -49,12 +65,12 @@ export function Tooltip({
   tabIndex,
   ariaLabel,
   ...anchorProps
-}) {
-  const anchorRef = useRef(null);
-  const tooltipRef = useRef(null);
+}: TooltipProps) {
+  const anchorRef = useRef<HTMLSpanElement>(null);
+  const tooltipRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
-  const [position, setPosition] = useState({ x: 0, y: 0, placement: "top" });
-  const tooltipId = useRef(`tooltip-${Math.random().toString(36).slice(2)}`).current;
+  const [position, setPosition] = useState<Position>({ x: 0, y: 0, placement: "top" });
+  const tooltipId = useId();
   const hasLabel = Boolean(label);
   const updatePosition = useCallback(() => {
     if (!anchorRef.current || !hasLabel) {
@@ -119,7 +135,7 @@ export function Tooltip({
               id={tooltipId}
               className={`app-tooltip app-tooltip-${position.placement}`}
               role="tooltip"
-              style={{ "--tooltip-x": `${position.x}px`, "--tooltip-y": `${position.y}px` }}
+              style={{ "--tooltip-x": `${position.x}px`, "--tooltip-y": `${position.y}px` } as React.CSSProperties}
             >
               {label}
             </div>,

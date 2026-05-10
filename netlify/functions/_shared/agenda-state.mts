@@ -708,17 +708,7 @@ export function clearSession(
   };
 }
 
-export function startDraftIfReady(state: GameState, now = new Date().toISOString()): GameState {
-  if (state.phase !== "house-select") {
-    return state;
-  }
-
-  const draftOrder = sortHouseIdsForDraft(getClaimedHouseIds(state), state.inventories);
-
-  if (draftOrder.length < REQUIRED_HOUSE_COUNT) {
-    return state;
-  }
-
+function transitionFromHouseSelectToDiscard(state: GameState, draftOrder: HouseId[], now: string): GameState {
   return {
     ...state,
     phase: "discard",
@@ -730,6 +720,37 @@ export function startDraftIfReady(state: GameState, now = new Date().toISOString
     version: state.version + 1,
     updatedAt: now,
   };
+}
+
+export function startDraftIfReady(state: GameState, now = new Date().toISOString()): GameState {
+  if (state.phase !== "house-select") {
+    return state;
+  }
+
+  const draftOrder = sortHouseIdsForDraft(getClaimedHouseIds(state), state.inventories);
+
+  if (draftOrder.length < REQUIRED_HOUSE_COUNT) {
+    return state;
+  }
+
+  return transitionFromHouseSelectToDiscard(state, draftOrder, now);
+}
+
+export function startDraftPhase(state: GameState, now = new Date().toISOString()): GameState {
+  if (state.phase !== "house-select") {
+    throw new AgendaStateError("비밀 의제 배정(폐기) 단계는 이미 시작되었습니다.", 409);
+  }
+
+  const draftOrder = sortHouseIdsForDraft(getClaimedHouseIds(state), state.inventories);
+
+  if (draftOrder.length < REQUIRED_HOUSE_COUNT) {
+    throw new AgendaStateError(
+      `참여 가문 ${REQUIRED_HOUSE_COUNT}곳이 모두 배정되어야 의제 폐기를 시작할 수 있습니다.`,
+      409,
+    );
+  }
+
+  return transitionFromHouseSelectToDiscard(state, draftOrder, now);
 }
 
 export function endSession(state: GameState, now = new Date().toISOString()): GameState {
@@ -1247,6 +1268,82 @@ export function applyDilemmaVotes(
       ...currentDilemma,
       votes: Object.fromEntries(participants.map((participantId) => [participantId, votes[participantId]])),
       voteNotes,
+      updatedAt: now,
+      updatedBy: houseId,
+      updatedByName: getHouseLabel(state, houseId),
+    },
+    version: state.version + 1,
+    updatedAt: now,
+  };
+}
+
+/** 찬성/반대 권력 합이 동점일 때 중재자만 결과(찬성/반대)를 확정합니다. 집계 기록(apply) 이후에만 호출됩니다. */
+export function resolveModeratorDecision(
+  state: GameState,
+  houseId: HouseId,
+  decision: unknown,
+  now = new Date().toISOString(),
+): GameState {
+  const currentDilemma = getDilemmaForVoting(state, houseId, now);
+  const participants = getDilemmaVotingParticipants(state);
+
+  if (currentDilemma.selectedOutcome) {
+    throw new AgendaStateError("이미 결과가 선택된 딜레마 투표입니다.", 409);
+  }
+
+  if (!currentDilemma.voteNotes?.trim()) {
+    throw new AgendaStateError("먼저 투표 집계를 기록한 뒤 중재자 결정을 진행하세요.", 409);
+  }
+
+  const moderator = sanitizeRoleHouseId(state.dilemmaModerator, participants);
+  if (!moderator || moderator !== houseId) {
+    throw new AgendaStateError("중재자만 동점을 결정할 수 있습니다.", 403);
+  }
+
+  const votes = sanitizeDilemmaVotes(currentDilemma.votes, now);
+  const missingHouse = participants.find((participantId) => !votes[participantId]?.side);
+
+  if (missingHouse) {
+    throw new AgendaStateError("로그인 중인 모든 가문이 찬성/반대/기권을 선택해야 합니다.", 409);
+  }
+
+  for (const participantId of participants) {
+    const playerVote = votes[participantId];
+
+    if (!playerVote) {
+      throw new AgendaStateError("딜레마 투표 내역을 확인할 수 없습니다.", 409);
+    }
+
+    const availablePower = getPlayerInventory(state, participantId).powerTokens;
+
+    if (playerVote.side !== "pass" && playerVote.powerTokens < 1) {
+      throw new AgendaStateError(`${getHouseLabel(state, participantId)} 가문은 찬성/반대에 권력 토큰을 1개 이상 걸어야 합니다.`, 409);
+    }
+
+    if (playerVote.powerTokens > availablePower) {
+      throw new AgendaStateError(`${getHouseLabel(state, participantId)} 가문의 권력 토큰이 부족합니다.`, 409);
+    }
+  }
+
+  const ayePower = sumDilemmaVotePower(votes, participants, "aye");
+  const nayPower = sumDilemmaVotePower(votes, participants, "nay");
+
+  if (ayePower !== nayPower) {
+    throw new AgendaStateError("찬성과 반대 권력 합계가 같을 때만 중재자 결정이 필요합니다.", 409);
+  }
+
+  const side = decision === "aye" || decision === "nay" ? decision : null;
+
+  if (!side) {
+    throw new AgendaStateError("중재 결정은 찬성(aye) 또는 반대(nay)여야 합니다.", 400);
+  }
+
+  return {
+    ...state,
+    dilemma: {
+      ...currentDilemma,
+      votes: Object.fromEntries(participants.map((participantId) => [participantId, votes[participantId]])),
+      selectedOutcome: side,
       updatedAt: now,
       updatedBy: houseId,
       updatedByName: getHouseLabel(state, houseId),
@@ -1948,29 +2045,6 @@ function sanitizePool(
   return pool.length ? pool : fallback;
 }
 
-function sanitizeAgendaOrder(value: unknown, currentPool: string[]): string[] {
-  if (!Array.isArray(value)) {
-    throw new AgendaStateError("정렬할 의제 목록을 전달하세요.", 400);
-  }
-
-  const poolSet = new Set(currentPool);
-  const seen = new Set<string>();
-  const nextOrder = value.filter((id): id is string => {
-    if (typeof id !== "string" || !poolSet.has(id) || seen.has(id)) {
-      return false;
-    }
-
-    seen.add(id);
-    return true;
-  });
-
-  if (nextOrder.length !== currentPool.length) {
-    throw new AgendaStateError("현재 남은 의제를 모두 포함한 순서로 저장하세요.", 400);
-  }
-
-  return nextOrder;
-}
-
 function sanitizeChoices(value: unknown, draftOrder: HouseId[]): Record<string, string> {
   if (!value || typeof value !== "object") {
     return {};
@@ -1978,18 +2052,22 @@ function sanitizeChoices(value: unknown, draftOrder: HouseId[]): Record<string, 
 
   const draftHouses = new Set(draftOrder);
   const usedAgendas = new Set<string>();
-  const entries = Object.entries(value as Record<string, unknown>).filter(([houseId, agendaId]) => {
-    if (!draftHouses.has(houseId) || typeof agendaId !== "string" || !AGENDA_BY_ID.has(agendaId)) {
-      return false;
-    }
+  const entries = Object.entries(value as Record<string, unknown>).filter(
+    (entry): entry is [string, string] => {
+      const houseId = entry[0];
+      const agendaId = entry[1];
+      if (!draftHouses.has(houseId) || typeof agendaId !== "string" || !AGENDA_BY_ID.has(agendaId)) {
+        return false;
+      }
 
-    if (usedAgendas.has(agendaId)) {
-      return false;
-    }
+      if (usedAgendas.has(agendaId)) {
+        return false;
+      }
 
-    usedAgendas.add(agendaId);
-    return true;
-  });
+      usedAgendas.add(agendaId);
+      return true;
+    },
+  );
 
   return Object.fromEntries(entries);
 }
@@ -2000,15 +2078,20 @@ function sanitizeCredentials(value: unknown): Record<string, SeatCredential> {
   }
 
   const entries = Object.entries(value as Record<string, unknown>).filter(
-    ([houseId, credential]): credential is SeatCredential =>
-      isHouseId(houseId) &&
-      Boolean(credential) &&
-      typeof credential === "object" &&
-      typeof (credential as SeatCredential).salt === "string" &&
-      typeof (credential as SeatCredential).hash === "string" &&
-      Number.isInteger((credential as SeatCredential).iterations) &&
-      (credential as SeatCredential).iterations > 0 &&
-      typeof (credential as SeatCredential).createdAt === "string",
+    (entry): entry is [string, SeatCredential] => {
+      const houseId = entry[0];
+      const credential = entry[1];
+      return (
+        isHouseId(houseId) &&
+        Boolean(credential) &&
+        typeof credential === "object" &&
+        typeof (credential as SeatCredential).salt === "string" &&
+        typeof (credential as SeatCredential).hash === "string" &&
+        Number.isInteger((credential as SeatCredential).iterations) &&
+        (credential as SeatCredential).iterations > 0 &&
+        typeof (credential as SeatCredential).createdAt === "string"
+      );
+    },
   );
 
   return Object.fromEntries(entries);
@@ -2619,7 +2702,7 @@ function sanitizeHouseProgress(value: unknown, now: string): HouseProgress {
   };
 }
 
-function sanitizeAlignmentOrder(value: unknown) {
+function sanitizeAlignmentOrder(_value: unknown) {
   return getDefaultAlignmentOrder();
 }
 
@@ -2844,13 +2927,18 @@ function sanitizeSessions(
   }
 
   const entries = Object.entries(value as Record<string, unknown>).filter(
-    ([houseId, session]): session is { token: string; createdAt: string } =>
-      isHouseId(houseId) &&
-      Boolean(credentials[houseId]) &&
-      Boolean(session) &&
-      typeof session === "object" &&
-      typeof (session as { token?: unknown }).token === "string" &&
-      typeof (session as { createdAt?: unknown }).createdAt === "string",
+    (entry): entry is [string, { token: string; createdAt: string }] => {
+      const houseId = entry[0];
+      const session = entry[1];
+      return (
+        isHouseId(houseId) &&
+        Boolean(credentials[houseId]) &&
+        Boolean(session) &&
+        typeof session === "object" &&
+        typeof (session as { token?: unknown }).token === "string" &&
+        typeof (session as { createdAt?: unknown }).createdAt === "string"
+      );
+    },
   );
 
   return Object.fromEntries(entries);
