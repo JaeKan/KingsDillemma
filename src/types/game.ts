@@ -213,6 +213,7 @@ export type RedactedState = {
   canPublishDilemmaResolution: boolean;
   /** 결과 초기화 — `dilemmaAuthorHouseId` 고정 작성자만 */
   canResetDilemmaResult: boolean;
+  canEditDilemmaCard: boolean;
   dilemmaLeader: HouseId | null;
   dilemmaModerator: HouseId | null;
   dilemmaVoteOrder: HouseId[];
@@ -230,3 +231,4 @@ export type GameStateResponse = {
   realtimeEnabled: boolean;
   state: RedactedState;
 };
+

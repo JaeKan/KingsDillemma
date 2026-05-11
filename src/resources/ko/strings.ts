@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 한글 UI 문자열 단일 원본. `gameResources`에서 `ko`로 재내보냅니다.
  */
 export const ko = {
@@ -141,7 +141,7 @@ export const ko = {
       readFail: "사진을 읽지 못했습니다.",
       loadFail: "사진을 불러오지 못했습니다.",
     },
-    publishNoRecord: "게시할 딜레마 기록이 없습니다.",
+    publishNoRecord: "게시할 딜레마가 없습니다.",
     publishNeedAllVotes: "로그인 중인 모든 가문이 투표해야 게시할 수 있습니다.",
     publishNeedOutcome: "딜레마 투표 결과를 직접 선택해야 게시할 수 있습니다.",
     publishNeedResolution: "후속 처리 내용을 입력해야 게시할 수 있습니다.",
@@ -373,22 +373,22 @@ export const ko = {
     editTooltipWait: "다른 가문이 편집을 마칠 때까지 기다려야 합니다.",
     editTooltipNeedRoles: "리더와 중재자를 먼저 지정하세요.",
     editTooltipNew: "새 딜레마를 작성합니다.",
-    editTooltipEdit: "딜레마 기록을 편집합니다.",
+    editTooltipEdit: "딜레마를 편집합니다.",
     publishTooltipLocked: "딜레마 편집을 저장하거나 취소해야 게시할 수 있습니다.",
-    publishTooltipEmpty: "게시할 딜레마 기록이 없습니다.",
+    publishTooltipEmpty: "게시할 딜레마가 없습니다.",
     publishTooltipDefault: "현재 저장된 딜레마를 딜레마 이력에 게시합니다.",
     publishTooltipAuthorOnly: "딜레마를 처음 작성한 가문만 게시할 수 있습니다.",
     resetTooltipWait: "다른 가문이 편집을 마칠 때까지 초기화할 수 없습니다.",
-    resetTooltipNone: "초기화할 딜레마 기록이나 역할이 없습니다.",
-    resetTooltipAuthorOnly: "딜레마를 처음 작성한 가문만 결과를 초기화할 수 있습니다.",
-    resetTooltipOk: "현재 딜레마 기록과 리더/중재자를 초기화합니다. 게시된 이력은 유지됩니다.",
+    resetTooltipNone: "초기화할 역할이나 딜레마가 없습니다.",
+    resetTooltipAuthorOnly: "최초 수정한 가문만 초기화할 수 있습니다.",
+    resetTooltipOk: "작성된 딜레마를 초기화합니다.",
     ledgerTitle: "딜레마",
     roleButton: "역할",
     write: "작성",
     edit: "편집",
     reset: "초기화",
     publish: "게시",
-    emptyRound: "이번 라운드의 딜레마 기록이 아직 없습니다.",
+    emptyRound: "이번 라운드의 딜레마가 아직 없습니다.",
     photoStripAria: "딜레마사진",
     photoStripResolutionAria: "딜레마 후속 사진",
     summaryLabelCardCode: "카드 번호",

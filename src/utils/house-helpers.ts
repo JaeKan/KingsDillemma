@@ -344,14 +344,24 @@ export function getVoteOrderHouses(state: RedactedState): RedactedHouse[] {
   const houses = getHouses(state);
   const housesById = new Map(houses.map((house) => [house.id, house]));
   const loggedInIds = houses.filter((house) => house.hasSession).map((house) => house.id);
-  const loggedInIdSet = new Set(loggedInIds);
+  const houseIdSet = new Set(houses.map((house) => house.id));
   let orderedIds = loggedInIds;
 
   if (Array.isArray(candidateState.dilemmaVoteOrder) && candidateState.dilemmaVoteOrder.length) {
-    orderedIds = candidateState.dilemmaVoteOrder.filter((houseId) => loggedInIdSet.has(houseId));
+    orderedIds = candidateState.dilemmaVoteOrder.filter((houseId) => houseIdSet.has(houseId));
   } else if (candidateState.phase !== "complete" && Array.isArray(candidateState.draftOrder) && candidateState.draftOrder.length) {
-    orderedIds = candidateState.draftOrder.filter((houseId) => loggedInIdSet.has(houseId));
+    orderedIds = candidateState.draftOrder.filter((houseId) => houseIdSet.has(houseId));
   }
+
+  const seen = new Set<string>();
+  orderedIds = orderedIds.filter((houseId) => {
+    if (seen.has(houseId)) {
+      return false;
+    }
+
+    seen.add(houseId);
+    return true;
+  });
 
   return orderedIds
     .map((houseId) => housesById.get(houseId) || (HOUSE_CATALOG.find((house) => house.id === houseId) as any))

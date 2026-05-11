@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useId, useRef } from "react";
+import React, { useCallback, useEffect, useId, useRef, useState } from "react";
 import { ValueMentionTextarea, MentionRenderedPreview, hasMentionToken, type MentionPart } from "./MentionUI";
 import { resourceCounters, ko } from "../resources/gameResources";
 import { TokenIcon } from "./GameIcons";
@@ -153,21 +153,23 @@ function DilemmaEditDialog({
         </div>
         <form className="dilemma-form" onSubmit={submit}>
           <div className="dilemma-dialog-meta">
-            <div className="dilemma-dialog-grid compact">
+            <div className="dilemma-dialog-grid compact dilemma-card-title-row">
               <DilemmaInput
                 ref={firstInputRef}
                 label={ko.dilemmaEdit.labelCardCode}
                 value={draft.cardCode}
                 onChange={(value) => onFieldChange("cardCode", value)}
                 placeholder={ko.dilemmaEdit.phCardCode}
+                prefix="No."
+                className="dilemma-field-card-code"
+              />
+              <DilemmaInput
+                label={ko.dilemmaEdit.labelTitle}
+                value={draft.title}
+                onChange={(value) => onFieldChange("title", value)}
+                placeholder={ko.dilemmaEdit.phTitle}
               />
             </div>
-            <DilemmaInput
-              label={ko.dilemmaEdit.labelTitle}
-              value={draft.title}
-              onChange={(value) => onFieldChange("title", value)}
-              placeholder={ko.dilemmaEdit.phTitle}
-            />
           </div>
           <MysteryStickerPicker
             value={draft.mysteryStickerId || ""}
@@ -194,7 +196,6 @@ function DilemmaEditDialog({
             onChange={(value) => onFieldChange("councilNotes", value)}
             placeholder={ko.dilemmaEdit.phMemo}
           />
-          <p className="dilemma-edit-resolution-hint">{ko.dilemmaEdit.postVoteResolutionHint}</p>
           <div className="dilemma-outcome-edit-grid">
             <DilemmaOutcomeEditor
               label={ko.dilemmaEdit.labelAye}
@@ -233,20 +234,63 @@ function DilemmaEditDialog({
   );
 }
 
-const DilemmaInput = React.forwardRef<HTMLInputElement, { label: string; value: string; onChange: (v: string) => void; placeholder?: string; disabled?: boolean }>(
-  ({ label, value, onChange, placeholder, disabled }, ref) => (
-    <label className="dilemma-field">
-      <span>{label}</span>
-      <input
-        ref={ref}
-        type="text"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder}
-        disabled={disabled}
-      />
-    </label>
-  )
+const DilemmaInput = React.forwardRef<
+  HTMLInputElement,
+  {
+    label: string;
+    value: string;
+    onChange: (v: string) => void;
+    placeholder?: string;
+    disabled?: boolean;
+    prefix?: string;
+    className?: string;
+  }
+>(
+  ({ label, value, onChange, placeholder, disabled, prefix, className }, ref) => {
+    const inputRef = React.useRef<HTMLInputElement>(null);
+    const [isFocused, setIsFocused] = useState(false);
+
+    const assignRef = (node: HTMLInputElement | null) => {
+      inputRef.current = node;
+
+      if (!ref) {
+        return;
+      }
+
+      if (typeof ref === "function") {
+        ref(node);
+      } else {
+        ref.current = node;
+      }
+    };
+
+    return (
+      <label className={`dilemma-field ${className ?? ""}`.trim()}>
+        <span>{label}</span>
+        <div className={`dilemma-field-input-wrap${isFocused ? " focused" : ""}`}>
+          {prefix ? (
+            <span
+              className="dilemma-field-input-prefix"
+              aria-hidden="true"
+            >
+              {prefix}
+            </span>
+          ) : null}
+          <input
+            ref={assignRef}
+            type="text"
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            onFocus={() => setIsFocused(true)}
+            onBlur={() => setIsFocused(false)}
+            placeholder={placeholder}
+            disabled={disabled}
+            className={prefix ? "dilemma-field-input-prefix-input" : undefined}
+          />
+        </div>
+      </label>
+    );
+  }
 );
 
 function DilemmaMentionTextarea({
@@ -324,7 +368,6 @@ function DilemmaOutcomeEditor({
         label={ko.dilemmaEdit.labelSummary}
         value={outcome.preview}
         onChange={(v) => onChange("preview", v)}
-        placeholder={ko.dilemmaEdit.phSummary}
       />
       <DilemmaMentionTextarea
         label={ko.dilemmaEdit.labelOutcomeShort}

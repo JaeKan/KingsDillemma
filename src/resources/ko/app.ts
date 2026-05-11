@@ -138,7 +138,7 @@ export const koApp = {
     openAgendaTokenChipAria: (short: string, res: string) => `${short} ${res} 공개 의제 토큰`,
     photoSlotLimit: (n: number) => `사진은 최대 ${n}장까지 첨부할 수 있습니다.`,
     photoAttachFail: "사진을 첨부하지 못했습니다.",
-    dilemmaResetConfirm: "현재 딜레마 기록, 리더, 중재자, 투표 내역을 모두 초기화할까요? 게시된 이력은 유지됩니다.",
+    dilemmaResetConfirm: "현재 딜레마를 초기화할까요?",
     photoProcessing: "사진 처리 중입니다. 잠시 후 저장하세요.",
     achievementEditorTitleNarrative: "서사 도전 과제",
     achievementEditorTitleFallback: "도전 과제",

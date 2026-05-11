@@ -178,6 +178,7 @@ export type GameState = {
   dilemma: DilemmaRecord;
   dilemmaLeader: HouseId | null;
   dilemmaModerator: HouseId | null;
+  dilemmaRolesAuthorHouseId: HouseId | null;
   dilemmaVoteOrder: HouseId[];
   dilemmaHistory: DilemmaHistoryEntry[];
   createdAt: string;
@@ -245,7 +246,7 @@ export type RedactedState = {
   canEnterDilemmaResolution: boolean;
   /** 딜레마 이력 게시 — `dilemmaAuthorHouseId` 고정 작성자만 true */
   canPublishDilemmaResolution: boolean;
-  /** 결과 초기화 — `dilemmaAuthorHouseId` 고정 작성자만 true */
+  /** 결과 초기화 — `dilemmaAuthorHouseId` 또는 역할 지정 가문이면 true */
   canResetDilemmaResult: boolean;
   /** 카드 본문 편집(작성/다이얼로그) — 본문·투표가 있으면 고정 작성자만, 완전 빈 카드는 역할 지정 후 누구나 첫 작성 가능 */
   canEditDilemmaCard: boolean;
@@ -523,6 +524,7 @@ export function createInitialState(now = new Date().toISOString()): GameState {
     dilemma: createDefaultDilemmaRecord(now),
     dilemmaLeader: null,
     dilemmaModerator: null,
+    dilemmaRolesAuthorHouseId: null,
     dilemmaVoteOrder: [],
     dilemmaHistory: [],
     createdAt: now,
@@ -560,6 +562,9 @@ export function normalizeState(value: unknown, now = new Date().toISOString()): 
   const turn = deriveTurn(migrateUnpickedDraftOrder ? null : candidate.turn, phase, draftOrder, choices);
   const dilemma =
     phase === "complete" ? migrateDilemmaAuthorHouseId(sanitizeDilemmaRecord(candidate.dilemma, now)) : createDefaultDilemmaRecord(now);
+  const dilemmaRolesAuthorHouseId = isHouseId(candidate.dilemmaRolesAuthorHouseId)
+    ? candidate.dilemmaRolesAuthorHouseId
+    : null;
   const dilemmaLeader =
     phase === "complete"
       ? sanitizeRoleHouseId(candidate.dilemmaLeader, activeHouseIds)
@@ -586,6 +591,7 @@ export function normalizeState(value: unknown, now = new Date().toISOString()): 
     inventories,
     progress,
     dilemma,
+    dilemmaRolesAuthorHouseId,
     dilemmaLeader,
     dilemmaModerator,
     dilemmaVoteOrder,
@@ -816,6 +822,7 @@ export function endSession(state: GameState, now = new Date().toISOString()): Ga
     dilemma: createDefaultDilemmaRecord(now),
     dilemmaLeader: null,
     dilemmaModerator: null,
+    dilemmaRolesAuthorHouseId: null,
     dilemmaVoteOrder: [],
     updatedAt: now,
   };
@@ -883,6 +890,7 @@ export function saveDilemmaRoles(
     ...state,
     dilemmaLeader: leader,
     dilemmaModerator: moderator,
+    dilemmaRolesAuthorHouseId: _houseId,
     version: state.version + 1,
     updatedAt: now,
   };
@@ -1030,7 +1038,12 @@ export function beginDilemmaEdit(
   }
 
   if (!isDilemmaRecordBlank(currentDilemma) || dilemmaHasVoteSides(currentDilemma)) {
-    assertDilemmaAuthorHouseMatches(currentDilemma, houseId, "딜레마를 처음 작성한 가문만 편집할 수 있습니다.");
+    assertDilemmaAuthorOrRoleAuthorHouseMatches(
+      state,
+      currentDilemma,
+      houseId,
+      "딜레마를 작성한 가문 또는 역할 지정 가문만 편집할 수 있습니다.",
+    );
   }
 
   return {
@@ -1164,6 +1177,22 @@ function assertDilemmaAuthorHouseMatches(dilemma: DilemmaRecord, houseId: HouseI
   }
 }
 
+function assertDilemmaAuthorOrRoleAuthorHouseMatches(
+  state: GameState,
+  dilemma: DilemmaRecord,
+  houseId: HouseId,
+  forbiddenMessage: string,
+) {
+  const authorId = getEffectiveDilemmaAuthorHouseId(dilemma);
+  const roleAuthor = isHouseId(state.dilemmaRolesAuthorHouseId) ? state.dilemmaRolesAuthorHouseId : null;
+
+  if (authorId === houseId || roleAuthor === houseId) {
+    return;
+  }
+
+  throw new AgendaStateError(forbiddenMessage, 403);
+}
+
 export function saveDilemmaRecord(
   state: GameState,
   houseId: HouseId,
@@ -1180,7 +1209,12 @@ export function saveDilemmaRecord(
 
   if (opts?.fromResolution !== true) {
     if (!isDilemmaRecordBlank(currentDilemma) || dilemmaHasVoteSides(currentDilemma)) {
-      assertDilemmaAuthorHouseMatches(currentDilemma, houseId, "딜레마를 처음 작성한 가문만 편집할 수 있습니다.");
+      assertDilemmaAuthorOrRoleAuthorHouseMatches(
+        state,
+        currentDilemma,
+        houseId,
+        "딜레마를 작성한 가문 또는 역할 지정 가문만 편집할 수 있습니다.",
+      );
     }
   }
 
@@ -1281,6 +1315,7 @@ export function publishDilemmaRecord(
     dilemma: createDefaultDilemmaRecord(now),
     dilemmaLeader: null,
     dilemmaModerator: null,
+    dilemmaRolesAuthorHouseId: null,
     dilemmaHistory: upsertDilemmaHistory(state.dilemmaHistory, nextDilemma, houseId, getHouseLabel(state, houseId), now),
     version: state.version + 1,
     updatedAt: now,
@@ -1292,21 +1327,20 @@ export function resetDilemmaRecord(
   houseId: HouseId,
   now = new Date().toISOString(),
 ): GameState {
-  assertCanEditDilemma(state);
-
   const currentDilemma = sanitizeDilemmaRecord(state.dilemma, now);
 
   if (currentDilemma.editLock && currentDilemma.editLock.houseId !== houseId) {
     throw new AgendaStateError(`${currentDilemma.editLock.houseName} 가문이 딜레마를 수정 중입니다.`, 409);
   }
 
-  assertCanResetDilemma(currentDilemma, houseId);
+  assertCanResetDilemma(state, currentDilemma, houseId);
 
   return {
     ...state,
     dilemma: createDefaultDilemmaRecord(now),
     dilemmaLeader: null,
     dilemmaModerator: null,
+    dilemmaRolesAuthorHouseId: null,
     version: state.version + 1,
     updatedAt: now,
   };
@@ -1726,6 +1760,7 @@ export function applyChoose(
     turn: isComplete ? houseId : state.draftOrder[draftIndex + 1],
     pool: nextPool,
     choices: nextChoices,
+    dilemmaRolesAuthorHouseId: isComplete ? null : state.dilemmaRolesAuthorHouseId,
     dilemmaLeader: isComplete ? null : defaultDilemmaRoles.leader,
     dilemmaModerator: isComplete ? null : defaultDilemmaRoles.moderator,
     updatedAt: now,
@@ -1772,8 +1807,12 @@ export function redactState(state: GameState, houseId: HouseId | null): Redacted
     Boolean(dilemmaForVote.voteNotes?.trim()) &&
     areDilemmaVotesComplete(state, dilemmaForVote, now) &&
     (!dilemmaForVote.selectedOutcome || !dilemmaForVote.resolutionNotes.trim());
-  /** 고정 작성자는 투표·집계 여부와 관계없이 언제든 결과 초기화 가능(서버 `resetDilemmaRecord`에서 실제로 지울 내역이 없으면 no-op에 가깝게 처리). */
+  /** 결과 초기화는 본문 최초 작성자 또는 역할 지정 가문에게 허용됩니다. */
   const authorMayResetResult = houseId !== null && Boolean(effectiveAuthor) && effectiveAuthor === houseId;
+  const roleAuthorMayResetResult =
+    houseId !== null &&
+    isHouseId(state.dilemmaRolesAuthorHouseId) &&
+    state.dilemmaRolesAuthorHouseId === houseId;
   const canEnterDilemmaResolution =
     houseId !== null &&
     state.phase === "complete" &&
@@ -1792,17 +1831,20 @@ export function redactState(state: GameState, houseId: HouseId | null): Redacted
     isDilemmaPublishRequirementsMet(state, dilemmaForVote, now);
   const canResetDilemmaResult =
     houseId !== null &&
-    state.phase === "complete" &&
     !dilemmaLockedByOther &&
-    authorMayResetResult;
+    (authorMayResetResult || roleAuthorMayResetResult);
   const bodyEditNeedsAuthor =
     !isDilemmaRecordBlank(dilemmaForVote) || dilemmaHasVoteSides(dilemmaForVote);
+  const roleAuthorMayEdit =
+    houseId !== null &&
+    isHouseId(state.dilemmaRolesAuthorHouseId) &&
+    state.dilemmaRolesAuthorHouseId === houseId;
   const canEditDilemmaCard =
     houseId !== null &&
     state.phase === "complete" &&
     rolesReadyForDilemma &&
     !dilemmaLockedByOther &&
-    (!bodyEditNeedsAuthor || (Boolean(effectiveAuthor) && effectiveAuthor === houseId));
+    (!bodyEditNeedsAuthor || (Boolean(effectiveAuthor) && effectiveAuthor === houseId) || roleAuthorMayEdit);
   const houses = HOUSE_CATALOG.map((house) => {
     const id = house.id;
     const hasPassword = Boolean(state.credentials[id]);
@@ -1854,6 +1896,7 @@ export function redactState(state: GameState, houseId: HouseId | null): Redacted
     canEnterDilemmaResolution,
     canPublishDilemmaResolution,
     canResetDilemmaResult,
+    canEditDilemmaCard,
     dilemmaLeader: state.dilemmaLeader,
     dilemmaModerator: state.dilemmaModerator,
     dilemmaVoteOrder: pickStoredDilemmaVoteOrder(state.dilemmaVoteOrder, getLoggedInHouseIds(state)),
@@ -2628,10 +2671,15 @@ function isDilemmaRecordBlank(dilemma: DilemmaRecord) {
   );
 }
 
-function assertCanResetDilemma(dilemma: DilemmaRecord, houseId: HouseId) {
+function assertCanResetDilemma(state: GameState, dilemma: DilemmaRecord, houseId: HouseId) {
   const author = getEffectiveDilemmaAuthorHouseId(dilemma);
+  const roleAuthor = isHouseId(state.dilemmaRolesAuthorHouseId) ? state.dilemmaRolesAuthorHouseId : null;
 
-  if (!author || author !== houseId) {
+  if (!author && !roleAuthor) {
+    throw new AgendaStateError("딜레마를 처음 작성한 가문만 결과를 초기화할 수 있습니다.", 403);
+  }
+
+  if (author !== houseId && roleAuthor !== houseId) {
     throw new AgendaStateError("딜레마를 처음 작성한 가문만 결과를 초기화할 수 있습니다.", 403);
   }
 }

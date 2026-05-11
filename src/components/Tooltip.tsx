@@ -88,6 +88,22 @@ export function Tooltip({
     setOpen(true);
   }, [hasLabel, updatePosition]);
   const hide = useCallback(() => setOpen(false), []);
+  const handleAnchorFocus = useCallback(
+    (event: React.FocusEvent<HTMLSpanElement>) => {
+      if (!event?.nativeEvent || event.nativeEvent.isTrusted === false) {
+        return;
+      }
+
+      show();
+    },
+    [show],
+  );
+  const handleAnchorMouseEnter = useCallback(() => {
+    show();
+  }, [show]);
+  const handleAnchorMouseLeave = useCallback(() => {
+    hide();
+  }, [hide]);
 
   useLayoutEffect(() => {
     if (open) {
@@ -120,10 +136,18 @@ export function Tooltip({
         tabIndex={tabIndex}
         aria-label={ariaLabel}
         aria-describedby={open && hasLabel ? tooltipId : undefined}
+        onPointerDownCapture={hide}
+        onMouseDownCapture={hide}
+        onClickCapture={hide}
+        onKeyDownCapture={(event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            hide();
+          }
+        }}
         onBlur={hide}
-        onFocus={show}
-        onMouseEnter={show}
-        onMouseLeave={hide}
+        onFocus={handleAnchorFocus}
+        onMouseEnter={handleAnchorMouseEnter}
+        onMouseLeave={handleAnchorMouseLeave}
         onPointerDown={hide}
       >
         {children}

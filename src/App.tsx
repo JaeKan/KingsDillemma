@@ -525,19 +525,22 @@ function App() {
     setTipsOpen((current) => !current);
   }, []);
 
-  const handleOpenDilemmaHistory = useCallback(() => {
+  const closeFloatingMenus = useCallback(() => {
     setSettingsOpen(false);
     setTipsOpen(false);
-    setDilemmaHistoryOpen(true);
   }, []);
+
+  const handleOpenDilemmaHistory = useCallback(() => {
+    closeFloatingMenus();
+    setDilemmaHistoryOpen(true);
+  }, [closeFloatingMenus]);
 
   const handleCloseDilemmaHistory = useCallback(() => {
     setDilemmaHistoryOpen(false);
   }, []);
 
   const handleOpenVoteOrderDialog = useCallback((eventOrOptions: any) => {
-    setSettingsOpen(false);
-    setTipsOpen(false);
+    closeFloatingMenus();
 
     const restoreFocusTarget = eventOrOptions?.restoreFocusTarget || eventOrOptions?.currentTarget;
 
@@ -546,7 +549,7 @@ function App() {
     }
 
     setVoteOrderDialogOpen(true);
-  }, []);
+  }, [closeFloatingMenus]);
 
   const handleCloseVoteOrderDialog = useCallback(() => {
     setVoteOrderDialogOpen(false);
@@ -569,10 +572,9 @@ function App() {
   );
 
   const handleOpenScoreGuide = useCallback(() => {
-    setSettingsOpen(false);
-    setTipsOpen(false);
+    closeFloatingMenus();
     setScoreGuideOpen(true);
-  }, []);
+  }, [closeFloatingMenus]);
 
   const handleCloseScoreGuide = useCallback(() => {
     setScoreGuideOpen(false);
@@ -590,13 +592,12 @@ function App() {
   }, []);
 
   const handleOpenSecretAgendaGuide = useCallback((event: any) => {
-    setSettingsOpen(false);
-    setTipsOpen(false);
+    closeFloatingMenus();
     if (event?.currentTarget) {
       secretAgendaGuideToggleRef.current = event.currentTarget;
     }
     setSecretAgendaGuideOpen(true);
-  }, []);
+  }, [closeFloatingMenus]);
 
   const handleCloseSecretAgendaGuide = useCallback(() => {
     setSecretAgendaGuideOpen(false);
@@ -699,6 +700,7 @@ function App() {
           onBgmVolumeChange={handleBgmVolumeChange}
           onToggleRandomDiscard={handleToggleRandomDiscard}
           onToggleBgmMuted={handleToggleBgmMuted}
+          onClose={closeFloatingMenus}
           onToggle={handleToggleSettings}
           onToggleTips={handleToggleTips}
           historyToggleRef={dilemmaHistoryToggleRef}
@@ -828,6 +830,7 @@ function FloatingSettings({
   onToggleBgmMuted,
   onToggleRandomDiscard,
   onToggleTips,
+  onClose,
   historyToggleRef,
   voteOrderToggleRef,
   tipsToggleRef,
@@ -835,9 +838,31 @@ function FloatingSettings({
   voteOrderLocked,
 }: any) {
   const bgmVolumePercent = Math.round(bgmVolume * 100);
+  const floatRef = React.useRef<HTMLDivElement>(null);
+
+  React.useEffect(() => {
+    if (!open && !tipsOpen) {
+      return undefined;
+    }
+
+    const handlePointerDown = (event: PointerEvent) => {
+      const root = floatRef.current;
+      const target = event.target;
+
+      if (!root || !(target instanceof Node) || root.contains(target)) {
+        return;
+      }
+
+      onClose?.();
+    };
+
+    document.addEventListener("pointerdown", handlePointerDown, true);
+
+    return () => document.removeEventListener("pointerdown", handlePointerDown, true);
+  }, [open, onClose, tipsOpen]);
 
   return (
-    <div className="settings-float">
+    <div ref={floatRef} className="settings-float">
       <div className="settings-float-actions">
         <button
           ref={toggleRef}
@@ -965,6 +990,7 @@ function FloatingSettings({
                   onClick={onEndSession}
                   disabled={busy || !canEndSession}
                 >
+                  <TokenIcon type="seal" />
                   {ko.app.settings.sessionEndPrep}
                 </button>
               </Tooltip>
@@ -1379,9 +1405,10 @@ function GamePanel({
           dilemmaModerator={state.dilemmaModerator}
           houses={state.houses || []}
           houseId={state.currentHouseId}
+          canEditDilemmaCard={state.phase === "complete" ? state.canEditDilemmaCard : undefined}
           canEnterDilemmaResolution={state.phase === "complete" ? Boolean(state.canEnterDilemmaResolution) : false}
           canPublishDilemmaResolution={state.phase === "complete" ? Boolean(state.canPublishDilemmaResolution) : false}
-          canResetDilemmaResult={state.phase === "complete" ? Boolean(state.canResetDilemmaResult) : false}
+          canResetDilemmaResult={Boolean(state.canResetDilemmaResult)}
           busy={busy}
           mutate={mutate}
           onSaveAlignmentReward={handleSaveAlignmentReward}
@@ -1664,6 +1691,7 @@ function PersonalInventoryPanel({
   dilemmaModerator,
   houses,
   houseId,
+  canEditDilemmaCard,
   canEnterDilemmaResolution = false,
   canPublishDilemmaResolution = false,
   canResetDilemmaResult = false,
@@ -2313,6 +2341,7 @@ function PersonalInventoryPanel({
             moderatorHouseId={dilemmaModerator}
             history={dilemmaHistory || []}
             houses={houses || []}
+            canEditDilemmaCard={canEditDilemmaCard}
             canEnterDilemmaResolution={canEnterDilemmaResolution}
             canPublishDilemmaResolution={canPublishDilemmaResolution}
             canResetDilemmaResult={canResetDilemmaResult}

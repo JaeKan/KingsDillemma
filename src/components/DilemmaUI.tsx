@@ -255,6 +255,7 @@ interface DilemmaSummaryCardProps {
   moderatorHouseId: string | null;
   history?: any[];
   houses?: RedactedHouse[];
+  canEditDilemmaCard?: boolean;
   editButtonRef?: React.RefObject<HTMLButtonElement>;
   resolutionButtonRef?: React.RefObject<HTMLButtonElement>;
   roleButtonRef?: React.RefObject<HTMLButtonElement>;
@@ -279,6 +280,7 @@ export function DilemmaSummaryCard({
   moderatorHouseId,
   history = [],
   houses = [],
+  canEditDilemmaCard,
   editButtonRef,
   resolutionButtonRef,
   roleButtonRef,
@@ -305,8 +307,6 @@ export function DilemmaSummaryCard({
   const leaderHouse = houseById.get(leaderHouseId as string) || null;
   const moderatorHouse = houseById.get(moderatorHouseId as string) || null;
   const rolesReady = Boolean(leaderHouse && moderatorHouse);
-  const hasResettableDilemma =
-    !isBlank || dilemmaHasVoteActivity(dilemma);
   const voteComplete = isDilemmaVoteCompleteForPublish(dilemma, houses);
   const publishBlockReason = getDilemmaPublishBlockReason(dilemma, houses);
   const status = getDilemmaStatusLabel({
@@ -320,10 +320,13 @@ export function DilemmaSummaryCard({
   });
   
   const canSetRoles = Boolean(currentHouseId) && isBlank && !locked;
-  const canEdit = Boolean(currentHouseId) && !lockedByOther && rolesReady;
+  const canEdit =
+    typeof canEditDilemmaCard === "boolean"
+      ? canEditDilemmaCard
+      : Boolean(currentHouseId) && !lockedByOther && rolesReady;
   const publishReadyClient = Boolean(currentHouseId) && !locked && !isBlank && !publishBlockReason;
   const canPublish = publishReadyClient && canPublishDilemmaResolution;
-  const canReset = Boolean(currentHouseId) && !lockedByOther && hasResettableDilemma && canResetDilemmaResult;
+  const canReset = Boolean(currentHouseId) && !lockedByOther && canResetDilemmaResult;
   const resolutionEntryPending = isDilemmaResolutionEntryPending(dilemma, houses);
   const resolutionLockOk = !dilemma.editLock || dilemma.editLock.houseId === currentHouseId;
   const canOpenResolutionEntry =
@@ -343,9 +346,15 @@ export function DilemmaSummaryCard({
     ? ko.dilemmaUi.editTooltipWait
     : !rolesReady
       ? ko.dilemmaUi.editTooltipNeedRoles
-      : isBlank
-        ? ko.dilemmaUi.editTooltipNew
-        : ko.dilemmaUi.editTooltipEdit;
+      : typeof canEditDilemmaCard === "boolean"
+        ? canEditDilemmaCard
+          ? isBlank
+            ? ko.dilemmaUi.editTooltipNew
+            : ko.dilemmaUi.editTooltipEdit
+          : ko.dilemmaUi.editTooltipAuthorOnly
+        : isBlank
+          ? ko.dilemmaUi.editTooltipNew
+          : ko.dilemmaUi.editTooltipEdit;
   const publishTooltip = locked
     ? ko.dilemmaUi.publishTooltipLocked
     : isBlank
@@ -356,11 +365,9 @@ export function DilemmaSummaryCard({
           : ko.dilemmaUi.publishTooltipDefault);
   const resetTooltip = lockedByOther
     ? ko.dilemmaUi.resetTooltipWait
-    : !hasResettableDilemma
-      ? ko.dilemmaUi.resetTooltipNone
-      : !canResetDilemmaResult
-        ? ko.dilemmaUi.resetTooltipAuthorOnly
-        : ko.dilemmaUi.resetTooltipOk;
+    : !canResetDilemmaResult
+      ? ko.dilemmaUi.resetTooltipAuthorOnly
+      : ko.dilemmaUi.resetTooltipOk;
   const resolutionEntryTooltip = !resolutionLockOk
     ? ko.dilemmaResolution.resultEntryTooltipLocked
     : ko.dilemmaResolution.resultEntryTooltip;
@@ -453,65 +460,61 @@ export function DilemmaSummaryCard({
         <div className="dilemma-summary-body">
           <div className="dilemma-summary-compact">
           <div className="dilemma-summary-meta-grid">
-            <div className="dilemma-summary-meta-hero">
-              <div className="dilemma-summary-meta-field dilemma-summary-meta-field--code">
-                <span className="dilemma-summary-meta-label">{ko.dilemmaUi.summaryLabelCardCode}</span>
-                <div className="dilemma-summary-meta-value">
-                  {cardCode ? (
-                    <span className="dilemma-summary-card-code">{cardCode}</span>
-                  ) : (
-                    <span className="dilemma-summary-meta-placeholder">—</span>
-                  )}
-                </div>
-              </div>
-              <div className="dilemma-summary-meta-field dilemma-summary-meta-field--title">
-                <span className="dilemma-summary-meta-label">{ko.dilemmaUi.summaryLabelTitle}</span>
-                <div className="dilemma-summary-meta-value dilemma-summary-meta-value--title">
-                  {cardTitle ? (
-                    <Tooltip className="dilemma-summary-title-anchor" label={cardTitle}>
-                      <span className="dilemma-summary-card-title">{cardTitle}</span>
-                    </Tooltip>
-                  ) : (
-                    <span className="dilemma-summary-meta-placeholder">—</span>
-                  )}
-                </div>
+            <div className="dilemma-summary-meta-field dilemma-summary-meta-field--code">
+              <span className="dilemma-summary-meta-label">{ko.dilemmaUi.summaryLabelCardCode}</span>
+              <div className="dilemma-summary-meta-value">
+                {cardCode ? (
+                  <span className="dilemma-summary-card-code">{cardCode}</span>
+                ) : (
+                  <span className="dilemma-summary-meta-placeholder">—</span>
+                )}
               </div>
             </div>
-            <div className="dilemma-summary-meta-row">
-              <div className="dilemma-summary-meta-field dilemma-summary-meta-field--time">
-                <span className="dilemma-summary-meta-label">{ko.dilemmaUi.summaryLabelTimeSlot}</span>
-                <div className="dilemma-summary-meta-value">
-                  {slotPlacement ? (
-                    <Tooltip label={`${ko.dilemmaHistory.factSlot}: ${slotPlacement}`}>
-                      <span className="dilemma-summary-slot-pill">{slotPlacement}</span>
-                    </Tooltip>
-                  ) : (
-                    <span className="dilemma-summary-meta-placeholder">—</span>
-                  )}
-                </div>
+            <div className="dilemma-summary-meta-field dilemma-summary-meta-field--time">
+              <span className="dilemma-summary-meta-label">{ko.dilemmaUi.summaryLabelTimeSlot}</span>
+              <div className="dilemma-summary-meta-value">
+                {slotPlacement ? (
+                  <Tooltip label={`${ko.dilemmaHistory.factSlot}: ${slotPlacement}`}>
+                    <span className="dilemma-summary-slot-pill">{slotPlacement}</span>
+                  </Tooltip>
+                ) : (
+                  <span className="dilemma-summary-meta-placeholder">—</span>
+                )}
               </div>
-              <div className="dilemma-summary-meta-field dilemma-summary-meta-field--sticker">
-                <span className="dilemma-summary-meta-label">{ko.dilemmaUi.summaryLabelStorySticker}</span>
-                <div className="dilemma-summary-meta-value">
-                  {dilemma.mysteryStickerId ? (
-                    <Tooltip
-                      label={`${ko.mysteryStickers.previewLabel}: ${getMysteryStickerLabel(dilemma.mysteryStickerId)}`}
-                      ariaLabel={`${ko.mysteryStickers.previewAlt}: ${getMysteryStickerLabel(dilemma.mysteryStickerId)}`}
-                    >
-                      <span className="dilemma-summary-sticker-group">
-                        <span className="dilemma-summary-sticker-wrap">
-                          <MysteryStickerImage
-                            stickerId={dilemma.mysteryStickerId}
-                            publicPath={getMysteryStickerEntry(dilemma.mysteryStickerId)?.publicPath}
-                            presentation="decorative"
-                          />
-                        </span>
+            </div>
+            <div className="dilemma-summary-meta-field dilemma-summary-meta-field--sticker">
+              <span className="dilemma-summary-meta-label">{ko.dilemmaUi.summaryLabelStorySticker}</span>
+              <div className="dilemma-summary-meta-value">
+                {dilemma.mysteryStickerId ? (
+                  <Tooltip
+                    label={`${ko.mysteryStickers.previewLabel}: ${getMysteryStickerLabel(dilemma.mysteryStickerId)}`}
+                    ariaLabel={`${ko.mysteryStickers.previewAlt}: ${getMysteryStickerLabel(dilemma.mysteryStickerId)}`}
+                  >
+                    <span className="dilemma-summary-sticker-group">
+                      <span className="dilemma-summary-sticker-wrap">
+                        <MysteryStickerImage
+                          stickerId={dilemma.mysteryStickerId}
+                          publicPath={getMysteryStickerEntry(dilemma.mysteryStickerId)?.publicPath}
+                          presentation="decorative"
+                        />
                       </span>
-                    </Tooltip>
-                  ) : (
-                    <span className="dilemma-summary-meta-placeholder">—</span>
-                  )}
-                </div>
+                    </span>
+                  </Tooltip>
+                ) : (
+                  <span className="dilemma-summary-meta-placeholder">—</span>
+                )}
+              </div>
+            </div>
+            <div className="dilemma-summary-meta-field dilemma-summary-meta-field--title">
+              <span className="dilemma-summary-meta-label">{ko.dilemmaUi.summaryLabelTitle}</span>
+              <div className="dilemma-summary-meta-value dilemma-summary-meta-value--title">
+                {cardTitle ? (
+                  <Tooltip className="dilemma-summary-title-anchor" label={cardTitle}>
+                    <span className="dilemma-summary-card-title">{cardTitle}</span>
+                  </Tooltip>
+                ) : (
+                  <span className="dilemma-summary-meta-placeholder">—</span>
+                )}
               </div>
             </div>
           </div>

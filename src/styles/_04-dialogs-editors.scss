@@ -941,6 +941,14 @@
   grid-template-columns: minmax(100px, 1fr) minmax(100px, 1fr);
 }
 
+.dilemma-dialog-grid.compact.dilemma-card-title-row {
+  grid-template-columns: minmax(120px, 170px) minmax(0, 1fr);
+}
+
+.dilemma-field-card-code {
+  max-width: 172px;
+}
+
 .visually-hidden {
   position: absolute;
   width: 1px;
@@ -966,10 +974,12 @@
 
 .mystery-sticker-picker-head h3 {
   margin: 0 0 2px;
-  font-size: 0.78rem;
-  font-weight: 900;
+  font-family: inherit;
+  font-size: 0.72rem;
+  font-weight: 930;
   color: var(--muted);
   letter-spacing: 0;
+  line-height: 1;
 }
 
 .mystery-sticker-picker-tiles {
@@ -1093,6 +1103,30 @@
   min-width: 0;
 }
 
+.dilemma-field-input-wrap {
+  position: relative;
+  display: block;
+  min-height: 38px;
+  min-width: 0;
+}
+
+.dilemma-field-input-prefix {
+  position: absolute;
+  left: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  pointer-events: none;
+  display: inline-flex;
+  align-items: center;
+  line-height: 1;
+  padding: 0;
+  white-space: nowrap;
+  color: var(--muted);
+  font-size: 0.9rem;
+  font-weight: 850;
+  min-height: 38px;
+}
+
 .dilemma-field>span,
 .dilemma-outcome-selector legend,
 .dilemma-outcome-editor legend {
@@ -1106,7 +1140,19 @@
 .dilemma-field input,
 .dilemma-field textarea {
   min-width: 0;
+  width: 100%;
   font-size: 0.9rem;
+}
+
+.dilemma-field-input-prefix-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding-left: 40px;
+  width: 100%;
+}
+
+.dilemma-field-input-wrap.focused .dilemma-field-input-prefix {
+  color: rgba(216, 178, 90, 0.95);
 }
 
 .dilemma-field input:disabled,
