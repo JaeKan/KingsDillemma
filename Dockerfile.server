@@ -1,0 +1,35 @@
+# syntax=docker/dockerfile:1
+# Express + 빌드된 SPA + MySQL 백엔드(docker-compose.yml 의 `web` 서비스).
+ARG NODE_VERSION=lts-alpine
+
+FROM node:${NODE_VERSION} AS builder
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci
+COPY . .
+
+ARG VITE_API_BASE=
+ENV VITE_API_BASE=${VITE_API_BASE}
+
+RUN npm run build
+
+FROM node:${NODE_VERSION} AS production
+WORKDIR /app
+# 프로덕션 컨테이너는 레포의 `.env` / `.env.development`를 읽지 않습니다(dotenv 미사용).
+# 변수는 compose/Kubernetes 등에서만 주입하고, 빌드 컨텍스트에서는 `.dockerignore`로 `.env*` 가 제외됩니다.
+ENV NODE_ENV=production
+
+COPY package*.json ./
+RUN npm ci --omit=dev && npm install tsx@4.21.0
+
+COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/server ./server
+COPY --from=builder /app/shared ./shared
+# 레포 경로 호환: agenda-state 등은 아직 `netlify/functions/_shared` 아래에 있음(Netlify 배포 여부와 무관).
+COPY --from=builder /app/netlify ./netlify
+
+ENV PORT=3000
+ENV HOST=0.0.0.0
+
+EXPOSE 3000
+CMD ["npx", "tsx", "server/index.mts"]

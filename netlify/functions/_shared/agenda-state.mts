@@ -5,6 +5,7 @@ import {
   isHouseId,
   sortHouseIdsByNumber,
 } from "../../../shared/houses.mjs";
+import { sanitizeMysteryStickerId } from "../../../shared/mystery-stickers.mts";
 
 export const PLAYER_COUNT = REQUIRED_HOUSE_COUNT;
 
@@ -117,6 +118,8 @@ export type DilemmaRecord = {
   historyId: string;
   cardCode: string;
   title: string;
+  /** 보드 카드 배치 위치(룰북 미스터리 스티커 1–6). 카탈로그 id, 빈 문자열 = 미선택 */
+  mysteryStickerId: string;
   timeCounterSlot: string;
   context: string;
   question: string;
@@ -449,6 +452,7 @@ export function createDefaultDilemmaRecord(now = new Date().toISOString()): Dile
     historyId: "",
     cardCode: "",
     title: "",
+    mysteryStickerId: "",
     timeCounterSlot: "",
     context: "",
     question: "",
@@ -1182,14 +1186,8 @@ export function saveDilemmaVote(
     throw new AgendaStateError("이미 결과가 선택된 딜레마 투표입니다.", 409);
   }
 
-  const currentVoteTurn = getCurrentDilemmaVoteTurn(state, now);
-
-  if (!currentVoteTurn) {
-    throw new AgendaStateError("로그인 중인 모든 가문이 투표했습니다. 결과와 후속 처리를 기록하세요.", 409);
-  }
-
-  if (currentVoteTurn !== houseId) {
-    throw new AgendaStateError(`${getHouseLabel(state, currentVoteTurn)} 가문의 투표 차례입니다.`, 403);
+  if (currentDilemma.voteNotes?.trim()) {
+    throw new AgendaStateError("투표 집계가 이미 확정되었습니다.", 409);
   }
 
   const sanitizedVote = sanitizeIncomingDilemmaVote(vote, getPlayerInventory(state, houseId).powerTokens);
@@ -1260,7 +1258,22 @@ export function applyDilemmaVotes(
   const nayPower = sumDilemmaVotePower(votes, participants, "nay");
 
   const passCount = participants.filter((participantId) => votes[participantId]?.side === "pass").length;
-  const voteNotes = `투표 집계: 찬성 ${ayePower} / 반대 ${nayPower} / 기권 ${passCount}. 결과 선택, 재화, 권력 토큰 처리는 가문 장부와 딜레마 편집에서 수기로 반영하세요.`;
+
+  // 영문 룰북 v35 §4 Vote Resolution: AYE vs NAY 권력 합 비교로 승패. 동률·전원 기권은 중재자 결정.
+  let selectedOutcome: DilemmaVoteSide | "" = "";
+
+  if (ayePower > nayPower) {
+    selectedOutcome = "aye";
+  } else if (nayPower > ayePower) {
+    selectedOutcome = "nay";
+  }
+
+  const tallyLine = `투표 집계: 찬성 ${ayePower} / 반대 ${nayPower} / 기권 ${passCount}.`;
+
+  const voteNotes =
+    selectedOutcome !== ""
+      ? `${tallyLine} 권력 다수는 「${selectedOutcome === "aye" ? "찬성" : "반대"}」입니다(King's Dilemma rulebook §4 Vote Resolution). 재화·권력·토큰은 장부와 딜레마 편집에서 수기로 반영하세요.`
+      : `${tallyLine} 찬성과 반대 권력이 같거나 전원 기권이면 중재자가 승리 쪽을 정합니다(§4). 딜레마 편집에서 결과를 선택하세요.`;
 
   return {
     ...state,
@@ -1268,6 +1281,7 @@ export function applyDilemmaVotes(
       ...currentDilemma,
       votes: Object.fromEntries(participants.map((participantId) => [participantId, votes[participantId]])),
       voteNotes,
+      ...(selectedOutcome ? { selectedOutcome } : {}),
       updatedAt: now,
       updatedBy: houseId,
       updatedByName: getHouseLabel(state, houseId),
@@ -1556,12 +1570,22 @@ export function applyChoose(
 }
 
 export function redactState(state: GameState, houseId: HouseId | null): RedactedState {
+  const now = new Date().toISOString();
   const ownChoiceId = houseId ? state.choices[houseId] : null;
   const isCurrentTurn = houseId !== null && state.turn === houseId;
   const canDiscard = isCurrentTurn && state.phase === "discard";
   const canChoose = isCurrentTurn && state.phase === "choose" && !ownChoiceId;
-  const dilemmaVoteTurn = getCurrentDilemmaVoteTurn(state);
-  const canVoteDilemma = houseId !== null && dilemmaVoteTurn === houseId;
+  const dilemmaVoteTurn = getCurrentDilemmaVoteTurn(state, now);
+  const dilemmaForVote = sanitizeDilemmaRecord(state.dilemma, now);
+  const tallyLocked = Boolean(dilemmaForVote.voteNotes?.trim());
+  const canVoteDilemma =
+    houseId !== null &&
+    state.phase === "complete" &&
+    !isDilemmaRecordBlank(dilemmaForVote) &&
+    !dilemmaForVote.editLock &&
+    !dilemmaForVote.selectedOutcome &&
+    !tallyLocked &&
+    getDilemmaVotingParticipants(state).includes(houseId);
   const houses = HOUSE_CATALOG.map((house) => {
     const id = house.id;
     const hasPassword = Boolean(state.credentials[id]);
@@ -1813,7 +1837,7 @@ function assertDilemmaPublishReady(state: GameState, dilemma: DilemmaRecord, now
   }
 
   if (!dilemma.selectedOutcome) {
-    throw new AgendaStateError("딜레마 투표 결과를 직접 선택한 뒤 게시할 수 있습니다.", 409);
+    throw new AgendaStateError("딜레마 투표 결과(찬성/반대)가 확정된 뒤 게시할 수 있습니다. 동률이면 중재자 결정을 먼저 하세요.", 409);
   }
 
   if (!dilemma.resolutionNotes.trim()) {
@@ -1854,14 +1878,17 @@ function getCurrentDilemmaVoteTurn(state: GameState, now = new Date().toISOStrin
 
   const currentDilemma = sanitizeDilemmaRecord(state.dilemma, now);
 
-  if (currentDilemma.selectedOutcome || currentDilemma.editLock || isDilemmaRecordBlank(currentDilemma)) {
+  if (
+    currentDilemma.selectedOutcome ||
+    currentDilemma.editLock ||
+    isDilemmaRecordBlank(currentDilemma) ||
+    currentDilemma.voteNotes?.trim()
+  ) {
     return null;
   }
 
-  const participants = getDilemmaVotingParticipants(state);
-  const votes = sanitizeDilemmaVotes(currentDilemma.votes, now);
-
-  return participants.find((participantId) => !votes[participantId]?.side) || null;
+  // 협상·동시 투표: 서버는 제출 순서를 강제하지 않는다(UI에서 시계방향 권장 차례만 표시 가능).
+  return null;
 }
 
 function sortHouseIdsForVoting(
@@ -2124,6 +2151,7 @@ function sanitizeDilemmaRecord(value: unknown, now: string): DilemmaRecord {
     historyId: sanitizeSingleLineText(candidate.historyId, DILEMMA_HISTORY_ID_LIMIT),
     cardCode: sanitizeSingleLineText(candidate.cardCode, DILEMMA_CODE_LIMIT),
     title: sanitizeSingleLineText(candidate.title, DILEMMA_TITLE_LIMIT),
+    mysteryStickerId: sanitizeMysteryStickerId(candidate.mysteryStickerId),
     timeCounterSlot: sanitizeSingleLineText(candidate.timeCounterSlot, DILEMMA_SLOT_LIMIT),
     context: sanitizeMultilineText(candidate.context, DILEMMA_LONG_TEXT_LIMIT),
     question: sanitizeMultilineText(candidate.question, DILEMMA_LONG_TEXT_LIMIT),
@@ -2301,6 +2329,7 @@ function isDilemmaRecordBlank(dilemma: DilemmaRecord) {
     dilemma.cardCode,
     dilemma.title,
     dilemma.timeCounterSlot,
+    dilemma.mysteryStickerId,
     dilemma.context,
     dilemma.question,
     dilemma.councilNotes,

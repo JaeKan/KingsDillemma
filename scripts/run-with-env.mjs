@@ -1,5 +1,9 @@
 import { readFileSync } from "node:fs";
 import { spawn } from "node:child_process";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 const separatorIndex = process.argv.indexOf("--");
 const envFile = process.argv[2];
@@ -9,7 +13,8 @@ if (!envFile || separatorIndex < 0 || separatorIndex === process.argv.length - 1
   process.exit(1);
 }
 
-loadEnvFile(envFile);
+const resolvedEnvPath = path.isAbsolute(envFile) ? envFile : path.join(repoRoot, envFile);
+loadEnvFile(resolvedEnvPath);
 
 const [command, ...args] = process.argv.slice(separatorIndex + 1);
 const commandOptions = createCommandOptions(command, args);
@@ -28,15 +33,18 @@ child.on("exit", (code, signal) => {
   process.exit(code ?? 0);
 });
 
-function loadEnvFile(path) {
+function loadEnvFile(filePath) {
   let contents;
 
   try {
-    contents = readFileSync(path, "utf8");
+    contents = readFileSync(filePath, "utf8");
   } catch (error) {
     if (error?.code === "ENOENT") {
-      console.warn(`Env file not found: ${path}`);
-      return;
+      console.error(`[run-with-env] 환경 파일을 찾을 수 없습니다:\n  ${filePath}`);
+      console.error(
+        "[run-with-env] 프로젝트 루트에 `.env`를 두세요. 예: `.env.example`을 복사해 수정 (`package.json`은 기본으로 `.env`를 로드합니다).",
+      );
+      process.exit(1);
     }
 
     throw error;

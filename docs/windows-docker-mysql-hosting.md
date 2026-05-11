@@ -1,6 +1,6 @@
 # Windows Docker + MySQL Hosting
 
-This project can now run without Netlify by serving the Vite build and the same `/api/agenda` contract from a Node server backed by MySQL.
+Production-style hosting uses Docker (or another Node host) with the Vite build and the same `/api/agenda` contract from Express plus MySQL.
 
 ## What Is Preserved
 
@@ -15,8 +15,8 @@ This project can now run without Netlify by serving the Vite build and the same 
 
 1. Install Docker Desktop for Windows and start it.
 2. If Docker Desktop or WSL was just installed, restart Windows before starting the stack.
-3. Copy `.env.docker.example` to `.env`.
-4. Replace `MYSQL_PASSWORD`, `MYSQL_ROOT_PASSWORD`, and `LOGIN_CODE` in `.env`.
+3. In the repo root, create `.env` following the **Production (Docker deployment)** section in [`/.env.example`](../.env.example), or reuse your team's existing Docker env template.
+4. Replace `MYSQL_PASSWORD`, `MYSQL_ROOT_PASSWORD`, `LOGIN_CODE`, and any other placeholders with secure values — **never commit real secrets**.
 5. Start the stack:
 
 ```powershell
@@ -39,11 +39,11 @@ Do not run `docker compose down -v` unless you intentionally want to delete the 
 
 ## Production Notes
 
-- Put the Windows host behind HTTPS before real players use it. Netlify provided HTTPS automatically; Docker does not.
+- Put the Windows host behind HTTPS before real players use it. Plain Docker does not terminate TLS; use Caddy overlay, a reverse proxy, or another TLS front end.
 - For a domain with built-in Caddy HTTPS, set `DOMAIN` in `.env`, point DNS to the Windows host, then run:
 
 ```powershell
-docker compose -f docker-compose.yml -f docker-compose.https.yml up --build -d
+docker compose --profile https up --build -d
 ```
 
 - If you use Caddy or another reverse proxy, set `APP_PORT=127.0.0.1:3000` in `.env` if you want the Node app port bound only to localhost.
@@ -54,7 +54,7 @@ docker compose -f docker-compose.yml -f docker-compose.https.yml up --build -d
 
 ## Import Existing State
 
-Netlify Blob data is not automatically copied into MySQL. If you have an exported `active-game.json`, import it with:
+MySQL does not load game state automatically from arbitrary cloud exports. If you already have an exported `active-game.json`, import it with:
 
 ```powershell
 $env:MYSQL_HOST="127.0.0.1"
@@ -65,4 +65,4 @@ $env:MYSQL_PASSWORD="<your password>"
 npm run mysql:import -- .\active-game.json
 ```
 
-If you need the current production Netlify Blob state and do not already have it as JSON, export must be done from Netlify with credentials or a temporary admin export path before shutting Netlify down.
+If you need historical state that only exists in an old host’s storage, obtain a JSON export through that environment’s tools or support before migrating.

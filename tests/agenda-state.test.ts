@@ -705,7 +705,7 @@ votingState = savePlayerInventory(votingState, "coden", { ...createDefaultPlayer
 votingState = savePlayerInventory(votingState, "solad", { ...createDefaultPlayerInventory(now), powerTokens: 5 }, now);
 assert.equal(
   redactState({ ...votingState, dilemmaVoteOrder: customVoteOrderState.dilemmaVoteOrder }, "gamam").dilemmaVoteTurn,
-  "gamam",
+  null,
 );
 const customSeatingTurnState = saveDilemmaVote(
   { ...votingState, dilemmaVoteOrder: customVoteOrderState.dilemmaVoteOrder },
@@ -713,37 +713,49 @@ const customSeatingTurnState = saveDilemmaVote(
   { side: "aye", powerTokens: 1 },
   now,
 );
-assert.equal(redactState(customSeatingTurnState, "coden").dilemmaVoteTurn, "coden");
-assert.equal(redactState(votingState, "gamam").dilemmaVoteTurn, "gamam");
+assert.equal(redactState(customSeatingTurnState, "coden").dilemmaVoteTurn, null);
+assert.equal(redactState(votingState, "gamam").dilemmaVoteTurn, null);
 assert.equal(redactState(votingState, "gamam").canVoteDilemma, true);
-assert.equal(redactState(votingState, "natar").canVoteDilemma, false);
+assert.equal(redactState(votingState, "natar").canVoteDilemma, true);
+assert.equal(redactState(votingState, "solad").canVoteDilemma, true);
 assert.equal(redactState(votingState, "gamam").dilemmaLeader, "gamam");
 assert.equal(redactState(votingState, "gamam").dilemmaModerator, "solad");
 assert.throws(() => saveDilemmaVote(votingState, "gamam", { side: "aye", powerTokens: 9 }, now), /8개/);
+const votingStateBeforeAnyVote = votingState;
 votingState = saveDilemmaVote(votingState, "gamam", { side: "aye", powerTokens: 2 }, now);
-assert.equal(redactState(votingState, "natar").dilemmaVoteTurn, "natar");
+votingState = saveDilemmaVote(votingState, "gamam", { side: "nay", powerTokens: 1 }, now);
+assert.equal(votingState.dilemma.votes.gamam?.side, "nay");
+assert.equal(redactState(votingState, "natar").dilemmaVoteTurn, null);
 assert.equal(redactState(votingState, "natar").canVoteDilemma, true);
-assert.throws(() => saveDilemmaVote(votingState, "solad", { side: "aye", powerTokens: 2 }, now), /투표 차례/);
-votingState = saveDilemmaVote(votingState, "natar", { side: "aye", powerTokens: 3 }, now);
+votingState = saveDilemmaVote(votingState, "gamam", { side: "aye", powerTokens: 2 }, now);
+assert.equal(votingState.dilemma.votes.gamam?.side, "aye");
 votingState = saveDilemmaVote(votingState, "solad", { side: "nay", powerTokens: 1 }, now);
+votingState = saveDilemmaVote(votingState, "natar", { side: "aye", powerTokens: 3 }, now);
 votingState = saveDilemmaVote(votingState, "coden", { side: "pass", powerTokens: 6 }, now);
 assert.equal(votingState.dilemma.votes.coden?.powerTokens, 0);
 assert.throws(() => applyDilemmaVotes(votingState, "gamam", now), /모든 가문/);
-const tieVotingState = saveDilemmaVote(votingState, "olwyn", { side: "pass", powerTokens: 0 }, now);
-const tiedTallyState = applyDilemmaVotes(tieVotingState, "gamam", now);
+
+let tieLine = saveDilemmaVote(votingStateBeforeAnyVote, "gamam", { side: "aye", powerTokens: 2 }, now);
+tieLine = saveDilemmaVote(tieLine, "natar", { side: "aye", powerTokens: 2 }, now);
+tieLine = saveDilemmaVote(tieLine, "solad", { side: "nay", powerTokens: 3 }, now);
+tieLine = saveDilemmaVote(tieLine, "coden", { side: "nay", powerTokens: 1 }, now);
+assert.throws(() => applyDilemmaVotes(tieLine, "gamam", now), /모든 가문/);
+tieLine = saveDilemmaVote(tieLine, "olwyn", { side: "pass", powerTokens: 0 }, now);
+const tiedTallyState = applyDilemmaVotes(tieLine, "gamam", now);
 assert.equal(tiedTallyState.dilemma.selectedOutcome, "");
-assert.match(tiedTallyState.dilemma.voteNotes, /찬성 5 \/ 반대 1 \/ 기권 2/);
+assert.match(tiedTallyState.dilemma.voteNotes, /찬성 4 \/ 반대 4 \/ 기권 1/);
+
 votingState = saveDilemmaVote(votingState, "olwyn", { side: "nay", powerTokens: 2 }, now);
 const inventoriesBeforeDilemmaApply = votingState.inventories;
 votingState = applyDilemmaVotes(votingState, "gamam", now);
-assert.equal(votingState.dilemma.selectedOutcome, "");
+assert.equal(votingState.dilemma.selectedOutcome, "aye");
 assert.match(votingState.dilemma.voteNotes, /찬성 5 \/ 반대 3 \/ 기권 1/);
-assert.match(votingState.dilemma.voteNotes, /수기로 반영/);
-assert.throws(() => publishDilemmaRecord(votingState, "gamam", "history-manual", now), /직접 선택/);
+assert.match(votingState.dilemma.voteNotes, /§4 Vote Resolution/);
+assert.throws(() => publishDilemmaRecord(votingState, "gamam", "history-manual", now), /해결 후속/);
 assert.deepEqual(votingState.inventories, inventoriesBeforeDilemmaApply);
 assert.equal(redactState(votingState, "natar").dilemmaVoteTurn, null);
 assert.equal(redactState(votingState, "natar").canVoteDilemma, false);
-assert.throws(() => saveDilemmaVote(votingState, "natar", { side: "nay", powerTokens: 0 }, now), /모든 가문.*투표/);
+assert.throws(() => saveDilemmaVote(votingState, "natar", { side: "nay", powerTokens: 0 }, now), /이미 결과/);
 
 editingDilemma = beginDilemmaEdit(state, "gamam", "edit-token-2", now);
 const canceledDilemma = cancelDilemmaEdit(editingDilemma, "gamam", "edit-token-2", now);

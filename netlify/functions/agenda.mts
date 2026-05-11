@@ -1,12 +1,11 @@
 import { getDeployStore, getStore } from "@netlify/blobs";
 import type { Config, Context } from "@netlify/functions";
 import {
-  STORE_KEY,
   STORE_NAME,
   handleAgendaRequest,
-  type AgendaStateStore,
+  type AgendaStateStoreFactory,
 } from "../../shared/agenda-api.mts";
-import { createMysqlAgendaStore } from "../../server/mysql-agenda-store.mts";
+import { createMysqlAgendaPool } from "../../server/mysql-agenda-store.mts";
 
 declare const Netlify:
   | undefined
@@ -26,11 +25,11 @@ const MYSQL_ENV_NAMES = [
   "MYSQL_CONNECTION_LIMIT",
 ] as const;
 
-let mysqlStore: AgendaStateStore | null = null;
+let mysqlPool: ReturnType<typeof createMysqlAgendaPool> | null = null;
 
 export default async function agenda(req: Request, context: Context) {
   const deployContext = getDeployContext(context);
-  const store = getAgendaStore(deployContext);
+  const storeFactory = getAgendaStoreFactory(deployContext);
 
   return handleAgendaRequest(
     req,
@@ -39,7 +38,7 @@ export default async function agenda(req: Request, context: Context) {
       deployContext,
       loginCode: getConfiguredLoginCode(),
     },
-    store,
+    storeFactory,
   );
 }
 
@@ -48,11 +47,12 @@ export const config: Config = {
   method: ["GET", "POST"],
 };
 
-function getAgendaStore(deployContext: string | undefined): AgendaStateStore {
+function getAgendaStoreFactory(deployContext: string | undefined): AgendaStateStoreFactory {
   if (isMysqlConfigured()) {
     syncMysqlEnv();
-    mysqlStore ||= createMysqlAgendaStore();
-    return mysqlStore;
+    mysqlPool ??= createMysqlAgendaPool();
+
+    return (rowKey) => mysqlPool!.createStore(rowKey);
   }
 
   const blobStore =
@@ -60,12 +60,12 @@ function getAgendaStore(deployContext: string | undefined): AgendaStateStore {
       ? getStore(STORE_NAME, { consistency: "strong" })
       : getDeployStore(STORE_NAME, { consistency: "strong" });
 
-  return {
-    get: () => blobStore.get(STORE_KEY, { type: "json" }),
+  return (rowKey) => ({
+    get: () => blobStore.get(rowKey, { type: "json" }),
     set: async (state) => {
-      await blobStore.setJSON(STORE_KEY, state);
+      await blobStore.setJSON(rowKey, state);
     },
-  };
+  });
 }
 
 function isMysqlConfigured() {

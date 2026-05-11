@@ -1,6 +1,8 @@
 services:
   web:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile.server
     restart: unless-stopped
     depends_on:
       mysql:
@@ -8,6 +10,7 @@ services:
     environment:
       NODE_ENV: production
       APP_ENV: production
+      MYSQL_USE_DEV_DB: "0"
       PORT: 3000
       MYSQL_HOST: mysql
       MYSQL_PORT: 3306
@@ -38,5 +41,58 @@ services:
       retries: 12
       start_period: 30s
 
+  # 정적 SPA만 (nginx). 프로덕션 API/UI 전체 스택과 동시에 쓰지 않음.
+  static:
+    profiles: ["static"]
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "${STATIC_PORT:-8080}:80"
+
+  # 개발·테스트 전용 MySQL (운영 `mysql`과 별도 데이터 볼륨). 같은 호스트에서 `docker compose up` 시 함께 기동.
+  # 루트 `.env`는 `MYSQL_*`로 운영 DB, `MYSQL_DEV_*`로 이 서비스만 설정해 변수가 섞이지 않게 합니다.
+  mysql-dev:
+    image: mysql:8.4
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: ${MYSQL_DEV_DATABASE:-kingsdillemma_dev}
+      MYSQL_USER: ${MYSQL_DEV_USER:-kingsdilemma_dev}
+      MYSQL_PASSWORD: ${MYSQL_DEV_PASSWORD:-your_dev_password}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_DEV_ROOT_PASSWORD:-your_dev_root_password}
+    command:
+      - "--character-set-server=utf8mb4"
+      - "--collation-server=utf8mb4_0900_ai_ci"
+    ports:
+      - "${MYSQL_DEV_PUBLISH:-127.0.0.1:3307}:3306"
+    volumes:
+      - mysql-dev-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u$${MYSQL_USER} -p$${MYSQL_PASSWORD} --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+
+  caddy:
+    profiles: ["https"]
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      - web
+    environment:
+      DOMAIN: ${DOMAIN:?Set DOMAIN in .env for HTTPS hosting}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./docker/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+
 volumes:
   mysql-data:
+  mysql-dev-data:
+  caddy-data:
+  caddy-config:

@@ -1,11 +1,16 @@
+// 로컬 개발: `npm run dev` → 루트 `.env`(run-with-env)만 주입. `MYSQL_USE_DEV_DB=1` + `MYSQL_DEV_*` 일 때 아젠다 스토어는 항상 개발 DB(`MYSQL_URL`/`DATABASE_URL` 미적용). Docker `web`는 `MYSQL_*`·호스트 `mysql`.
 import express from "express";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { getAuthenticatedHouse, handleAgendaRequest } from "../shared/agenda-api.mts";
+import {
+  getAuthenticatedHouse,
+  handleAgendaRequest,
+  resolveAgendaStateRowKey,
+  type AgendaStateStore,
+} from "../shared/agenda-api.mts";
 import { normalizeState } from "../netlify/functions/_shared/agenda-state.mts";
 import type { GameState } from "../netlify/functions/_shared/agenda-state.mts";
-import type { AgendaStateStore } from "../shared/agenda-api.mts";
-import { createMysqlAgendaStore } from "./mysql-agenda-store.mts";
+import { createMysqlAgendaPool } from "./mysql-agenda-store.mts";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, "..");
@@ -17,14 +22,19 @@ const host = process.env.HOST || "0.0.0.0";
 const bodyLimitBytes = parsePositiveInteger(process.env.REQUEST_BODY_LIMIT_BYTES, 5 * 1024 * 1024);
 
 const app = express();
-const mysqlStore = createMysqlAgendaStore();
+const mysqlPool = createMysqlAgendaPool();
 const agendaEvents = createAgendaEventHub();
-const store: AgendaStateStore = {
-  get: () => mysqlStore.get(),
-  set: async (state) => {
-    await mysqlStore.set(state);
-    agendaEvents.broadcast(state);
-  },
+
+const mysqlAgendaStoreFactory = (rowKey: string): AgendaStateStore => {
+  const inner = mysqlPool.createStore(rowKey);
+
+  return {
+    get: () => inner.get(),
+    set: async (state) => {
+      await inner.set(state);
+      agendaEvents.broadcast(state, rowKey);
+    },
+  };
 };
 
 app.disable("x-powered-by");
@@ -32,15 +42,18 @@ app.set("trust proxy", true);
 
 app.get("/api/agenda/events", async (req: express.Request, res: express.Response) => {
   try {
+    const webRequest = await toWebRequest(req);
+    const rowKey = resolveAgendaStateRowKey(webRequest.url);
+    const store = mysqlAgendaStoreFactory(rowKey);
     const state = normalizeState(await store.get());
-    const houseId = getAuthenticatedHouse(await toWebRequest(req), {}, state);
+    const houseId = getAuthenticatedHouse(webRequest, {}, state);
 
     if (!houseId) {
       res.status(401).json({ ok: false, error: "Login required." });
       return;
     }
 
-    agendaEvents.connect(req, res);
+    agendaEvents.connect(req, res, rowKey);
   } catch (error) {
     console.error(error);
     res.status(500).json({ ok: false, error: "Unexpected server error." });
@@ -49,14 +62,15 @@ app.get("/api/agenda/events", async (req: express.Request, res: express.Response
 
 app.all("/api/agenda", async (req: express.Request, res: express.Response) => {
   try {
+    const webRequest = await toWebRequest(req);
     const response = await handleAgendaRequest(
-      await toWebRequest(req),
+      webRequest,
       {
         deployContext: process.env.APP_ENV || process.env.NODE_ENV,
         loginCode: process.env.LOGIN_CODE,
         realtimeUpdatesEnabled: true,
       },
-      store,
+      mysqlAgendaStoreFactory,
     );
 
     res.status(response.status);
@@ -124,7 +138,7 @@ for (const signal of ["SIGINT", "SIGTERM"] as const) {
   process.on(signal, async () => {
     server.close();
     agendaEvents.closeAll();
-    await mysqlStore.close();
+    await mysqlPool.close();
     process.exit(0);
   });
 }
@@ -134,6 +148,7 @@ function createAgendaEventHub() {
     id: number;
     res: express.Response;
     heartbeat: ReturnType<typeof setInterval>;
+    rowKey: string;
   };
 
   const clients = new Set<SseClient>();
@@ -154,7 +169,7 @@ function createAgendaEventHub() {
   };
 
   return {
-    connect(req: express.Request, res: express.Response) {
+    connect(req: express.Request, res: express.Response, rowKey: string) {
       res.status(200);
       res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
       res.setHeader("Cache-Control", "no-store, no-transform");
@@ -165,6 +180,7 @@ function createAgendaEventHub() {
       const client: SseClient = {
         id: nextClientId,
         res,
+        rowKey,
         heartbeat: setInterval(() => {
           res.write(`: heartbeat ${Date.now()}\n\n`);
         }, 25_000),
@@ -177,10 +193,14 @@ function createAgendaEventHub() {
         removeClient(client);
       });
     },
-    broadcast(state: GameState) {
+    broadcast(state: GameState, rowKey: string) {
       const payload = { version: state.version, updatedAt: state.updatedAt };
 
       for (const client of Array.from(clients)) {
+        if (client.rowKey !== rowKey) {
+          continue;
+        }
+
         sendEvent(client, "state", payload);
       }
     },

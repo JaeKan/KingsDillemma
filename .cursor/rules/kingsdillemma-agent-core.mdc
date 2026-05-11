@@ -1,5 +1,5 @@
 ---
-description: Kings Dilemma — 완료 기준(verify), 범위, UI·한국어 문자열 경로, App.tsx 탐색, Netlify/shared
+description: Kings Dilemma — 완료 기준(verify), 범위, UI·한국어 문자열 경로, App.tsx 탐색, shared·레거시 netlify/
 alwaysApply: true
 ---
 
@@ -10,5 +10,5 @@ alwaysApply: true
 - **`src/App.tsx`**: `grep`/검색으로 위치 좁힘 → **부분 읽기만**(통째 읽기·붙여넣기 금지). 글로브 규칙: [`kingsdillemma-app-tsx.mdc`](kingsdillemma-app-tsx.mdc).
 - **신규 UI**: `src/components/` 또는 `src/features/` **새 파일** 우선, `App.tsx`에는 연결만. `App.tsx` 대규모 분할은 **명시 요청 시에만**.
 - **한국어 카피**: `src/resources/ko/` (기존 패턴)에서 관리·참조.
-- **경계**: 서버리스 **`netlify/functions/`**; 앱과 공유하는 타입·클라이언트 등은 **`shared/`**.
+- **경계**: 레거시 보관 **`netlify/functions/`**(배포 미사용); 앱·서버 공유 로직·타입은 **`shared/`**, API 서버는 **`server/`**·[`DOCKER.md`](../../DOCKER.md) 기준.
 - **문서 단일 출처**: 요약·9항 체크리스트는 [`AGENTS.md`](../../AGENTS.md); 이 파일은 우선순위·습관만 압축.

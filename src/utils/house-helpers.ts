@@ -7,7 +7,7 @@ import {
   phaseCopy,
 } from "../resources/gameResources";
 import { RedactedHouse, RedactedState, HouseId } from "../types/game";
-import { normalizeDilemmaRecord, isDilemmaBlank } from "./dilemma-helpers";
+import { normalizeDilemmaRecord, isDilemmaBlank, normalizeDilemmaVotes } from "./dilemma-helpers";
 
 export function isCustomNameReady(name: string): boolean {
   const trimmed = name.trim();
@@ -155,13 +155,20 @@ export function getCouncilStageCopy(state: RedactedState): string {
 
   if (state.phase === "complete" && !isDilemmaBlank(state.dilemma)) {
     const dilemma = normalizeDilemmaRecord(state.dilemma);
-    const voteTurnName = getDilemmaVoteTurnName(state);
 
-    return dilemma.selectedOutcome
-      ? ko.houseHelpers.outcomeSelectedBlurb
-      : voteTurnName
-        ? ko.houseHelpers.voteTurnForHouse(voteTurnName)
-        : ko.houseHelpers.allVotedBlurb;
+    if (dilemma.selectedOutcome) {
+      return ko.houseHelpers.outcomeSelectedBlurb;
+    }
+
+    if (dilemma.voteNotes?.trim() && !dilemma.selectedOutcome) {
+      return ko.houseHelpers.moderatorTieBlurb;
+    }
+
+    if (isDilemmaVotingComplete(state)) {
+      return ko.houseHelpers.allVotedBlurb;
+    }
+
+    return ko.houseHelpers.votingNegotiateBlurb;
   }
 
   return phaseCopy[state.phase as keyof typeof phaseCopy] || ko.houseHelpers.councilUpdating;
@@ -189,8 +196,29 @@ export function getCouncilProcedureTitle(state: RedactedState): string {
   return ko.houseHelpers.labelCouncilReady;
 }
 
+/** UI 전용: 서버가 순서를 강제하지 않을 때 시계방향 권장 차례로 첫 미투표 가문. */
+export function getSuggestedDilemmaVoteTurnHouseId(state: RedactedState): HouseId | null {
+  if (state.phase !== "complete" || isDilemmaBlank(state.dilemma)) {
+    return null;
+  }
+
+  const dilemma = normalizeDilemmaRecord(state.dilemma);
+
+  if (dilemma.selectedOutcome || dilemma.editLock || dilemma.voteNotes?.trim()) {
+    return null;
+  }
+
+  const participants = getDilemmaVoteParticipants(state);
+  const votes = normalizeDilemmaVotes(dilemma.votes);
+  const next = participants.find((house) => !votes[house.id]?.side);
+
+  return next?.id ?? null;
+}
+
 export function getDilemmaVoteTurnName(state: RedactedState): string {
-  return state.dilemmaVoteTurn ? getHouseDisplayName(state, state.dilemmaVoteTurn) : "";
+  const turnHouse = state.dilemmaVoteTurn ?? getSuggestedDilemmaVoteTurnHouseId(state);
+
+  return turnHouse ? getHouseDisplayName(state, turnHouse) : "";
 }
 
 export function getDilemmaProgressLabel(state: RedactedState): string {
@@ -222,11 +250,19 @@ export function isDilemmaVotingComplete(state: RedactedState): boolean {
 
   const dilemma = normalizeDilemmaRecord(state.dilemma);
 
-  if (dilemma.selectedOutcome) {
+  if (dilemma.selectedOutcome || dilemma.voteNotes?.trim()) {
     return true;
   }
 
-  return !state.dilemmaVoteTurn;
+  const participants = getDilemmaVoteParticipants(state);
+
+  if (participants.length === 0) {
+    return false;
+  }
+
+  const votes = normalizeDilemmaVotes(dilemma.votes);
+
+  return participants.every((house) => Boolean(votes[house.id]?.side));
 }
 
 export function getDilemmaVoteParticipants(state: RedactedState): RedactedHouse[] {

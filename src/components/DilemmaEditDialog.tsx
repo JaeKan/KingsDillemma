@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef } from "react";
+import React, { useCallback, useEffect, useId, useRef } from "react";
 import { ValueMentionTextarea, MentionRenderedPreview, hasMentionToken, type MentionPart } from "./MentionUI";
 import { 
   normalizeDilemmaOutcome,
@@ -8,6 +8,7 @@ import { dilemmaPhotoLimit, resourceCounters, ko } from "../resources/gameResour
 import { TokenIcon } from "./GameIcons";
 import { DilemmaResourceDeltaPreview } from "./DilemmaUI";
 import { DilemmaPhoto, DilemmaEditDraft } from "../types/game";
+import { MysteryStickerPicker } from "./MysteryStickerPicker";
 
 function getClipboardImageFiles(clipboardData: DataTransfer | null): File[] {
   if (!clipboardData) {
@@ -334,6 +335,11 @@ function DilemmaEditDialog({
               placeholder={ko.dilemmaEdit.phSlot}
             />
           </div>
+          <MysteryStickerPicker
+            value={draft.mysteryStickerId || ""}
+            disabled={busy}
+            onChange={(id) => onFieldChange("mysteryStickerId", id)}
+          />
           <div className="dilemma-dialog-grid">
             <DilemmaMentionTextarea
               label={ko.dilemmaEdit.labelContext}
@@ -476,41 +482,61 @@ function DilemmaMentionTextarea({
   );
 }
 
-const DilemmaOutcomeEditor = ({ label, outcome, selected, onChange }: { label: string; outcome: any; selected: boolean; onChange: (f: string, v: any) => void }) => (
-  <fieldset className={`dilemma-outcome-editor${selected ? " selected" : ""}`}>
-    <legend>{label}</legend>
-    <DilemmaMentionTextarea
-      label={ko.dilemmaEdit.labelSummary}
-      value={outcome.preview}
-      onChange={(v) => onChange("preview", v)}
-      placeholder={ko.dilemmaEdit.phSummary}
-    />
-    <DilemmaMentionTextarea
-      label={ko.dilemmaEdit.labelOutcomeShort}
-      value={outcome.result}
-      onChange={(v) => onChange("result", v)}
-      placeholder={ko.dilemmaEdit.phOutcome}
-    />
-    <div className="dilemma-resource-deltas-edit">
-      <p className="section-label">{ko.dilemmaEdit.resourceDeltaSection}</p>
-      <div className="dilemma-resource-deltas-grid">
-        {resourceCounters.map((resource) => (
-          <label key={resource.id} className="dilemma-delta-input">
-            <TokenIcon type={resource.icon} />
-            <span>{resource.label}</span>
-            <input
-              type="number"
-              value={outcome.resourceDeltas[resource.id] || 0}
-              onChange={(e) => {
-                const val = parseInt(e.target.value, 10);
-                onChange("resourceDeltas", { ...outcome.resourceDeltas, [resource.id]: isNaN(val) ? 0 : val });
-              }}
-            />
-          </label>
-        ))}
+function DilemmaOutcomeEditor({
+  label,
+  outcome,
+  selected,
+  onChange,
+}: {
+  label: string;
+  outcome: any;
+  selected: boolean;
+  onChange: (f: string, v: any) => void;
+}) {
+  const resourceHeadingId = useId();
+
+  return (
+    <fieldset className={`dilemma-outcome-editor${selected ? " selected" : ""}`}>
+      <legend>{label}</legend>
+      <DilemmaMentionTextarea
+        label={ko.dilemmaEdit.labelSummary}
+        value={outcome.preview}
+        onChange={(v) => onChange("preview", v)}
+        placeholder={ko.dilemmaEdit.phSummary}
+      />
+      <DilemmaMentionTextarea
+        label={ko.dilemmaEdit.labelOutcomeShort}
+        value={outcome.result}
+        onChange={(v) => onChange("result", v)}
+        placeholder={ko.dilemmaEdit.phOutcome}
+      />
+      <div className="dilemma-resource-deltas-edit" aria-labelledby={resourceHeadingId}>
+        <p id={resourceHeadingId} className="section-label dilemma-resource-deltas-heading">
+          {ko.dilemmaEdit.resourceDeltaSection}
+        </p>
+        <div className="dilemma-resource-deltas-rows">
+          {resourceCounters.map((resource) => (
+            <div key={resource.id} className="dilemma-resource-delta-edit-row">
+              <div className="dilemma-resource-delta-edit-label">
+                <TokenIcon type={resource.icon} />
+                <span className="dilemma-resource-delta-edit-name">{resource.label}</span>
+              </div>
+              <input
+                className="dilemma-resource-delta-edit-input"
+                type="number"
+                aria-label={`${label} · ${resource.label} · ${ko.dilemmaEdit.resourceDeltaSection}`}
+                value={outcome.resourceDeltas[resource.id] || 0}
+                onChange={(e) => {
+                  const val = parseInt(e.target.value, 10);
+                  onChange("resourceDeltas", { ...outcome.resourceDeltas, [resource.id]: isNaN(val) ? 0 : val });
+                }}
+              />
+            </div>
+          ))}
+        </div>
       </div>
-    </div>
-  </fieldset>
-);
+    </fieldset>
+  );
+}
 
 export default DilemmaEditDialog;

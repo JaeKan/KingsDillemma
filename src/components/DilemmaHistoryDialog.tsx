@@ -1,5 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { normalizeDilemmaHistoryEntry, formatDilemmaCardLabel, formatLocalDateTime } from "../utils/dilemma-helpers";
+import { getMysteryStickerEntry } from "../../shared/mystery-stickers.mts";
+import { getMysteryStickerLabel } from "../utils/mystery-sticker-labels";
+import { MysteryStickerImage } from "./MysteryStickerImage";
 import { dilemmaOutcomeLabels, ko } from "../resources/gameResources";
 import { TokenIcon } from "./GameIcons";
 import { DilemmaFact, DilemmaTextPreview, DilemmaOutcomePreview, DilemmaPhotoStrip } from "./DilemmaUI";
@@ -207,6 +210,20 @@ function DilemmaHistoryDetail({ canDelete, deleteBusy, entry, onDelete }: Dilemm
       <div className="dilemma-facts">
         <DilemmaFact label={ko.dilemmaHistory.factCard} value={formatDilemmaCardLabel(entry as any)} />
         <DilemmaFact label={ko.dilemmaHistory.factSlot} value={entry.timeCounterSlot} />
+        {entry.mysteryStickerId ? (
+          <div className="dilemma-fact dilemma-fact-sticker">
+            <span>{ko.mysteryStickers.previewLabel}</span>
+            <strong>
+              <MysteryStickerImage
+                stickerId={entry.mysteryStickerId}
+                publicPath={getMysteryStickerEntry(entry.mysteryStickerId)?.publicPath}
+                presentation="meaningful"
+                meaningfulAlt={ko.mysteryStickers.previewAlt}
+              />
+              <span>{getMysteryStickerLabel(entry.mysteryStickerId)}</span>
+            </strong>
+          </div>
+        ) : null}
         <DilemmaFact label={ko.dilemmaHistory.factResult} value={(dilemmaOutcomeLabels as any)[entry.selectedOutcome || ""] || ko.common.undecided} />
       </div>
       <DilemmaTextPreview label={ko.dilemmaHistory.labelContext} value={entry.context} />

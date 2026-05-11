@@ -41,6 +41,41 @@ export const COOKIE_NAME = "kd_agenda_session";
 export const STORE_NAME = "kings-dilemma-agenda";
 export const STORE_KEY = "active-game";
 
+/**
+ * 브라우저 `?session=1`…`?session=5` — 한 PC에서 가문별로 **다른 HttpOnly 쿠키**를 쓰기 위한 슬롯(저장소 행은 나누지 않음).
+ */
+export const AGENDA_PARALLEL_SESSION_MAX = 5;
+
+/** 항상 단일 의회 상태 행. `?session=`는 {@link resolveAgendaSessionCookieName}에서만 탭별 로그인을 구분한다. */
+export function resolveAgendaStateRowKey(_requestUrl: string): string {
+  return STORE_KEY;
+}
+
+/** `?session=` 슬롯마다 다른 HttpOnly 쿠키(같은 origin에서 탭별 로그인 분리). */
+export function resolveAgendaSessionCookieName(requestUrl: string): string {
+  let url: URL;
+
+  try {
+    url = new URL(requestUrl);
+  } catch {
+    return COOKIE_NAME;
+  }
+
+  const raw = url.searchParams.get("session");
+
+  if (!raw) {
+    return COOKIE_NAME;
+  }
+
+  const slot = Number.parseInt(raw, 10);
+
+  if (!Number.isFinite(slot) || slot < 1 || slot > AGENDA_PARALLEL_SESSION_MAX) {
+    return COOKIE_NAME;
+  }
+
+  return `${COOKIE_NAME}__s${slot}`;
+}
+
 const DEFAULT_LOGIN_CODE = "12345";
 const PASSWORD_MIN_LENGTH = 4;
 const PASSWORD_MAX_LENGTH = 64;
@@ -51,6 +86,7 @@ const NAME_MAX_LENGTH = 32;
 const NO_STORE_HEADERS = { "Cache-Control": "no-store" };
 const ANONYMOUS_GET_CACHE_HEADERS = {
   "Cache-Control": "public, max-age=0, must-revalidate",
+  // Netlify CDN 힌트(선택). Docker/Express 등 다른 출처에서는 무시되며 해롭지 않습니다.
   "Netlify-CDN-Cache-Control": "public, durable, max-age=15, stale-while-revalidate=45",
   "Netlify-Vary": `cookie=${COOKIE_NAME}`,
 };
@@ -59,6 +95,8 @@ export type AgendaStateStore = {
   get: () => Promise<unknown | null>;
   set: (state: GameState) => Promise<void>;
 };
+
+export type AgendaStateStoreFactory = (rowKey: string) => AgendaStateStore;
 
 export type AgendaRequestContext = {
   cookies?: { get: (name: string) => string | undefined };
@@ -70,8 +108,11 @@ export type AgendaRequestContext = {
 export async function handleAgendaRequest(
   req: Request,
   context: AgendaRequestContext,
-  store: AgendaStateStore,
+  storeFactory: AgendaStateStoreFactory,
 ) {
+  const rowKey = resolveAgendaStateRowKey(req.url);
+  const store = storeFactory(rowKey);
+
   try {
     if (req.method === "GET") {
       const state = await loadState(store);
@@ -531,7 +572,9 @@ export function getAuthenticatedHouse(
   context: AgendaRequestContext,
   state: GameState,
 ): HouseId | null {
-  const rawCookie = context.cookies?.get(COOKIE_NAME) || parseCookie(req.headers.get("cookie"))[COOKIE_NAME];
+  const cookieName = resolveAgendaSessionCookieName(req.url);
+  const rawCookie =
+    context.cookies?.get(cookieName) || parseCookie(req.headers.get("cookie"))[cookieName];
 
   if (!rawCookie) {
     return null;
@@ -580,12 +623,14 @@ function json(body: unknown, status = 200, headers: Record<string, string> = {})
 function createSessionCookie(req: Request, houseId: HouseId, token: string) {
   const secure = new URL(req.url).protocol === "https:" ? "; Secure" : "";
   const value = encodeURIComponent(`${houseId}:${token}`);
-  return `${COOKIE_NAME}=${value}; HttpOnly; Path=/; SameSite=Lax; Max-Age=28800${secure}`;
+  const cookieName = resolveAgendaSessionCookieName(req.url);
+  return `${cookieName}=${value}; HttpOnly; Path=/; SameSite=Lax; Max-Age=28800${secure}`;
 }
 
 function clearSessionCookie(req: Request) {
   const secure = new URL(req.url).protocol === "https:" ? "; Secure" : "";
-  return `${COOKIE_NAME}=; HttpOnly; Path=/; SameSite=Lax; Max-Age=0${secure}`;
+  const cookieName = resolveAgendaSessionCookieName(req.url);
+  return `${cookieName}=; HttpOnly; Path=/; SameSite=Lax; Max-Age=0${secure}`;
 }
 
 function parseCookie(cookieHeader: string | null) {

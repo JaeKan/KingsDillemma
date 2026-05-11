@@ -10,6 +10,7 @@ import {
   HOUSE_CATALOG,
   ko,
 } from "../resources/gameResources";
+import { sanitizeMysteryStickerId } from "../../shared/mystery-stickers.mts";
 import { normalizeCounter, normalizeTextField } from "./normalizers";
 import { getHouseKoreanName, getHouseHoverLabel } from "./house-helpers";
 import {
@@ -58,6 +59,7 @@ export function createDilemmaDraft(value: any = {}): Omit<DilemmaRecord, "update
     historyId: normalizeTextField(candidate.historyId),
     cardCode: normalizeTextField(candidate.cardCode),
     title: normalizeTextField(candidate.title),
+    mysteryStickerId: sanitizeMysteryStickerId(candidate.mysteryStickerId),
     timeCounterSlot: normalizeTextField(candidate.timeCounterSlot),
     context: normalizeTextField(candidate.context),
     question: normalizeTextField(candidate.question),
@@ -306,6 +308,7 @@ export function isDilemmaBlank(dilemma: any): boolean {
     draft.cardCode,
     draft.title,
     draft.timeCounterSlot,
+    draft.mysteryStickerId,
     draft.context,
     draft.question,
     draft.councilNotes,

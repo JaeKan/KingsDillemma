@@ -1,5 +1,8 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { RedactedHouse, DilemmaPhoto, DilemmaRecord } from "../types/game";
+import { getMysteryStickerEntry } from "../../shared/mystery-stickers.mts";
+import { getMysteryStickerLabel } from "../utils/mystery-sticker-labels";
+import { MysteryStickerImage } from "./MysteryStickerImage";
 import { 
   formatDilemmaResourceDelta, 
   normalizeDilemmaRecord, 
@@ -298,6 +301,20 @@ export function DilemmaSummaryCard({
           <div className="dilemma-facts">
             <DilemmaFact label={ko.dilemmaHistory.factCard} value={formatDilemmaCardLabel(dilemma)} />
             <DilemmaFact label={ko.dilemmaHistory.factSlot} value={dilemma.timeCounterSlot} />
+            {dilemma.mysteryStickerId ? (
+              <div className="dilemma-fact dilemma-fact-sticker">
+                <span>{ko.mysteryStickers.previewLabel}</span>
+                <strong>
+                  <MysteryStickerImage
+                    stickerId={dilemma.mysteryStickerId}
+                    publicPath={getMysteryStickerEntry(dilemma.mysteryStickerId)?.publicPath}
+                    presentation="meaningful"
+                    meaningfulAlt={ko.mysteryStickers.previewAlt}
+                  />
+                  <span>{getMysteryStickerLabel(dilemma.mysteryStickerId)}</span>
+                </strong>
+              </div>
+            ) : null}
             <DilemmaFact
               label={ko.dilemmaHistory.factResult}
               value={(dilemmaOutcomeLabels as any)[dilemma.selectedOutcome || ""] || ko.common.undecided}
@@ -580,14 +597,31 @@ export function GameMessage({ state }: { state: any }) {
   } else if (state.phase === "complete") {
     if (!isDilemmaBlank(state.dilemma)) {
       const dilemma = normalizeDilemmaRecord(state.dilemma);
-      const voteTurnName = getDilemmaVoteTurnName(state);
+      const participants = getDilemmaVoteParticipants(state);
+      const votes = normalizeDilemmaVotes(dilemma.votes);
+      const selfId = state.currentHouseId;
+      const selfVoted = Boolean(selfId && votes[selfId]?.side);
+      const everyVoted =
+        participants.length > 0 && participants.every((house: RedactedHouse) => Boolean(votes[house.id]?.side));
 
       if (dilemma.selectedOutcome) {
         text = ko.dilemmaUi.outcomePickedBlurb(dilemmaOutcomeLabels[dilemma.selectedOutcome as keyof typeof dilemmaOutcomeLabels]);
+      } else if (dilemma.voteNotes?.trim() && !dilemma.selectedOutcome) {
+        text = ko.houseHelpers.moderatorTieBlurb;
       } else if (state.canVoteDilemma) {
-        text = ko.dilemmaUi.myVoteTurn;
+        if (selfVoted && !everyVoted) {
+          text = ko.dilemmaUi.voteSubmittedWaitOthers;
+        } else if (everyVoted && !dilemma.voteNotes?.trim()) {
+          text = ko.dilemmaUi.allVotedRecord;
+        } else {
+          text = ko.dilemmaUi.myVoteTurn;
+        }
+      } else if (selfVoted && !everyVoted) {
+        text = ko.dilemmaUi.voteSubmittedWaitOthers;
+      } else if (everyVoted && !dilemma.voteNotes?.trim()) {
+        text = ko.dilemmaUi.allVotedRecord;
       } else {
-        text = voteTurnName ? ko.dilemmaUi.voteTurnLine(voteTurnName) : ko.dilemmaUi.allVotedRecord;
+        text = ko.dilemmaUi.waitYourTurn;
       }
     } else {
       text = ko.dilemmaUi.needRolesWrite;
@@ -626,7 +660,10 @@ export function DilemmaVotingPanel({ state, busy, mutate }: DilemmaVotingPanelPr
   const votedCount = participants.filter((house) => votes[house.id]?.side).length;
   const allVoted = participants.length > 0 && participants.every((house) => Boolean(votes[house.id]?.side));
   const voteTurnName = getDilemmaVoteTurnName(state);
-  const votingComplete = !selectedOutcome && !state.dilemmaVoteTurn && allVoted;
+  const tallyPending = !dilemma.voteNotes?.trim();
+  const votingComplete = !selectedOutcome && tallyPending && allVoted;
+  const tieAwaitingModerator = !selectedOutcome && Boolean(dilemma.voteNotes?.trim());
+  const isModerator = Boolean(state.currentHouseId && state.dilemmaModerator === state.currentHouseId);
   const ayePower = sumDilemmaVotes(votes, participants, "aye");
   const nayPower = sumDilemmaVotes(votes, participants, "nay");
   const passCount = participants.filter((house) => votes[house.id]?.side === "pass").length;
@@ -637,7 +674,8 @@ export function DilemmaVotingPanel({ state, busy, mutate }: DilemmaVotingPanelPr
   const advantageText = formatDilemmaVoteAdvantage(ayePower, nayPower);
   const activePower = side === "pass" ? 0 : Math.min(powerTokens, ownPowerTokens);
   const hasValidWager = side === "pass" || activePower >= 1;
-  const canSaveVote = Boolean(state.currentHouseId) && state.canVoteDilemma && !busy && !selectedOutcome && side && hasValidWager;
+  const canSaveVote =
+    Boolean(state.currentHouseId) && state.canVoteDilemma && !busy && !selectedOutcome && tallyPending && side && hasValidWager;
   const canApply = !busy && votingComplete;
 
   useEffect(() => {
@@ -681,24 +719,34 @@ export function DilemmaVotingPanel({ state, busy, mutate }: DilemmaVotingPanelPr
     setStatusText(result ? ko.dilemmaUi.applyOk : ko.dilemmaUi.applyFail);
   };
 
+  const resolveTie = async (decision: "aye" | "nay") => {
+    setStatusText("");
+    const result = await mutate({ action: "resolveModeratorDecision", decision });
+    setStatusText(result ? ko.dilemmaUi.moderatorResolveOk : ko.dilemmaUi.moderatorResolveFail);
+  };
+
   return (
     <div className={`dilemma-vote-panel${selectedOutcome ? " applied" : ""}`}>
       <div className="dilemma-vote-summary">
         <span>
           {selectedOutcome
             ? ko.dilemmaUi.voteSummaryOutcome(dilemmaOutcomeLabels[selectedOutcome as keyof typeof dilemmaOutcomeLabels])
-            : votingComplete
+            : tieAwaitingModerator
               ? ko.dilemmaUi.votePhaseComplete
-              : ko.dilemmaUi.votePhaseProgress}
+              : votingComplete
+                ? ko.dilemmaUi.votePhaseComplete
+                : ko.dilemmaUi.votePhaseProgress}
         </span>
         <strong>
           {selectedOutcome
             ? ko.dilemmaUi.tallyLine(ayePower, nayPower, passCount)
-            : votingComplete
-              ? ko.dilemmaUi.allHouseVotedLine
-              : voteTurnName
-                ? ko.dilemmaUi.turnOnly(voteTurnName)
-                : ko.dilemmaUi.voteCountLine(votedCount, participants.length)}
+            : tieAwaitingModerator
+              ? ko.houseHelpers.moderatorTieBlurb
+              : votingComplete
+                ? ko.dilemmaUi.allHouseVotedLine
+                : voteTurnName
+                  ? ko.dilemmaUi.turnOnly(voteTurnName)
+                  : ko.dilemmaUi.voteCountLine(votedCount, participants.length)}
         </strong>
       </div>
       <div className="dilemma-vote-role-grid" aria-label={ko.dilemmaUi.voteRoleGridAria}>
@@ -727,7 +775,27 @@ export function DilemmaVotingPanel({ state, busy, mutate }: DilemmaVotingPanelPr
           <strong>{advantageText}</strong>
         </span>
       </div>
-      {!selectedOutcome && !state.canVoteDilemma && !votingComplete ? (
+      {!selectedOutcome && tieAwaitingModerator && isModerator ? (
+        <div className="dilemma-vote-actions" role="group" aria-label={ko.dilemmaUi.moderatorDecideAria}>
+          <button
+            className="primary-button compact"
+            type="button"
+            onClick={() => resolveTie("aye")}
+            disabled={busy}
+          >
+            {ko.dilemmaUi.moderatorPickAye}
+          </button>
+          <button
+            className="secondary-button compact"
+            type="button"
+            onClick={() => resolveTie("nay")}
+            disabled={busy}
+          >
+            {ko.dilemmaUi.moderatorPickNay}
+          </button>
+        </div>
+      ) : null}
+      {!selectedOutcome && !tieAwaitingModerator && !state.canVoteDilemma && !votingComplete ? (
         <p className="dilemma-vote-turn-note">{ko.dilemmaUi.waitYourTurn}</p>
       ) : null}
       {!selectedOutcome && state.canVoteDilemma ? (

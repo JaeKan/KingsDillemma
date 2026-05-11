@@ -1,5 +1,11 @@
 import React, { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { agendaRequest, useAgendaMutations, useAgendaRefresh, useAgendaStateQuery } from "./app/agendaClient";
+import {
+  agendaEventsPathWithSession,
+  agendaRequest,
+  useAgendaMutations,
+  useAgendaRefresh,
+  useAgendaStateQuery,
+} from "./app/agendaClient";
 import { HouseIcon, TokenIcon } from "./components/GameIcons";
 import { Tooltip } from "./components/Tooltip";
 
@@ -83,6 +89,8 @@ import {
   getCouncilProcedureTitle,
   getDilemmaProgressLabel,
   getDilemmaVoteParticipants,
+  getDilemmaVoteTurnName,
+  getSuggestedDilemmaVoteTurnHouseId,
   getVoteOrderHouses,
   isVoteOrderSettingLocked,
 } from "./utils/house-helpers";
@@ -233,6 +241,8 @@ function App() {
   const authenticated = Boolean(agendaQuery.data?.authenticated);
   const realtimeEnabled = Boolean(agendaQuery.data?.realtimeEnabled);
   const sessionStatus = agendaQuery.isPending ? "checking" : "ready";
+  const parallelAgendaSessionParam =
+    typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("session") ?? "" : "";
 
   useEffect(() => {
     if (
@@ -252,7 +262,7 @@ function App() {
       void refresh();
     };
 
-    const events = new EventSource("/api/agenda/events");
+    const events = new EventSource(agendaEventsPathWithSession());
     events.addEventListener("connected", refreshIfVisible);
     events.addEventListener("state", refreshIfVisible);
     window.addEventListener("focus", refreshIfVisible);
@@ -265,7 +275,15 @@ function App() {
       window.removeEventListener("focus", refreshIfVisible);
       document.removeEventListener("visibilitychange", refreshIfVisible);
     };
-  }, [authenticated, mutationInFlight, realtimeEnabled, refresh, sessionEndDialogOpen, sessionStatus]);
+  }, [
+    authenticated,
+    mutationInFlight,
+    parallelAgendaSessionParam,
+    realtimeEnabled,
+    refresh,
+    sessionEndDialogOpen,
+    sessionStatus,
+  ]);
 
   useEffect(() => {
     const audio = bgmAudioRef.current as any;
@@ -1222,7 +1240,7 @@ function GamePanel({
   onOpenSecretAgendaGuide,
 }: any) {
   const voteOrderHouses = getDilemmaVoteParticipants(state);
-  const currentVoteName = state.dilemmaVoteTurn ? getHouseDisplayName(state, state.dilemmaVoteTurn) : "";
+  const currentVoteName = getDilemmaVoteTurnName(state);
   const draftTurnName = state.turn ? getHouseDisplayName(state, state.turn) : ko.app.gamePanel.beforeStart;
   const leaderName = getHouseDisplayName(state, state.dilemmaLeader);
   const moderatorName = getHouseDisplayName(state, state.dilemmaModerator);
@@ -1315,7 +1333,12 @@ function GamePanel({
             </Suspense>
             <Suspense fallback={null}>
               {state.phase === "complete" ? (
-                <VoteOrderTrack houses={voteOrderHouses} leaderHouseId={state.dilemmaLeader} moderatorHouseId={state.dilemmaModerator} turn={state.dilemmaVoteTurn} />
+                <VoteOrderTrack
+                  houses={voteOrderHouses}
+                  leaderHouseId={state.dilemmaLeader}
+                  moderatorHouseId={state.dilemmaModerator}
+                  turn={state.dilemmaVoteTurn ?? getSuggestedDilemmaVoteTurnHouseId(state)}
+                />
               ) : (
                 <TurnTrackAny houses={state.houses} draftOrder={state.draftOrder} turn={state.turn} phase={state.phase} />
               )}

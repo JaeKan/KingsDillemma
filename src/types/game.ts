@@ -106,6 +106,8 @@ export type DilemmaRecord = {
   historyId: string;
   cardCode: string;
   title: string;
+  /** 보드 카드 배치 위치(룰북 미스터리 스티커 1–6). 카탈로그 id, 빈 문자열 = 미선택 */
+  mysteryStickerId: string;
   timeCounterSlot: string;
   context: string;
   question: string;

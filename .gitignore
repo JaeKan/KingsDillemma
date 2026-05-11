@@ -11,3 +11,4 @@ dist/
 output/
 tmp/
 .codex/
+scripts/.mystery-extract-tmp/

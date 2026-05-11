@@ -14,6 +14,8 @@ const store: AgendaStateStore = {
   },
 };
 
+const storeFactory = (_rowKey: string) => store;
+
 function jsonRequest(body: Record<string, unknown>, cookie?: string) {
   return new Request("http://localhost/api/agenda", {
     method: "POST",
@@ -42,7 +44,7 @@ function apiInventory(prestige = 0) {
   };
 }
 
-const anonymousGet = await handleAgendaRequest(new Request("http://localhost/api/agenda"), {}, store);
+const anonymousGet = await handleAgendaRequest(new Request("http://localhost/api/agenda"), {}, storeFactory);
 const anonymousPayload = (await anonymousGet.json()) as any;
 assert.equal(anonymousGet.status, 200);
 assert.equal(anonymousGet.headers.get("Cache-Control"), "public, max-age=0, must-revalidate");
@@ -50,13 +52,13 @@ assert.equal(anonymousPayload.authenticated, false);
 assert.equal(anonymousPayload.realtimeEnabled, false);
 assert.equal(anonymousPayload.state.phase, "house-select");
 
-const badReset = await handleAgendaRequest(jsonRequest({ action: "reset", code: "wrong" }), {}, store);
+const badReset = await handleAgendaRequest(jsonRequest({ action: "reset", code: "wrong" }), {}, storeFactory);
 assert.equal(badReset.status, 401);
 
 const reset = await handleAgendaRequest(
   jsonRequest({ action: "reset", code: "12345" }),
   { deployContext: "development" },
-  store,
+  storeFactory,
 );
 assert.equal(reset.status, 200);
 assert.equal((persisted as any)?.phase, "house-select");
@@ -69,7 +71,7 @@ const login = await handleAgendaRequest(
     displayName: "House Pinchay",
   }),
   { deployContext: "development" },
-  store,
+  storeFactory,
 );
 const loginPayload = (await login.json()) as any;
 const setCookie = login.headers.get("Set-Cookie") || "";
@@ -83,7 +85,7 @@ assert.equal((persisted as any)?.sessions.gamam?.token.length, 36);
 const authenticatedGet = await handleAgendaRequest(
   new Request("http://localhost/api/agenda", { headers: { Cookie: setCookie } }),
   { realtimeUpdatesEnabled: true },
-  store,
+  storeFactory,
 );
 const authenticatedPayload = (await authenticatedGet.json()) as any;
 assert.equal(authenticatedGet.status, 200);
@@ -124,7 +126,7 @@ const saveProgress = await handleAgendaRequest(
     setCookie,
   ),
   {},
-  store,
+  storeFactory,
 );
 const saveProgressPayload = (await saveProgress.json()) as any;
 assert.equal(saveProgress.status, 200);
@@ -156,7 +158,7 @@ assert.deepEqual(saveProgressPayload.state.ownHouseProgress.houseAchievementDeta
 assert.equal(saveProgressPayload.state.ownHouseProgress.houseAchievementDetails[0].effectIcon, "start");
 assert.equal(saveProgressPayload.state.ownHouseProgress.houseAchievementDetails[0].effectAmount, 0);
 
-const earlyDilemmaEdit = await handleAgendaRequest(jsonRequest({ action: "beginDilemmaEdit" }, setCookie), {}, store);
+const earlyDilemmaEdit = await handleAgendaRequest(jsonRequest({ action: "beginDilemmaEdit" }, setCookie), {}, storeFactory);
 const earlyDilemmaEditPayload = (await earlyDilemmaEdit.json()) as any;
 assert.equal(earlyDilemmaEdit.status, 409);
 assert.match(earlyDilemmaEditPayload.error, /완료/);
@@ -164,7 +166,7 @@ assert.match(earlyDilemmaEditPayload.error, /완료/);
 const discardMode = await handleAgendaRequest(
   jsonRequest({ action: "setRandomDiscardEnabled", enabled: false }, setCookie),
   {},
-  store,
+  storeFactory,
 );
 const discardModePayload = (await discardMode.json()) as any;
 assert.equal(discardMode.status, 200);
@@ -212,7 +214,7 @@ persisted = {
 const saveVoteOrder = await handleAgendaRequest(
   jsonRequest({ action: "saveDilemmaVoteOrder", voteOrder: ["gamam"] }, setCookie),
   {},
-  store,
+  storeFactory,
 );
 const saveVoteOrderPayload = (await saveVoteOrder.json()) as any;
 assert.equal(saveVoteOrder.status, 200);
@@ -221,14 +223,14 @@ assert.deepEqual(saveVoteOrderPayload.state.dilemmaVoteOrder, ["gamam"]);
 const saveDilemmaRoles = await handleAgendaRequest(
   jsonRequest({ action: "saveDilemmaRoles", roles: { leaderHouseId: "gamam", moderatorHouseId: "gamam" } }, setCookie),
   {},
-  store,
+  storeFactory,
 );
 const saveDilemmaRolesPayload = (await saveDilemmaRoles.json()) as any;
 assert.equal(saveDilemmaRoles.status, 200);
 assert.equal(saveDilemmaRolesPayload.state.dilemmaLeader, "gamam");
 assert.equal(saveDilemmaRolesPayload.state.dilemmaModerator, "gamam");
 
-const beginDilemmaEdit = await handleAgendaRequest(jsonRequest({ action: "beginDilemmaEdit" }, setCookie), {}, store);
+const beginDilemmaEdit = await handleAgendaRequest(jsonRequest({ action: "beginDilemmaEdit" }, setCookie), {}, storeFactory);
 const beginDilemmaEditPayload = (await beginDilemmaEdit.json()) as any;
 assert.equal(beginDilemmaEdit.status, 200);
 assert.equal(beginDilemmaEditPayload.dilemmaEditToken.length, 36);
@@ -247,7 +249,7 @@ const prematureDilemmaOutcome = await handleAgendaRequest(
     setCookie,
   ),
   {},
-  store,
+  storeFactory,
 );
 const prematureDilemmaOutcomePayload = (await prematureDilemmaOutcome.json()) as any;
 assert.equal(prematureDilemmaOutcome.status, 409);
@@ -281,7 +283,7 @@ const saveDilemma = await handleAgendaRequest(
     setCookie,
   ),
   {},
-  store,
+  storeFactory,
 );
 const saveDilemmaPayload = (await saveDilemma.json()) as any;
 assert.equal(saveDilemma.status, 200);
@@ -292,7 +294,7 @@ assert.equal(saveDilemmaPayload.state.dilemma.photos.length, 1);
 assert.equal(saveDilemmaPayload.state.dilemmaHistory.length, 0);
 assert.equal(persisted?.dilemmaHistory.length, 0);
 
-const blockedPublishDilemma = await handleAgendaRequest(jsonRequest({ action: "publishDilemma" }, setCookie), {}, store);
+const blockedPublishDilemma = await handleAgendaRequest(jsonRequest({ action: "publishDilemma" }, setCookie), {}, storeFactory);
 const blockedPublishDilemmaPayload = (await blockedPublishDilemma.json()) as any;
 assert.equal(blockedPublishDilemma.status, 409);
 assert.match(blockedPublishDilemmaPayload.error, /모든 가문.*투표/);
@@ -313,7 +315,7 @@ persisted = {
   },
 };
 
-const publishDilemma = await handleAgendaRequest(jsonRequest({ action: "publishDilemma" }, setCookie), {}, store);
+const publishDilemma = await handleAgendaRequest(jsonRequest({ action: "publishDilemma" }, setCookie), {}, storeFactory);
 const publishDilemmaPayload = (await publishDilemma.json()) as any;
 assert.equal(publishDilemma.status, 200);
 assert.equal(publishDilemmaPayload.state.dilemmaHistory.length, 1);
@@ -323,7 +325,7 @@ assert.equal(publishDilemmaPayload.state.dilemma.historyId, "");
 assert.equal(persisted?.dilemma.title, "");
 assert.equal(persisted?.dilemmaHistory.length, 1);
 
-const republishDilemma = await handleAgendaRequest(jsonRequest({ action: "publishDilemma" }, setCookie), {}, store);
+const republishDilemma = await handleAgendaRequest(jsonRequest({ action: "publishDilemma" }, setCookie), {}, storeFactory);
 const republishDilemmaPayload = (await republishDilemma.json()) as any;
 assert.equal(republishDilemma.status, 409);
 assert.match(republishDilemmaPayload.error, /게시할 딜레마/);
@@ -331,7 +333,7 @@ assert.match(republishDilemmaPayload.error, /게시할 딜레마/);
 const anonymousDeleteDilemmaHistory = await handleAgendaRequest(
   jsonRequest({ action: "deleteDilemmaHistory", historyId: publishDilemmaPayload.state.dilemmaHistory[0].historyId }),
   {},
-  store,
+  storeFactory,
 );
 assert.equal(anonymousDeleteDilemmaHistory.status, 401);
 assert.equal(persisted?.dilemmaHistory.length, 1);
@@ -339,7 +341,7 @@ assert.equal(persisted?.dilemmaHistory.length, 1);
 const deleteDilemmaHistory = await handleAgendaRequest(
   jsonRequest({ action: "deleteDilemmaHistory", historyId: publishDilemmaPayload.state.dilemmaHistory[0].historyId }, setCookie),
   {},
-  store,
+  storeFactory,
 );
 const deleteDilemmaHistoryPayload = (await deleteDilemmaHistory.json()) as any;
 assert.equal(deleteDilemmaHistory.status, 200);
@@ -349,11 +351,11 @@ assert.equal(persisted?.dilemmaHistory.length, 0);
 const saveVotingDilemmaRoles = await handleAgendaRequest(
   jsonRequest({ action: "saveDilemmaRoles", roles: { leaderHouseId: "gamam", moderatorHouseId: "gamam" } }, setCookie),
   {},
-  store,
+  storeFactory,
 );
 assert.equal(saveVotingDilemmaRoles.status, 200);
 
-const beginVotingDilemmaEdit = await handleAgendaRequest(jsonRequest({ action: "beginDilemmaEdit" }, setCookie), {}, store);
+const beginVotingDilemmaEdit = await handleAgendaRequest(jsonRequest({ action: "beginDilemmaEdit" }, setCookie), {}, storeFactory);
 const beginVotingDilemmaEditPayload = (await beginVotingDilemmaEdit.json()) as any;
 assert.equal(beginVotingDilemmaEdit.status, 200);
 
@@ -372,39 +374,39 @@ const saveVotingDilemma = await handleAgendaRequest(
     setCookie,
   ),
   {},
-  store,
+  storeFactory,
 );
 assert.equal(saveVotingDilemma.status, 200);
 
 const lockedVoteOrder = await handleAgendaRequest(
   jsonRequest({ action: "saveDilemmaVoteOrder", voteOrder: ["solad", "gamam", "natar", "coden", "olwyn"] }, setCookie),
   {},
-  store,
+  storeFactory,
 );
 assert.equal(lockedVoteOrder.status, 409);
 
 const saveDilemmaVote = await handleAgendaRequest(
   jsonRequest({ action: "saveDilemmaVote", vote: { side: "aye", powerTokens: 2 } }, setCookie),
   {},
-  store,
+  storeFactory,
 );
 const saveDilemmaVotePayload = (await saveDilemmaVote.json()) as any;
 assert.equal(saveDilemmaVote.status, 200);
 assert.equal(saveDilemmaVotePayload.state.dilemma.votes.gamam.side, "aye");
 assert.equal(saveDilemmaVotePayload.state.dilemma.votes.gamam.powerTokens, 2);
 assert.equal(saveDilemmaVotePayload.state.dilemmaVoteTurn, null);
-assert.equal(saveDilemmaVotePayload.state.canVoteDilemma, false);
+assert.equal(saveDilemmaVotePayload.state.canVoteDilemma, true);
 const inventoryBeforeApply = structuredClone(persisted?.inventories);
 
-const earlyApplyDilemmaVotes = await handleAgendaRequest(jsonRequest({ action: "applyDilemmaVotes" }, setCookie), {}, store);
+const earlyApplyDilemmaVotes = await handleAgendaRequest(jsonRequest({ action: "applyDilemmaVotes" }, setCookie), {}, storeFactory);
 const earlyApplyDilemmaVotesPayload = (await earlyApplyDilemmaVotes.json()) as any;
 assert.equal(earlyApplyDilemmaVotes.status, 200);
-assert.equal(earlyApplyDilemmaVotesPayload.state.dilemma.selectedOutcome, "");
-assert.match(earlyApplyDilemmaVotesPayload.state.dilemma.voteNotes, /수기로 반영/);
+assert.equal(earlyApplyDilemmaVotesPayload.state.dilemma.selectedOutcome, "aye");
+assert.match(earlyApplyDilemmaVotesPayload.state.dilemma.voteNotes, /§4 Vote Resolution/);
 assert.equal(earlyApplyDilemmaVotesPayload.state.canVoteDilemma, false);
 assert.deepEqual(persisted?.inventories, inventoryBeforeApply);
 
-const resetDilemma = await handleAgendaRequest(jsonRequest({ action: "resetDilemma" }, setCookie), {}, store);
+const resetDilemma = await handleAgendaRequest(jsonRequest({ action: "resetDilemma" }, setCookie), {}, storeFactory);
 const resetDilemmaPayload = (await resetDilemma.json()) as any;
 assert.equal(resetDilemma.status, 200);
 assert.equal(resetDilemmaPayload.state.dilemma.title, "");
