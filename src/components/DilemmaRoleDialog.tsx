@@ -151,7 +151,7 @@ function DilemmaRoleDialog({
           <p className="dilemma-role-copy">{ko.dilemmaRole.copy}</p>
           {activeHouses.length > 0 ? (
             <div className="dilemma-role-grid">
-              <label className="dilemma-role-card dilemma-role-card--leader">
+              <label className="dilemma-role-card">
                 <span>
                   <TokenIcon type="leader" /> {ko.dilemmaRole.leaderTokenChip}
                 </span>

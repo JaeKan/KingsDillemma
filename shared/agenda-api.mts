@@ -220,7 +220,15 @@ export async function handleAgendaRequest(
         typeof state.dilemma.historyId === "string" && state.dilemma.historyId
           ? state.dilemma.historyId
           : crypto.randomUUID();
-      const nextState = saveDilemmaRecord(state, houseId, body.dilemmaEditToken, body.dilemma, dilemmaHistoryId);
+      const nextState = saveDilemmaRecord(
+        state,
+        houseId,
+        body.dilemmaEditToken,
+        body.dilemma,
+        dilemmaHistoryId,
+        new Date().toISOString(),
+        { fromResolution: body.fromResolution === true },
+      );
       await saveState(store, nextState);
       return json({ ok: true, state: redactState(nextState, houseId) }, 200, NO_STORE_HEADERS);
     }

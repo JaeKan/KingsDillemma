@@ -78,16 +78,13 @@
   color: var(--muted);
   font-size: 0.72rem;
   font-weight: 900;
+  white-space: nowrap;
 }
 
 .dilemma-role-card span svg {
   flex: 0 0 auto;
   width: 18px;
   height: 18px;
-}
-
-.dilemma-role-card.dilemma-role-card--leader > span .token-icon-emoji {
-  font-size: 16px;
 }
 
 .dilemma-role-card select {
@@ -368,8 +365,109 @@
   box-shadow: var(--shadow);
   color: var(--ink);
   display: grid;
-  gap: 16px;
-  padding: 20px;
+  gap: 12px;
+  padding: 16px 18px;
+}
+
+.dilemma-resolution-dialog {
+  width: min(100%, 640px);
+}
+
+.dilemma-resolution-form {
+  gap: 20px;
+}
+
+.dilemma-resolution-step {
+  margin: 0;
+  padding: 14px 16px;
+  border: 1px solid rgba(234, 223, 189, 0.14);
+  border-radius: 10px;
+  background: rgba(8, 12, 11, 0.55);
+  display: grid;
+  gap: 10px;
+}
+
+.dilemma-resolution-step-title {
+  margin: 0;
+  font-size: 0.78rem;
+  font-weight: 850;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.dilemma-resolution-step-body,
+.dilemma-resolution-step-note {
+  margin: 0;
+  font-size: 0.82rem;
+  line-height: 1.45;
+  color: var(--ink);
+}
+
+.dilemma-resolution-step-note {
+  color: rgba(234, 223, 189, 0.75);
+}
+
+.dilemma-resolution-vote-notes {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(234, 223, 189, 0.1);
+  font-size: 0.76rem;
+  line-height: 1.35;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 8.5rem;
+  overflow-y: auto;
+}
+
+.dilemma-resolution-power-line {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.dilemma-resolution-moderator-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.dilemma-resolution-checklist {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+}
+
+.dilemma-resolution-checklist-row {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 8px;
+  align-items: start;
+  font-size: 0.8rem;
+  line-height: 1.35;
+  color: rgba(234, 223, 189, 0.92);
+  cursor: pointer;
+}
+
+.dilemma-resolution-checklist-row input {
+  margin-top: 0.2rem;
+}
+
+.dilemma-edit-resolution-hint {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: rgba(216, 178, 90, 0.09);
+  border: 1px solid rgba(216, 178, 90, 0.22);
+  font-size: 0.78rem;
+  line-height: 1.4;
+  color: rgba(234, 223, 189, 0.88);
+}
+
+.dilemma-summary-actions .dilemma-resolution-entry-button {
+  border-color: rgba(216, 178, 90, 0.55);
 }
 
 .achievement-dialog {
@@ -388,7 +486,13 @@
 
 .dilemma-form {
   display: grid;
-  gap: 12px;
+  gap: 10px;
+  min-width: 0;
+}
+
+.dilemma-dialog-meta {
+  display: grid;
+  gap: 6px;
   min-width: 0;
 }
 
@@ -829,12 +933,12 @@
 .dilemma-dialog-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
+  gap: 8px;
   min-width: 0;
 }
 
 .dilemma-dialog-grid.compact {
-  grid-template-columns: minmax(120px, 0.56fr) minmax(0, 1fr) minmax(120px, 0.58fr);
+  grid-template-columns: minmax(100px, 1fr) minmax(100px, 1fr);
 }
 
 .visually-hidden {
@@ -851,52 +955,87 @@
 
 .mystery-sticker-picker {
   display: grid;
-  gap: 10px;
+  gap: 6px;
   min-width: 0;
 }
 
+.mystery-sticker-picker.disabled {
+  opacity: 0.6;
+  pointer-events: none;
+}
+
 .mystery-sticker-picker-head h3 {
-  margin: 0 0 4px;
+  margin: 0 0 2px;
   font-size: 0.78rem;
   font-weight: 900;
   color: var(--muted);
   letter-spacing: 0;
 }
 
-.mystery-sticker-picker-row {
+.mystery-sticker-picker-tiles {
   display: flex;
   flex-wrap: wrap;
-  align-items: flex-end;
-  gap: 10px 14px;
+  align-items: center;
+  gap: 8px;
   min-width: 0;
 }
 
-.mystery-sticker-picker-row.disabled {
-  opacity: 0.6;
-  pointer-events: none;
-}
-
-.mystery-sticker-picker-preview {
-  flex: 0 0 auto;
+.mystery-sticker-picker-tile {
+  box-sizing: border-box;
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 44px;
-  height: 44px;
-  border-radius: 8px;
+  width: 48px;
+  height: 48px;
+  margin: 0;
+  padding: 0;
   border: 1px solid rgba(234, 223, 189, 0.14);
-  background: rgba(10, 8, 12, 0.35);
+  border-radius: 8px;
+  background: rgba(5, 9, 9, 0.23);
+  cursor: pointer;
   overflow: hidden;
+  transition:
+    background 140ms ease,
+    border-color 140ms ease,
+    box-shadow 140ms ease;
 }
 
-.mystery-sticker-picker-preview img {
+.mystery-sticker-picker-tile:hover:not(:disabled) {
+  border-color: rgba(216, 178, 90, 0.34);
+  background: rgba(216, 178, 90, 0.075);
+}
+
+.mystery-sticker-picker-tile:focus {
+  outline: 0;
+}
+
+.mystery-sticker-picker-tile:focus-visible {
+  outline: 2px solid rgba(216, 178, 90, 0.5);
+  outline-offset: 2px;
+}
+
+.mystery-sticker-picker-tile:disabled {
+  cursor: not-allowed;
+  opacity: 0.68;
+}
+
+.mystery-sticker-picker-tile.selected {
+  border-color: rgba(216, 178, 90, 0.56);
+  background:
+    linear-gradient(180deg, rgba(216, 178, 90, 0.16), rgba(216, 178, 90, 0.07)),
+    rgba(5, 9, 9, 0.2);
+  box-shadow: inset 0 0 0 1px rgba(216, 178, 90, 0.16);
+}
+
+.mystery-sticker-picker-tile img {
   width: 36px;
   height: 36px;
   object-fit: contain;
   display: block;
+  pointer-events: none;
 }
 
-.mystery-sticker-picker-preview .mystery-sticker-thumb-fallback {
+.mystery-sticker-picker-tile .mystery-sticker-thumb-fallback {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -906,46 +1045,17 @@
   font-size: 0.95rem;
   font-weight: 800;
   color: rgba(234, 223, 189, 0.55);
+  pointer-events: none;
 }
 
-.mystery-sticker-picker-preview-placeholder {
-  font-size: 1.1rem;
-  font-weight: 700;
+.mystery-sticker-picker-tile--none {
+  font-size: 1.05rem;
+  font-weight: 800;
   color: rgba(234, 223, 189, 0.5);
+}
+
+.mystery-sticker-picker-tile-none-mark {
   line-height: 1;
-}
-
-.mystery-sticker-picker-select-wrap {
-  flex: 1 1 200px;
-  min-width: min(100%, 220px);
-  min-height: 0;
-}
-
-.mystery-sticker-picker-select-wrap select {
-  box-sizing: border-box;
-  width: 100%;
-  min-width: 0;
-  min-height: 38px;
-  margin: 0;
-  border: 1px solid rgba(234, 223, 189, 0.18);
-  border-radius: 7px;
-  background: rgba(9, 14, 13, 0.86);
-  color: var(--ink-strong);
-  font: inherit;
-  font-size: 0.82rem;
-  font-weight: 850;
-  padding: 0 10px;
-  cursor: pointer;
-}
-
-.mystery-sticker-picker-select-wrap select:disabled {
-  cursor: not-allowed;
-  opacity: 0.85;
-}
-
-.mystery-sticker-picker-select-wrap select:focus-visible {
-  outline: 2px solid rgba(216, 178, 90, 0.5);
-  outline-offset: 2px;
 }
 
 .dilemma-fact-sticker img {
@@ -1424,7 +1534,7 @@
   height: 20px;
 }
 
-.dilemma-resource-delta-edit-label .token-icon-emoji {
+.dilemma-resource-delta-edit-label .leader-token-emoji {
   flex: 0 0 auto;
   font-size: 18px;
   line-height: 1;

@@ -98,25 +98,27 @@
 .dilemma-ledger-card {
   grid-area: dilemma;
   display: grid;
-  gap: 10px;
+  gap: 8px;
   min-width: 0;
   border: 1px solid rgba(216, 178, 90, 0.2);
   border-radius: var(--radius);
   background:
     linear-gradient(135deg, rgba(216, 178, 90, 0.08), rgba(192, 79, 69, 0.055)),
     rgba(234, 223, 189, 0.055);
-  padding: 12px;
+  padding: 10px;
 }
 
 .dilemma-summary-head {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: 10px;
   min-width: 0;
 }
 
 .dilemma-summary-head>div:first-child {
+  flex: 1 1 160px;
   min-width: 0;
 }
 
@@ -158,11 +160,12 @@
 
 .dilemma-summary-actions {
   display: flex;
-  flex: 0 0 auto;
+  flex: 1 1 240px;
   flex-wrap: wrap;
   align-items: center;
   justify-content: flex-end;
   gap: 7px;
+  min-width: 0;
 }
 
 .dilemma-summary-actions>.app-tooltip-anchor {
@@ -236,8 +239,394 @@
 
 .dilemma-summary-body {
   display: grid;
-  gap: 9px;
+  gap: 7px;
   min-width: 0;
+}
+
+.dilemma-summary-compact {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  border: 1px solid rgba(234, 223, 189, 0.16);
+  border-radius: var(--radius);
+  background: rgba(8, 14, 14, 0.44);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  padding: 9px 11px;
+}
+
+.dilemma-summary-meta-grid {
+  display: grid;
+  grid-template-columns: minmax(52px, 0.75fr) minmax(0, 1.55fr) minmax(76px, 0.9fr) minmax(76px, 0.9fr);
+  align-items: center;
+  gap: 8px 12px;
+  min-width: 0;
+}
+
+.dilemma-summary-meta-field {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  align-self: center;
+  min-width: 0;
+  gap: 3px;
+  text-align: center;
+}
+
+.dilemma-summary-meta-field--title {
+  align-items: flex-start;
+  text-align: left;
+}
+
+.dilemma-summary-meta-field--sticker .dilemma-summary-meta-value {
+  justify-content: center;
+}
+
+.dilemma-summary-meta-label {
+  flex: 0 0 auto;
+  color: rgba(234, 223, 189, 0.48);
+  font-size: 0.61rem;
+  font-weight: 820;
+  line-height: 1.25;
+  letter-spacing: 0.04em;
+  text-transform: none;
+}
+
+.dilemma-summary-meta-value {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 6px 10px;
+  min-width: 0;
+  width: 100%;
+}
+
+.dilemma-summary-meta-field--title .dilemma-summary-meta-value {
+  justify-content: flex-start;
+}
+
+.dilemma-summary-meta-value--title {
+  align-items: center;
+}
+
+@media (max-width: 520px) {
+  .dilemma-summary-meta-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: center;
+    gap: 10px 12px;
+  }
+
+  .dilemma-summary-meta-field {
+    align-items: flex-start;
+    text-align: left;
+  }
+
+  .dilemma-summary-meta-field--title {
+    align-items: flex-start;
+  }
+
+  .dilemma-summary-meta-field--sticker .dilemma-summary-meta-value {
+    justify-content: flex-start;
+  }
+
+  .dilemma-summary-meta-value {
+    justify-content: flex-start;
+  }
+}
+
+.dilemma-summary-meta-placeholder {
+  color: rgba(234, 223, 189, 0.38);
+  font-size: 0.78rem;
+  font-weight: 820;
+  line-height: 1.3;
+}
+
+.dilemma-summary-title-anchor {
+  flex: 1 1 4rem;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.dilemma-summary-title-anchor .dilemma-summary-card-title {
+  display: block;
+  width: 100%;
+}
+
+.dilemma-summary-card-code {
+  flex: 0 0 auto;
+  color: var(--gold-2);
+  font-size: 0.8rem;
+  font-weight: 950;
+  line-height: 1.2;
+  letter-spacing: 0.02em;
+}
+
+.dilemma-summary-card-title {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--ink-strong);
+  font-size: 0.8rem;
+  font-weight: 820;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dilemma-summary-slot-pill {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  padding: 1px 6px;
+  border-radius: 999px;
+  border: 1px solid rgba(216, 178, 90, 0.28);
+  background: rgba(216, 178, 90, 0.1);
+  color: #ffe8ad;
+  font-size: 0.7rem;
+  font-weight: 880;
+  line-height: 1.25;
+  white-space: nowrap;
+}
+
+.dilemma-summary-sticker-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.dilemma-summary-sticker-slot-num {
+  flex: 0 0 auto;
+  color: var(--gold-2);
+  font-size: 0.68rem;
+  font-weight: 950;
+  line-height: 1;
+  letter-spacing: 0.02em;
+  user-select: none;
+}
+
+.dilemma-summary-meta-field--sticker .app-tooltip-anchor {
+  flex: 0 0 auto;
+  min-width: 0;
+}
+
+.dilemma-summary-sticker-wrap {
+  flex: 0 0 auto;
+  display: inline-grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  border: 1px solid rgba(216, 178, 90, 0.26);
+  background: rgba(216, 178, 90, 0.06);
+  overflow: hidden;
+}
+
+.dilemma-summary-sticker-wrap img,
+.dilemma-summary-sticker-wrap .mystery-sticker-thumb-fallback {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.dilemma-summary-sticker-wrap .mystery-sticker-thumb-fallback {
+  display: inline-grid;
+  place-items: center;
+  font-size: 0.76rem;
+  font-weight: 900;
+  color: var(--gold-2);
+}
+
+.dilemma-summary-roles-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 16px;
+  align-items: start;
+  min-width: 0;
+  margin-top: 4px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(234, 223, 189, 0.1);
+}
+
+.dilemma-summary-role {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  max-width: 100%;
+  padding: 6px 8px;
+  border-radius: calc(var(--radius) - 1px);
+  border: 1px solid rgba(234, 223, 189, 0.1);
+  background: rgba(5, 9, 9, 0.22);
+}
+
+/* Ledger compact: role-kind row — 12px fist emoji + moderator MUI icon (same as TokenIcon elsewhere) */
+.dilemma-ledger-card .dilemma-summary-compact .dilemma-summary-role-kind {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+}
+
+.dilemma-ledger-card .dilemma-summary-compact .dilemma-summary-role-kind-icon {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 12px;
+  height: 12px;
+  margin-top: 0;
+  color: var(--gold-2);
+  opacity: 0.94;
+}
+
+.dilemma-ledger-card .dilemma-summary-compact .dilemma-summary-role-kind-icon svg {
+  width: 12px;
+  height: 12px;
+  font-size: 12px;
+}
+
+.dilemma-ledger-card .dilemma-summary-compact .dilemma-summary-role-kind-icon .leader-token-emoji {
+  font-size: 12px;
+  line-height: 1;
+}
+
+/* Match vote-breakdown crest (32×32) */
+.dilemma-ledger-card .dilemma-summary-compact .dilemma-summary-role-crest {
+  flex-shrink: 0;
+  align-self: center;
+  width: 32px;
+  height: 32px;
+  background: rgba(216, 178, 90, 0.12);
+  box-shadow: inset 0 0 0 1px rgba(216, 178, 90, 0.26);
+}
+
+.dilemma-ledger-card .dilemma-summary-compact .dilemma-summary-role-crest--empty {
+  opacity: 0.65;
+  background: rgba(5, 9, 9, 0.35);
+  box-shadow: inset 0 0 0 1px rgba(216, 178, 90, 0.16);
+}
+
+.house-role-name-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  align-items: flex-start;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.house-role-name-stack--empty {
+  color: var(--muted);
+  font-size: 0.74rem;
+  font-weight: 820;
+}
+
+.house-role-name-stack__primary {
+  overflow: hidden;
+  max-width: 100%;
+  color: inherit;
+  font-size: inherit;
+  font-weight: inherit;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.house-role-name-stack__secondary {
+  overflow: hidden;
+  max-width: 100%;
+  color: var(--muted);
+  font-size: 0.62rem;
+  font-weight: 800;
+  line-height: 1.15;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dilemma-summary-role-text {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  flex: 1 1 0;
+}
+
+.dilemma-summary-role-kind-label {
+  color: var(--muted);
+  font-size: 0.62rem;
+  font-weight: 820;
+  line-height: 1.2;
+  letter-spacing: 0.02em;
+}
+
+.dilemma-summary-role-text .dilemma-summary-role-name-tooltip {
+  display: block;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.dilemma-summary-role-text .house-role-name-stack__primary {
+  font-size: 0.76rem;
+  font-weight: 930;
+  color: var(--ink-strong);
+}
+
+.dilemma-summary-role-text .house-role-name-stack__secondary {
+  font-size: 0.65rem;
+}
+
+.dilemma-summary-vote-pills {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: 8px;
+  margin: 0;
+  padding-top: 10px;
+  border-top: 1px solid rgba(234, 223, 189, 0.1);
+  min-width: 0;
+}
+
+.dilemma-summary-vote-pill {
+  flex: 1 1 min(140px, 100%);
+  display: grid;
+  grid-template-rows: auto auto;
+  row-gap: 3px;
+  min-width: 0;
+  max-width: 100%;
+  padding: 6px 9px;
+  border-radius: 999px;
+  border: 1px solid rgba(216, 178, 90, 0.22);
+  background: rgba(8, 14, 14, 0.55);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.dilemma-summary-vote-pill__label {
+  color: rgba(234, 223, 189, 0.52);
+  font-size: 0.61rem;
+  font-weight: 820;
+  line-height: 1.15;
+  letter-spacing: 0.03em;
+}
+
+.dilemma-summary-vote-pill__value {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--ink-strong);
+  font-size: 0.74rem;
+  font-weight: 920;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 520px) {
+  .dilemma-summary-roles-row {
+    grid-template-columns: 1fr;
+  }
 }
 
 .dilemma-facts {
@@ -299,8 +688,8 @@
 }
 
 .dilemma-vote-breakdown-group.tone-aye {
-  border-color: rgba(216, 178, 90, 0.28);
-  background: rgba(216, 178, 90, 0.07);
+  border-color: rgba(128, 153, 142, 0.24);
+  background: rgba(69, 87, 78, 0.12);
 }
 
 .dilemma-vote-breakdown-group.tone-nay {
@@ -309,8 +698,8 @@
 }
 
 .dilemma-vote-breakdown-group.tone-pass {
-  border-color: rgba(128, 153, 142, 0.24);
-  background: rgba(69, 87, 78, 0.12);
+  border-color: rgba(216, 178, 90, 0.28);
+  background: rgba(216, 178, 90, 0.07);
 }
 
 .dilemma-vote-breakdown-group header {
@@ -342,16 +731,17 @@
 }
 
 .dilemma-vote-breakdown-list {
-  display: grid;
+  display: flex;
+  flex-direction: column;
   gap: 5px;
   min-width: 0;
 }
 
 .dilemma-vote-breakdown-chip {
-  display: grid;
-  grid-template-columns: 26px minmax(0, 1fr) auto;
+  display: flex;
+  flex-direction: row;
   align-items: center;
-  gap: 2px 7px;
+  gap: 7px;
   min-width: 0;
   border: 1px solid rgba(234, 223, 189, 0.1);
   border-radius: 7px;
@@ -360,11 +750,21 @@
 }
 
 .dilemma-vote-breakdown-crest {
-  grid-row: 1 / span 2;
-  width: 26px;
-  height: 26px;
+  flex-shrink: 0;
+  align-self: center;
+  width: 32px;
+  height: 32px;
   background: rgba(216, 178, 90, 0.12);
   box-shadow: inset 0 0 0 1px rgba(216, 178, 90, 0.26);
+}
+
+.dilemma-vote-breakdown-chip-main {
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+  min-width: 0;
 }
 
 .dilemma-vote-breakdown-chip strong {
@@ -379,7 +779,6 @@
 }
 
 .dilemma-vote-breakdown-chip small {
-  grid-column: 2 / -1;
   min-width: 0;
   overflow: hidden;
   color: var(--muted);
@@ -391,8 +790,9 @@
 }
 
 .dilemma-vote-breakdown-chip em {
-  grid-row: 1 / 2;
-  grid-column: 3 / 4;
+  flex-shrink: 0;
+  margin-left: auto;
+  align-self: center;
   color: var(--gold-2);
   font-size: 0.66rem;
   font-style: normal;
@@ -506,6 +906,16 @@
 
 .dilemma-updated {
   justify-self: end;
+}
+
+.dilemma-photo-strip-block {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.dilemma-photo-strip-section-label {
+  margin: 0;
 }
 
 .dilemma-photo-strip {

@@ -7,7 +7,12 @@ import {
   phaseCopy,
 } from "../resources/gameResources";
 import { RedactedHouse, RedactedState, HouseId } from "../types/game";
-import { normalizeDilemmaRecord, isDilemmaBlank, normalizeDilemmaVotes } from "./dilemma-helpers";
+import {
+  dilemmaAwaitingModeratorResolution,
+  normalizeDilemmaRecord,
+  isDilemmaBlank,
+  normalizeDilemmaVotes,
+} from "./dilemma-helpers";
 
 export function isCustomNameReady(name: string): boolean {
   const trimmed = name.trim();
@@ -52,10 +57,57 @@ export function getHouseCustomName(house: any): string {
   return house?.hasCustomName && typeof house.name === "string" ? house.name.trim() : "";
 }
 
+/** 플레이어 표시용: 커스텀 이름 또는 name 필드 중 가문과 구별되는 값 */
+export function getHouseSeatPlayerLabel(house: any): string {
+  const fromFlag = getHouseCustomName(house);
+  if (fromFlag) {
+    return fromFlag;
+  }
+
+  const houseName = getHouseKoreanName(house);
+  const raw = typeof house?.name === "string" ? house.name.trim() : "";
+
+  if (raw && raw !== houseName && raw !== house?.koreanTitle && raw !== house?.title) {
+    return raw;
+  }
+
+  return "";
+}
+
+/**
+ * 두 번째 줄: 구별되는 플레이어 이름만 `(이름)` 형태. 없으면 빈 문자열.
+ * 투표 칩 등에서 투표 제출자 이름은 자리 표시 이름이 없을 때만 보조로 사용.
+ */
+export function getHouseParenPlayerLine(house: any, options?: { reporterName?: string | null }): string {
+  const houseName = getHouseKoreanName(house);
+
+  const toParen = (label: string): string => {
+    const t = label.trim();
+    if (!t || t === houseName || t === house?.koreanTitle || t === house?.title) {
+      return "";
+    }
+    return `(${t})`;
+  };
+
+  const fromSeat = toParen(getHouseSeatPlayerLabel(house));
+  if (fromSeat) {
+    return fromSeat;
+  }
+
+  const reporter = options?.reporterName;
+  if (typeof reporter === "string" && reporter.trim()) {
+    return toParen(reporter);
+  }
+
+  return "";
+}
+
 export function getHouseHoverLabel(house: any, customNameOverride?: string | null): string {
   const houseName = getHouseKoreanName(house);
   const customName =
-    typeof customNameOverride === "string" ? customNameOverride.trim() : getHouseCustomName(house);
+    typeof customNameOverride === "string" && customNameOverride.trim()
+      ? customNameOverride.trim()
+      : getHouseSeatPlayerLabel(house);
 
   if (!customName || customName === houseName || customName === house?.koreanTitle || customName === house?.title) {
     return houseName;
@@ -121,7 +173,7 @@ export function getHouseDisplayName(state: RedactedState, houseId: HouseId | nul
     state.houses?.find((item) => item.id === houseId) ||
     HOUSE_CATALOG.find((item) => item.id === houseId);
   const houseName = getHouseKoreanName(house);
-  const customName = getHouseCustomName(house);
+  const customName = getHouseSeatPlayerLabel(house);
 
   if (!customName || customName === houseName || customName === house?.koreanTitle || customName === house?.title) {
     return houseName;
@@ -161,7 +213,12 @@ export function getCouncilStageCopy(state: RedactedState): string {
     }
 
     if (dilemma.voteNotes?.trim() && !dilemma.selectedOutcome) {
-      return ko.houseHelpers.moderatorTieBlurb;
+      const votes = normalizeDilemmaVotes(dilemma.votes);
+      const participants = getDilemmaVoteParticipants(state);
+
+      return dilemmaAwaitingModeratorResolution(dilemma, votes, participants)
+        ? ko.houseHelpers.moderatorTieBlurb
+        : ko.houseHelpers.needOutcome;
     }
 
     if (isDilemmaVotingComplete(state)) {

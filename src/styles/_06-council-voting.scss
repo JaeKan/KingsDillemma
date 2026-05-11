@@ -484,7 +484,7 @@
   gap: 5px;
 }
 
-.dilemma-vote-role-grid span {
+.dilemma-vote-role-grid>span {
   display: grid;
   gap: 2px;
   min-width: 0;
@@ -494,7 +494,7 @@
   padding: 6px 7px;
 }
 
-.dilemma-vote-role-grid span.wide {
+.dilemma-vote-role-grid>span.wide {
   grid-column: 1 / -1;
 }
 
@@ -507,10 +507,19 @@
   font-weight: 900;
 }
 
+.dilemma-vote-role-grid .role-cell small {
+  white-space: nowrap;
+}
+
 .dilemma-vote-role-grid small svg {
   flex: 0 0 auto;
   width: 14px;
   height: 14px;
+}
+
+.dilemma-vote-role-grid small .leader-token-emoji {
+  font-size: 12px;
+  line-height: 1;
 }
 
 .dilemma-vote-role-grid strong {
@@ -521,6 +530,36 @@
   font-weight: 950;
 }
 
+.dilemma-vote-role-grid strong:has(.house-role-name-stack) {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  overflow-wrap: unset;
+}
+
+.dilemma-vote-role-grid strong:has(.dilemma-vote-side-lead) {
+  display: block;
+  overflow-wrap: unset;
+}
+
+.dilemma-vote-side-lead {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  min-width: 0;
+}
+
+.dilemma-vote-side-lead__house {
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+}
+
+.dilemma-vote-side-lead__power {
+  white-space: nowrap;
+}
+
 .dilemma-vote-role-grid .role-cell--leader small {
   font-size: 0.74rem;
   font-weight: 920;
@@ -528,10 +567,6 @@
 
 .dilemma-vote-role-grid .role-cell--leader strong {
   font-size: 0.82rem;
-}
-
-.dilemma-vote-role-grid .role-cell--leader small .token-icon-emoji {
-  font-size: 15px;
 }
 
 .dilemma-vote-options {
@@ -558,8 +593,8 @@
 }
 
 .dilemma-vote-option.selected {
-  border-color: rgba(241, 214, 134, 0.76);
-  background: rgba(167, 128, 54, 0.28);
+  border-color: rgba(128, 153, 142, 0.72);
+  background: rgba(69, 87, 78, 0.36);
   color: #fff7da;
 }
 
@@ -569,8 +604,8 @@
 }
 
 .dilemma-vote-option.tone-pass.selected {
-  border-color: rgba(128, 153, 142, 0.72);
-  background: rgba(69, 87, 78, 0.36);
+  border-color: rgba(241, 214, 134, 0.76);
+  background: rgba(167, 128, 54, 0.28);
 }
 
 .dilemma-vote-wager {

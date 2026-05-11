@@ -1,32 +1,38 @@
 import React, { useState, useEffect, useMemo } from "react";
-import { RedactedHouse, DilemmaPhoto, DilemmaRecord } from "../types/game";
+import { DilemmaVote, RedactedHouse, DilemmaPhoto, DilemmaRecord } from "../types/game";
 import { getMysteryStickerEntry } from "../../shared/mystery-stickers.mts";
 import { getMysteryStickerLabel } from "../utils/mystery-sticker-labels";
 import { MysteryStickerImage } from "./MysteryStickerImage";
-import { 
-  formatDilemmaResourceDelta, 
-  normalizeDilemmaRecord, 
-  isDilemmaBlank, 
-  normalizeDilemmaVotes, 
-  sumDilemmaVotes, 
-  isDilemmaVoteCompleteForPublish, 
-  getDilemmaPublishBlockReason, 
-  formatDilemmaCardLabel, 
+import {
+  formatDilemmaResourceDelta,
+  normalizeDilemmaRecord,
+  isDilemmaBlank,
+  normalizeDilemmaVotes,
+  sumDilemmaVotes,
+  isDilemmaVoteCompleteForPublish,
+  getDilemmaPublishBlockReason,
   formatDilemmaVoteAdvantage,
   normalizeDilemmaOutcome,
   normalizeDilemmaResourceDeltas,
   createDilemmaVoteGroups,
   formatDilemmaVoteGroupMetric,
   normalizeDilemmaVote,
-  formatDilemmaSideLeader,
+  getDilemmaSideLeader,
   getDilemmaStatusLabel,
+  dilemmaAwaitingModeratorResolution,
+  isDilemmaResolutionEntryPending,
+  dilemmaHasVoteActivity,
+  normalizeResolutionChecklist,
+  resolutionChecklistHasProgress,
 } from "../utils/dilemma-helpers";
-import { 
-  getHouseKoreanName, 
-  getHouseHoverLabel, 
-  getDilemmaVoteParticipants, 
+import {
+  getHouseHoverLabel,
+  getDilemmaVoteParticipants,
   getDilemmaVoteTurnName,
   getHouseDisplayName,
+  getHouseKoreanName,
+  getHouseParenPlayerLine,
+  getHouses,
   isHouseCrestImageSrc,
 } from "../utils/house-helpers";
 import { TokenIcon, HouseIcon } from "./GameIcons";
@@ -61,6 +67,86 @@ function isPublishedDilemmaCurrent(dilemma: DilemmaRecord, entry: any): boolean 
 
 function getActiveDilemmaVoteHouses(houses: RedactedHouse[] = []): RedactedHouse[] {
   return (houses || []).filter((house) => house?.hasSession).slice(0, REQUIRED_HOUSE_COUNT);
+}
+
+function HouseRoleNameStack({
+  house,
+  emptyMark = "—",
+}: {
+  house: RedactedHouse | null | undefined;
+  emptyMark?: string;
+}) {
+  if (!house) {
+    return <span className="house-role-name-stack house-role-name-stack--empty">{emptyMark}</span>;
+  }
+
+  const secondary = getHouseParenPlayerLine(house);
+
+  return (
+    <span className="house-role-name-stack" title={getHouseHoverLabel(house)}>
+      <span className="house-role-name-stack__primary">{getHouseKoreanName(house)}</span>
+      {secondary ? <span className="house-role-name-stack__secondary">{secondary}</span> : null}
+    </span>
+  );
+}
+
+function VoteSideLeadStack({
+  votes,
+  participants,
+  side,
+}: {
+  votes: Record<string, DilemmaVote>;
+  participants: RedactedHouse[];
+  side: string;
+}) {
+  const leader = getDilemmaSideLeader(votes, participants, side);
+
+  if (!leader) {
+    return (
+      <span className="dilemma-vote-side-lead dilemma-vote-side-lead--empty">{ko.dilemmaHelpers.breakdownEmpty}</span>
+    );
+  }
+
+  return (
+    <span className="dilemma-vote-side-lead">
+      <span className="dilemma-vote-side-lead__house">{getHouseKoreanName(leader.house)}</span>
+      <span className="dilemma-vote-side-lead__power">{ko.dilemmaHelpers.powerTotal(leader.vote.powerTokens)}</span>
+    </span>
+  );
+}
+
+function formatResolutionChecklistSummary(dilemma: DilemmaRecord): string {
+  const checklist = normalizeResolutionChecklist(dilemma.resolutionChecklist);
+  const marks: string[] = [];
+
+  if (checklist.a) {
+    marks.push("A");
+  }
+
+  if (checklist.b) {
+    marks.push("B");
+  }
+
+  if (checklist.c) {
+    marks.push("C");
+  }
+
+  if (checklist.d) {
+    marks.push("D");
+  }
+
+  if (checklist.f) {
+    marks.push("F");
+  }
+
+  const head = marks.join("/");
+  const memo = checklist.memo?.trim() || "";
+
+  if (memo && head) {
+    return `${head} · ${memo}`;
+  }
+
+  return head || memo;
 }
 
 export function DilemmaFact({ label, value }: { label: string; value: string | undefined }) {
@@ -102,20 +188,35 @@ export function DilemmaOutcomePreview({ label, outcome, selected }: { label: str
   );
 }
 
-export function DilemmaPhotoStrip({ photos = [] }: { photos?: DilemmaPhoto[] }) {
+export function DilemmaPhotoStrip({
+  photos = [],
+  sectionLabel,
+  stripAriaLabel,
+}: {
+  photos?: DilemmaPhoto[];
+  /** 섹션 제목(있을 때만 표시) */
+  sectionLabel?: string;
+  /** 사진 갤러리 접근성 이름 */
+  stripAriaLabel?: string;
+}) {
   if (!photos.length) {
     return null;
   }
 
+  const aria = stripAriaLabel || ko.dilemmaUi.photoStripAria;
+
   return (
-    <div className="dilemma-photo-strip" aria-label={ko.dilemmaUi.photoStripAria}>
-      {photos.map((photo) => (
-        <Tooltip key={photo.id} label={photo.name}>
-          <a href={photo.dataUrl} target="_blank" rel="noreferrer">
-            <img src={photo.dataUrl} alt={photo.name || ko.dilemmaHelpers.defaultPhotoName} />
-          </a>
-        </Tooltip>
-      ))}
+    <div className="dilemma-photo-strip-block">
+      {sectionLabel ? <p className="section-label dilemma-photo-strip-section-label">{sectionLabel}</p> : null}
+      <div className="dilemma-photo-strip" aria-label={aria}>
+        {photos.map((photo) => (
+          <Tooltip key={photo.id} label={photo.name}>
+            <a href={photo.dataUrl} target="_blank" rel="noreferrer">
+              <img src={photo.dataUrl} alt={photo.name || ko.dilemmaHelpers.defaultPhotoName} />
+            </a>
+          </Tooltip>
+        ))}
+      </div>
     </div>
   );
 }
@@ -155,8 +256,16 @@ interface DilemmaSummaryCardProps {
   history?: any[];
   houses?: RedactedHouse[];
   editButtonRef?: React.RefObject<HTMLButtonElement>;
+  resolutionButtonRef?: React.RefObject<HTMLButtonElement>;
   roleButtonRef?: React.RefObject<HTMLButtonElement>;
+  /** 서버 redactState — 결과 입력(모달) 허용 여부; 작성자만 */
+  canEnterDilemmaResolution?: boolean;
+  /** 서버 redactState — 게시(이력) 가능 여부 */
+  canPublishDilemmaResolution?: boolean;
+  /** 서버 redactState — 결과 초기화 가능 여부 */
+  canResetDilemmaResult?: boolean;
   onEdit: () => void;
+  onOpenResolutionEntry?: () => void;
   onOpenRoleDialog: () => void;
   onPublish: () => void;
   onReset: () => void;
@@ -171,8 +280,13 @@ export function DilemmaSummaryCard({
   history = [],
   houses = [],
   editButtonRef,
+  resolutionButtonRef,
   roleButtonRef,
+  canEnterDilemmaResolution = false,
+  canPublishDilemmaResolution = false,
+  canResetDilemmaResult = false,
   onEdit,
+  onOpenResolutionEntry,
   onOpenRoleDialog,
   onPublish,
   onReset,
@@ -191,7 +305,8 @@ export function DilemmaSummaryCard({
   const leaderHouse = houseById.get(leaderHouseId as string) || null;
   const moderatorHouse = houseById.get(moderatorHouseId as string) || null;
   const rolesReady = Boolean(leaderHouse && moderatorHouse);
-  const hasResettableDilemma = !isBlank || Boolean(leaderHouseId || moderatorHouseId);
+  const hasResettableDilemma =
+    !isBlank || dilemmaHasVoteActivity(dilemma);
   const voteComplete = isDilemmaVoteCompleteForPublish(dilemma, houses);
   const publishBlockReason = getDilemmaPublishBlockReason(dilemma, houses);
   const status = getDilemmaStatusLabel({
@@ -206,8 +321,18 @@ export function DilemmaSummaryCard({
   
   const canSetRoles = Boolean(currentHouseId) && isBlank && !locked;
   const canEdit = Boolean(currentHouseId) && !lockedByOther && rolesReady;
-  const canPublish = Boolean(currentHouseId) && !locked && !isBlank && !publishBlockReason;
-  const canReset = Boolean(currentHouseId) && !lockedByOther && hasResettableDilemma;
+  const publishReadyClient = Boolean(currentHouseId) && !locked && !isBlank && !publishBlockReason;
+  const canPublish = publishReadyClient && canPublishDilemmaResolution;
+  const canReset = Boolean(currentHouseId) && !lockedByOther && hasResettableDilemma && canResetDilemmaResult;
+  const resolutionEntryPending = isDilemmaResolutionEntryPending(dilemma, houses);
+  const resolutionLockOk = !dilemma.editLock || dilemma.editLock.houseId === currentHouseId;
+  const canOpenResolutionEntry =
+    Boolean(currentHouseId && onOpenResolutionEntry) &&
+    rolesReady &&
+    !isBlank &&
+    resolutionLockOk &&
+    resolutionEntryPending &&
+    canEnterDilemmaResolution;
 
   const roleTooltip = locked
     ? ko.dilemmaUi.roleTooltipLocked
@@ -225,13 +350,27 @@ export function DilemmaSummaryCard({
     ? ko.dilemmaUi.publishTooltipLocked
     : isBlank
       ? ko.dilemmaUi.publishTooltipEmpty
-      : publishBlockReason || ko.dilemmaUi.publishTooltipDefault;
+      : publishBlockReason ||
+        (!canPublishDilemmaResolution && publishReadyClient
+          ? ko.dilemmaUi.publishTooltipAuthorOnly
+          : ko.dilemmaUi.publishTooltipDefault);
   const resetTooltip = lockedByOther
     ? ko.dilemmaUi.resetTooltipWait
     : !hasResettableDilemma
       ? ko.dilemmaUi.resetTooltipNone
-      : ko.dilemmaUi.resetTooltipOk;
+      : !canResetDilemmaResult
+        ? ko.dilemmaUi.resetTooltipAuthorOnly
+        : ko.dilemmaUi.resetTooltipOk;
+  const resolutionEntryTooltip = !resolutionLockOk
+    ? ko.dilemmaResolution.resultEntryTooltipLocked
+    : ko.dilemmaResolution.resultEntryTooltip;
 
+  const cardCode = dilemma.cardCode.trim();
+  const cardTitle = dilemma.title.trim();
+  const slotPlacement = dilemma.timeCounterSlot.trim();
+  const outcomeDisplay =
+    (dilemmaOutcomeLabels as Record<string, string>)[dilemma.selectedOutcome || ""] || ko.common.undecided;
+  const advantageDisplay = formatDilemmaVoteAdvantage(ayePower, nayPower);
   return (
     <section className="dilemma-ledger-card" aria-labelledby="dilemma-ledger-title">
       <div className="dilemma-summary-head">
@@ -269,6 +408,20 @@ export function DilemmaSummaryCard({
               {editButtonLabel}
             </button>
           </Tooltip>
+          {resolutionEntryPending ? (
+            <Tooltip label={resolutionEntryTooltip}>
+              <button
+                ref={resolutionButtonRef}
+                className="ghost-button dilemma-summary-button dilemma-resolution-entry-button"
+                type="button"
+                onClick={onOpenResolutionEntry}
+                disabled={busy || !canOpenResolutionEntry}
+              >
+                <TokenIcon type="resolution" />
+                {ko.dilemmaResolution.resultEntryButton}
+              </button>
+            </Tooltip>
+          ) : null}
           <Tooltip label={resetTooltip}>
             <button
               className="ghost-button dilemma-summary-button danger-button"
@@ -298,30 +451,126 @@ export function DilemmaSummaryCard({
         <p className="dilemma-empty">{ko.dilemmaUi.emptyRound}</p>
       ) : (
         <div className="dilemma-summary-body">
-          <div className="dilemma-facts">
-            <DilemmaFact label={ko.dilemmaHistory.factCard} value={formatDilemmaCardLabel(dilemma)} />
-            <DilemmaFact label={ko.dilemmaHistory.factSlot} value={dilemma.timeCounterSlot} />
-            {dilemma.mysteryStickerId ? (
-              <div className="dilemma-fact dilemma-fact-sticker">
-                <span>{ko.mysteryStickers.previewLabel}</span>
-                <strong>
-                  <MysteryStickerImage
-                    stickerId={dilemma.mysteryStickerId}
-                    publicPath={getMysteryStickerEntry(dilemma.mysteryStickerId)?.publicPath}
-                    presentation="meaningful"
-                    meaningfulAlt={ko.mysteryStickers.previewAlt}
-                  />
-                  <span>{getMysteryStickerLabel(dilemma.mysteryStickerId)}</span>
-                </strong>
+          <div className="dilemma-summary-compact">
+          <div className="dilemma-summary-meta-grid">
+            <div className="dilemma-summary-meta-hero">
+              <div className="dilemma-summary-meta-field dilemma-summary-meta-field--code">
+                <span className="dilemma-summary-meta-label">{ko.dilemmaUi.summaryLabelCardCode}</span>
+                <div className="dilemma-summary-meta-value">
+                  {cardCode ? (
+                    <span className="dilemma-summary-card-code">{cardCode}</span>
+                  ) : (
+                    <span className="dilemma-summary-meta-placeholder">—</span>
+                  )}
+                </div>
               </div>
-            ) : null}
-            <DilemmaFact
-              label={ko.dilemmaHistory.factResult}
-              value={(dilemmaOutcomeLabels as any)[dilemma.selectedOutcome || ""] || ko.common.undecided}
-            />
-            <DilemmaFact label={ko.dilemmaUi.sessionLeader} value={leaderHouse ? getHouseKoreanName(leaderHouse) : ""} />
-            <DilemmaFact label={ko.dilemmaUi.sessionModerator} value={moderatorHouse ? getHouseKoreanName(moderatorHouse) : ""} />
-            <DilemmaFact label={ko.dilemmaUi.factAdvantage} value={formatDilemmaVoteAdvantage(ayePower, nayPower)} />
+              <div className="dilemma-summary-meta-field dilemma-summary-meta-field--title">
+                <span className="dilemma-summary-meta-label">{ko.dilemmaUi.summaryLabelTitle}</span>
+                <div className="dilemma-summary-meta-value dilemma-summary-meta-value--title">
+                  {cardTitle ? (
+                    <Tooltip className="dilemma-summary-title-anchor" label={cardTitle}>
+                      <span className="dilemma-summary-card-title">{cardTitle}</span>
+                    </Tooltip>
+                  ) : (
+                    <span className="dilemma-summary-meta-placeholder">—</span>
+                  )}
+                </div>
+              </div>
+            </div>
+            <div className="dilemma-summary-meta-row">
+              <div className="dilemma-summary-meta-field dilemma-summary-meta-field--time">
+                <span className="dilemma-summary-meta-label">{ko.dilemmaUi.summaryLabelTimeSlot}</span>
+                <div className="dilemma-summary-meta-value">
+                  {slotPlacement ? (
+                    <Tooltip label={`${ko.dilemmaHistory.factSlot}: ${slotPlacement}`}>
+                      <span className="dilemma-summary-slot-pill">{slotPlacement}</span>
+                    </Tooltip>
+                  ) : (
+                    <span className="dilemma-summary-meta-placeholder">—</span>
+                  )}
+                </div>
+              </div>
+              <div className="dilemma-summary-meta-field dilemma-summary-meta-field--sticker">
+                <span className="dilemma-summary-meta-label">{ko.dilemmaUi.summaryLabelStorySticker}</span>
+                <div className="dilemma-summary-meta-value">
+                  {dilemma.mysteryStickerId ? (
+                    <Tooltip
+                      label={`${ko.mysteryStickers.previewLabel}: ${getMysteryStickerLabel(dilemma.mysteryStickerId)}`}
+                      ariaLabel={`${ko.mysteryStickers.previewAlt}: ${getMysteryStickerLabel(dilemma.mysteryStickerId)}`}
+                    >
+                      <span className="dilemma-summary-sticker-group">
+                        <span className="dilemma-summary-sticker-wrap">
+                          <MysteryStickerImage
+                            stickerId={dilemma.mysteryStickerId}
+                            publicPath={getMysteryStickerEntry(dilemma.mysteryStickerId)?.publicPath}
+                            presentation="decorative"
+                          />
+                        </span>
+                      </span>
+                    </Tooltip>
+                  ) : (
+                    <span className="dilemma-summary-meta-placeholder">—</span>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+            <div className="dilemma-summary-roles-row">
+              <div className="dilemma-summary-role">
+                {leaderHouse ? (
+                  <HouseCrestBadge house={leaderHouse} className="dilemma-summary-role-crest" disableTooltip />
+                ) : (
+                  <div className="house-crest-badge dilemma-summary-role-crest dilemma-summary-role-crest--empty" aria-hidden="true" />
+                )}
+                <div className="dilemma-summary-role-text">
+                  <span className="dilemma-summary-role-kind">
+                    <span className="dilemma-summary-role-kind-icon">
+                      <TokenIcon type="leader" />
+                    </span>
+                    <span className="dilemma-summary-role-kind-label">{ko.dilemmaUi.sessionLeader}</span>
+                  </span>
+                  {leaderHouse ? (
+                    <Tooltip className="dilemma-summary-role-name-tooltip" label={getHouseHoverLabel(leaderHouse)}>
+                      <HouseRoleNameStack house={leaderHouse} />
+                    </Tooltip>
+                  ) : (
+                    <HouseRoleNameStack house={leaderHouse} />
+                  )}
+                </div>
+              </div>
+              <div className="dilemma-summary-role">
+                {moderatorHouse ? (
+                  <HouseCrestBadge house={moderatorHouse} className="dilemma-summary-role-crest" disableTooltip />
+                ) : (
+                  <div className="house-crest-badge dilemma-summary-role-crest dilemma-summary-role-crest--empty" aria-hidden="true" />
+                )}
+                <div className="dilemma-summary-role-text">
+                  <span className="dilemma-summary-role-kind">
+                    <span className="dilemma-summary-role-kind-icon">
+                      <TokenIcon type="moderator" />
+                    </span>
+                    <span className="dilemma-summary-role-kind-label">{ko.dilemmaUi.sessionModerator}</span>
+                  </span>
+                  {moderatorHouse ? (
+                    <Tooltip className="dilemma-summary-role-name-tooltip" label={getHouseHoverLabel(moderatorHouse)}>
+                      <HouseRoleNameStack house={moderatorHouse} />
+                    </Tooltip>
+                  ) : (
+                    <HouseRoleNameStack house={moderatorHouse} />
+                  )}
+                </div>
+              </div>
+            </div>
+            <div className="dilemma-summary-vote-pills" role="group">
+              <div className="dilemma-summary-vote-pill">
+                <span className="dilemma-summary-vote-pill__label">{ko.dilemmaHistory.factResult}</span>
+                <span className="dilemma-summary-vote-pill__value">{outcomeDisplay}</span>
+              </div>
+              <div className="dilemma-summary-vote-pill">
+                <span className="dilemma-summary-vote-pill__label">{ko.dilemmaUi.factAdvantage}</span>
+                <span className="dilemma-summary-vote-pill__value">{advantageDisplay}</span>
+              </div>
+            </div>
           </div>
           <DilemmaVoteBreakdown dilemma={dilemma} houses={houses} />
           <DilemmaTextPreview label={ko.dilemmaHistory.labelContext} value={dilemma.context} />
@@ -332,8 +581,20 @@ export function DilemmaSummaryCard({
             <DilemmaOutcomePreview label={ko.dilemmaUi.labelNay} selected={dilemma.selectedOutcome === "nay"} outcome={dilemma.nay} />
           </div>
           <DilemmaTextPreview label={ko.dilemmaHistory.labelVote} value={dilemma.voteNotes} />
+          {resolutionChecklistHasProgress(dilemma.resolutionChecklist) ? (
+            <DilemmaFact label={ko.dilemmaHistory.labelResolutionChecklist} value={formatResolutionChecklistSummary(dilemma)} />
+          ) : null}
+          <DilemmaPhotoStrip
+            photos={dilemma.photos}
+            sectionLabel={ko.dilemmaHistory.labelPhotosCard}
+            stripAriaLabel={ko.dilemmaUi.photoStripAria}
+          />
           <DilemmaTextPreview label={ko.dilemmaHistory.labelFollowUp} value={dilemma.resolutionNotes} />
-          <DilemmaPhotoStrip photos={dilemma.photos} />
+          <DilemmaPhotoStrip
+            photos={dilemma.resolutionPhotos}
+            sectionLabel={ko.dilemmaHistory.labelPhotosResolution}
+            stripAriaLabel={ko.dilemmaUi.photoStripResolutionAria}
+          />
           {dilemma.updatedByName ? (
             <p className="dilemma-updated">
               {ko.dilemmaUi.savedLine(dilemma.updatedByName, formatLocalDateTime(dilemma.updatedAt))}
@@ -372,8 +633,10 @@ export function DilemmaVoteBreakdown({ dilemma, houses = [] }: { dilemma: Dilemm
                     tooltipLabel={item.hoverLabel}
                     ariaLabel={item.hoverLabel}
                   />
-                  <strong>{item.name}</strong>
-                  <small>{item.houseName}</small>
+                  <span className="dilemma-vote-breakdown-chip-main">
+                    <strong>{item.houseTitle}</strong>
+                    {item.secondaryLine ? <small>{item.secondaryLine}</small> : null}
+                  </span>
                   {item.powerTokens > 0 ? <em>{ko.dilemmaUi.powerEm(item.powerTokens)}</em> : null}
                 </span>
               ))
@@ -436,7 +699,7 @@ export function SessionRoleLabel({ role }: { role: string }) {
   if (role === "leader") {
     return (
       <span className="session-role-label tone-leader">
-        <TokenIcon type="crown" />
+        <TokenIcon type="leader" />
         <strong>{ko.dilemmaUi.sessionLeader}</strong>
       </span>
     );
@@ -444,7 +707,7 @@ export function SessionRoleLabel({ role }: { role: string }) {
   if (role === "moderator") {
     return (
       <span className="session-role-label tone-moderator">
-        <TokenIcon type="eye" />
+        <TokenIcon type="moderator" />
         <strong>{ko.dilemmaUi.sessionModerator}</strong>
       </span>
     );
@@ -607,7 +870,9 @@ export function GameMessage({ state }: { state: any }) {
       if (dilemma.selectedOutcome) {
         text = ko.dilemmaUi.outcomePickedBlurb(dilemmaOutcomeLabels[dilemma.selectedOutcome as keyof typeof dilemmaOutcomeLabels]);
       } else if (dilemma.voteNotes?.trim() && !dilemma.selectedOutcome) {
-        text = ko.houseHelpers.moderatorTieBlurb;
+        text = dilemmaAwaitingModeratorResolution(dilemma, votes, participants)
+          ? ko.houseHelpers.moderatorTieBlurb
+          : ko.houseHelpers.needOutcome;
       } else if (state.canVoteDilemma) {
         if (selfVoted && !everyVoted) {
           text = ko.dilemmaUi.voteSubmittedWaitOthers;
@@ -662,21 +927,22 @@ export function DilemmaVotingPanel({ state, busy, mutate }: DilemmaVotingPanelPr
   const voteTurnName = getDilemmaVoteTurnName(state);
   const tallyPending = !dilemma.voteNotes?.trim();
   const votingComplete = !selectedOutcome && tallyPending && allVoted;
-  const tieAwaitingModerator = !selectedOutcome && Boolean(dilemma.voteNotes?.trim());
-  const isModerator = Boolean(state.currentHouseId && state.dilemmaModerator === state.currentHouseId);
   const ayePower = sumDilemmaVotes(votes, participants, "aye");
   const nayPower = sumDilemmaVotes(votes, participants, "nay");
+  const tieAwaitingModerator = dilemmaAwaitingModeratorResolution(dilemma, votes, participants);
+  const isModerator = Boolean(state.currentHouseId && state.dilemmaModerator === state.currentHouseId);
   const passCount = participants.filter((house) => votes[house.id]?.side === "pass").length;
-  const leaderName = getHouseDisplayName(state, state.dilemmaLeader);
-  const moderatorName = getHouseDisplayName(state, state.dilemmaModerator);
-  const ayeLeader = formatDilemmaSideLeader(votes, participants, "aye");
-  const nayLeader = formatDilemmaSideLeader(votes, participants, "nay");
+  const roster = getHouses(state);
+  const leaderHouse =
+    state.dilemmaLeader ? roster.find((h) => h.id === state.dilemmaLeader) ?? null : null;
+  const moderatorHouse =
+    state.dilemmaModerator ? roster.find((h) => h.id === state.dilemmaModerator) ?? null : null;
   const advantageText = formatDilemmaVoteAdvantage(ayePower, nayPower);
   const activePower = side === "pass" ? 0 : Math.min(powerTokens, ownPowerTokens);
   const hasValidWager = side === "pass" || activePower >= 1;
   const canSaveVote =
     Boolean(state.currentHouseId) && state.canVoteDilemma && !busy && !selectedOutcome && tallyPending && side && hasValidWager;
-  const canApply = !busy && votingComplete;
+  const canApplyTally = Boolean(state.canApplyDilemmaVotes) && !busy;
 
   useEffect(() => {
     const nextVote = normalizeDilemmaVote(votes[state.currentHouseId]);
@@ -750,25 +1016,33 @@ export function DilemmaVotingPanel({ state, busy, mutate }: DilemmaVotingPanelPr
         </strong>
       </div>
       <div className="dilemma-vote-role-grid" aria-label={ko.dilemmaUi.voteRoleGridAria}>
-        <span className="role-cell role-cell--leader">
+        <span className="role-cell">
           <small>
             <TokenIcon type="leader" /> {ko.dilemmaUi.leaderShort}
           </small>
-          <strong>{leaderName || ko.common.notSpecified}</strong>
+          <strong>
+            <HouseRoleNameStack house={leaderHouse} emptyMark={ko.common.notSpecified} />
+          </strong>
         </span>
-        <span>
+        <span className="role-cell">
           <small>
             <TokenIcon type="moderator" /> {ko.dilemmaUi.moderatorShort}
           </small>
-          <strong>{moderatorName || ko.common.notSpecified}</strong>
+          <strong>
+            <HouseRoleNameStack house={moderatorHouse} emptyMark={ko.common.notSpecified} />
+          </strong>
         </span>
         <span>
           <small>{ko.dilemmaUi.ayeLead}</small>
-          <strong>{ayeLeader}</strong>
+          <strong>
+            <VoteSideLeadStack votes={votes} participants={participants} side="aye" />
+          </strong>
         </span>
         <span>
           <small>{ko.dilemmaUi.nayLead}</small>
-          <strong>{nayLeader}</strong>
+          <strong>
+            <VoteSideLeadStack votes={votes} participants={participants} side="nay" />
+          </strong>
         </span>
         <span className="wide">
           <small>{ko.dilemmaUi.advantageNow}</small>
@@ -849,7 +1123,11 @@ export function DilemmaVotingPanel({ state, busy, mutate }: DilemmaVotingPanelPr
           </div>
         </>
       ) : null}
-      {votingComplete ? <p className="dilemma-vote-turn-note">{ko.dilemmaUi.applyHint}</p> : null}
+      {votingComplete ? (
+        <p className="dilemma-vote-turn-note">
+          {state.canApplyDilemmaVotes ? ko.dilemmaUi.applyHint : ko.dilemmaUi.applyWaitEditor}
+        </p>
+      ) : null}
       {!selectedOutcome && (state.canVoteDilemma || votingComplete) ? (
         <div className="dilemma-vote-actions">
           {state.canVoteDilemma ? (
@@ -857,8 +1135,8 @@ export function DilemmaVotingPanel({ state, busy, mutate }: DilemmaVotingPanelPr
               {ko.dilemmaUi.saveVote}
             </button>
           ) : null}
-          {votingComplete ? (
-            <button className="primary-button compact" type="button" onClick={applyVotes} disabled={!canApply}>
+          {votingComplete && state.canApplyDilemmaVotes ? (
+            <button className="primary-button compact" type="button" onClick={applyVotes} disabled={!canApplyTally}>
               {ko.dilemmaUi.applyTally}
             </button>
           ) : null}

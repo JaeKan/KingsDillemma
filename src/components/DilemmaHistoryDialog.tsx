@@ -234,8 +234,17 @@ function DilemmaHistoryDetail({ canDelete, deleteBusy, entry, onDelete }: Dilemm
         <DilemmaOutcomePreview label={ko.dilemmaHistory.labelNay} selected={entry.selectedOutcome === "nay"} outcome={entry.nay} />
       </div>
       <DilemmaTextPreview label={ko.dilemmaHistory.labelVote} value={entry.voteNotes} />
+      <DilemmaPhotoStrip
+        photos={entry.photos}
+        sectionLabel={ko.dilemmaHistory.labelPhotosCard}
+        stripAriaLabel={ko.dilemmaUi.photoStripAria}
+      />
       <DilemmaTextPreview label={ko.dilemmaHistory.labelFollowUp} value={entry.resolutionNotes} />
-      <DilemmaPhotoStrip photos={entry.photos} />
+      <DilemmaPhotoStrip
+        photos={entry.resolutionPhotos}
+        sectionLabel={ko.dilemmaHistory.labelPhotosResolution}
+        stripAriaLabel={ko.dilemmaUi.photoStripResolutionAria}
+      />
       <p className="dilemma-updated">
         {ko.dilemmaHistory.savedLine(entry.savedByName || entry.updatedByName || ko.common.councilFallback, formatLocalDateTime(entry.savedAt || entry.updatedAt))}
       </p>

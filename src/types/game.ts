@@ -91,6 +91,17 @@ export type DilemmaPhoto = {
   addedByName: string;
 };
 
+/** 룰북 5장 딜레마 해결 절차 기록(A–D, F). E는 timeCounterSlot와 함께 안내 */
+export type DilemmaResolutionChecklist = {
+  a?: boolean;
+  b?: boolean;
+  c?: boolean;
+  d?: boolean;
+  f?: boolean;
+  /** 연대기 스티커·봉투 등 짧은 메모 */
+  memo?: string;
+};
+
 export type DilemmaEditLock = {
   houseId: HouseId;
   houseName: string;
@@ -117,15 +128,23 @@ export type DilemmaRecord = {
   selectedOutcome: DilemmaVoteSide;
   voteNotes: string;
   resolutionNotes: string;
+  resolutionChecklist?: DilemmaResolutionChecklist;
   votes: Partial<Record<HouseId, DilemmaVote>>;
   photos: DilemmaPhoto[];
+  /** 후속·결과 단계 첨부 사진(카드 작성 `photos`와 별도) */
+  resolutionPhotos: DilemmaPhoto[];
   updatedAt: string;
   updatedBy: HouseId | null;
   updatedByName: string;
+  /** 최초로 빈 딜레마에 내용을 확정한 가문(saveDilemma). 이후 편집해도 바뀌지 않음. 게시·결과 초기화 권한 기준. */
+  dilemmaAuthorHouseId: HouseId | null;
   editLock: DilemmaEditLock | null;
 };
 
-export type DilemmaEditDraft = Omit<DilemmaRecord, "updatedAt" | "updatedBy" | "updatedByName" | "editLock">;
+export type DilemmaEditDraft = Omit<
+  DilemmaRecord,
+  "updatedAt" | "updatedBy" | "updatedByName" | "dilemmaAuthorHouseId" | "editLock"
+>;
 
 export type DilemmaHistoryEntry = Omit<DilemmaRecord, "editLock"> & {
   savedAt: string;
@@ -186,6 +205,14 @@ export type RedactedState = {
   canChoose: boolean;
   dilemmaVoteTurn: HouseId | null;
   canVoteDilemma: boolean;
+  /** 집계 기록(apply) 가능 — 로그인 중 투표 참여 가문 중 누구나(전원 투표 완료 시); 작성자 판별에는 사용하지 않음 */
+  canApplyDilemmaVotes: boolean;
+  /** 결과 입력 흐름(모달 창) — `dilemmaAuthorHouseId` 고정 작성자만 */
+  canEnterDilemmaResolution: boolean;
+  /** 딜레마 이력 게시 — `dilemmaAuthorHouseId` 고정 작성자만 true */
+  canPublishDilemmaResolution: boolean;
+  /** 결과 초기화 — `dilemmaAuthorHouseId` 고정 작성자만 */
+  canResetDilemmaResult: boolean;
   dilemmaLeader: HouseId | null;
   dilemmaModerator: HouseId | null;
   dilemmaVoteOrder: HouseId[];

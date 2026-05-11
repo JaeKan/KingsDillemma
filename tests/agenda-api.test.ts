@@ -288,11 +288,36 @@ const saveDilemma = await handleAgendaRequest(
 const saveDilemmaPayload = (await saveDilemma.json()) as any;
 assert.equal(saveDilemma.status, 200);
 assert.equal(saveDilemmaPayload.state.dilemma.title, "Harbor levy");
+assert.equal(saveDilemmaPayload.state.dilemma.dilemmaAuthorHouseId, "gamam");
 assert.equal(saveDilemmaPayload.state.dilemma.selectedOutcome, "");
 assert.deepEqual(saveDilemmaPayload.state.dilemma.nay.resourceDeltas, { morale: -1, knowledge: 2 });
 assert.equal(saveDilemmaPayload.state.dilemma.photos.length, 1);
 assert.equal(saveDilemmaPayload.state.dilemmaHistory.length, 0);
 assert.equal(persisted?.dilemmaHistory.length, 0);
+
+const loginSoladForDilemma = await handleAgendaRequest(
+  jsonRequest({
+    action: "login",
+    houseId: "solad",
+    password: "seat-password",
+    displayName: "House Gambol",
+  }),
+  { deployContext: "development" },
+  storeFactory,
+);
+const setCookieSolad = loginSoladForDilemma.headers.get("Set-Cookie") || "";
+assert.equal(loginSoladForDilemma.status, 200);
+assert.match(setCookieSolad, new RegExp(`^${COOKIE_NAME}=`));
+
+const resetByNonAuthor = await handleAgendaRequest(jsonRequest({ action: "resetDilemma" }, setCookieSolad), {}, storeFactory);
+assert.equal(resetByNonAuthor.status, 403);
+
+persisted = {
+  ...(persisted as GameState)!,
+  sessions: Object.fromEntries(
+    Object.entries((persisted as GameState).sessions).filter(([id]) => id !== "solad"),
+  ),
+};
 
 const blockedPublishDilemma = await handleAgendaRequest(jsonRequest({ action: "publishDilemma" }, setCookie), {}, storeFactory);
 const blockedPublishDilemmaPayload = (await blockedPublishDilemma.json()) as any;
@@ -305,6 +330,15 @@ persisted = {
     ...(persisted as any)!.dilemma,
     selectedOutcome: "nay",
     resolutionNotes: "Resolve harbor unrest and place the card.",
+    resolutionPhotos: [
+      {
+        id: "reso-1",
+        name: "after.jpg",
+        mimeType: "image/jpeg",
+        dataUrl: "data:image/jpeg;base64,aGVsbG8=",
+        size: 800,
+      },
+    ],
     votes: {
       gamam: { side: "aye", powerTokens: 2, updatedAt: "2026-05-07T00:00:00.000Z", updatedByName: "House Pinchay" },
       solad: { side: "nay", powerTokens: 1, updatedAt: "2026-05-07T00:00:00.000Z", updatedByName: "House Gambol" },
@@ -315,11 +349,35 @@ persisted = {
   },
 };
 
+const loginSoladForPublish = await handleAgendaRequest(
+  jsonRequest({
+    action: "login",
+    houseId: "solad",
+    password: "seat-password",
+    displayName: "House Gambol",
+  }),
+  { deployContext: "development" },
+  storeFactory,
+);
+const setCookieSoladPublish = loginSoladForPublish.headers.get("Set-Cookie") || "";
+assert.equal(loginSoladForPublish.status, 200);
+
+const publishByNonAuthor = await handleAgendaRequest(jsonRequest({ action: "publishDilemma" }, setCookieSoladPublish), {}, storeFactory);
+assert.equal(publishByNonAuthor.status, 403);
+
+persisted = {
+  ...(persisted as GameState)!,
+  sessions: Object.fromEntries(
+    Object.entries((persisted as GameState).sessions).filter(([id]) => id !== "solad"),
+  ),
+};
+
 const publishDilemma = await handleAgendaRequest(jsonRequest({ action: "publishDilemma" }, setCookie), {}, storeFactory);
 const publishDilemmaPayload = (await publishDilemma.json()) as any;
 assert.equal(publishDilemma.status, 200);
 assert.equal(publishDilemmaPayload.state.dilemmaHistory.length, 1);
 assert.equal(publishDilemmaPayload.state.dilemmaHistory[0].title, "Harbor levy");
+assert.equal(publishDilemmaPayload.state.dilemmaHistory[0].resolutionPhotos.length, 1);
 assert.equal(publishDilemmaPayload.state.dilemma.title, "");
 assert.equal(publishDilemmaPayload.state.dilemma.historyId, "");
 assert.equal(persisted?.dilemma.title, "");
@@ -347,6 +405,14 @@ const deleteDilemmaHistoryPayload = (await deleteDilemmaHistory.json()) as any;
 assert.equal(deleteDilemmaHistory.status, 200);
 assert.equal(deleteDilemmaHistoryPayload.state.dilemmaHistory.length, 0);
 assert.equal(persisted?.dilemmaHistory.length, 0);
+
+/** 이전 단계 로그인(solad)으로 남은 세션을 걷어내면, 로그인은 gamam 하나뿐이어야 투표 단일 참가 시나리오가 성립합니다. */
+persisted = {
+  ...(persisted as GameState)!,
+  sessions: Object.fromEntries(
+    Object.entries((persisted as GameState).sessions).filter(([id]) => id === "gamam"),
+  ),
+};
 
 const saveVotingDilemmaRoles = await handleAgendaRequest(
   jsonRequest({ action: "saveDilemmaRoles", roles: { leaderHouseId: "gamam", moderatorHouseId: "gamam" } }, setCookie),
@@ -385,6 +451,19 @@ const lockedVoteOrder = await handleAgendaRequest(
 );
 assert.equal(lockedVoteOrder.status, 409);
 
+const loginSoladForPair = await handleAgendaRequest(
+  jsonRequest({
+    action: "login",
+    houseId: "solad",
+    password: "seat-password",
+    displayName: "House Gambol",
+  }),
+  { deployContext: "development" },
+  storeFactory,
+);
+const cookieSoladPair = loginSoladForPair.headers.get("Set-Cookie") || "";
+assert.equal(loginSoladForPair.status, 200);
+
 const saveDilemmaVote = await handleAgendaRequest(
   jsonRequest({ action: "saveDilemmaVote", vote: { side: "aye", powerTokens: 2 } }, setCookie),
   {},
@@ -396,15 +475,58 @@ assert.equal(saveDilemmaVotePayload.state.dilemma.votes.gamam.side, "aye");
 assert.equal(saveDilemmaVotePayload.state.dilemma.votes.gamam.powerTokens, 2);
 assert.equal(saveDilemmaVotePayload.state.dilemmaVoteTurn, null);
 assert.equal(saveDilemmaVotePayload.state.canVoteDilemma, true);
+assert.equal(saveDilemmaVotePayload.state.canApplyDilemmaVotes, false);
+
+const saveSoladVotePair = await handleAgendaRequest(
+  jsonRequest({ action: "saveDilemmaVote", vote: { side: "pass", powerTokens: 0 } }, cookieSoladPair),
+  {},
+  storeFactory,
+);
+const saveSoladVotePairPayload = (await saveSoladVotePair.json()) as any;
+assert.equal(saveSoladVotePair.status, 200);
+assert.equal(saveSoladVotePairPayload.state.canApplyDilemmaVotes, true);
+
+const tallyAuthorUpdatedByBeforeApply = (persisted as GameState).dilemma.updatedBy;
+
+const peekGamamDualVote = await handleAgendaRequest(
+  new Request("http://localhost/api/agenda", { headers: { Cookie: setCookie } }),
+  {},
+  storeFactory,
+);
+const peekGamamDualVotePayload = (await peekGamamDualVote.json()) as any;
+assert.equal(peekGamamDualVote.status, 200);
+assert.equal(peekGamamDualVotePayload.state.canResetDilemmaResult, true);
+assert.equal(saveSoladVotePairPayload.state.canResetDilemmaResult, false);
+
 const inventoryBeforeApply = structuredClone(persisted?.inventories);
 
-const earlyApplyDilemmaVotes = await handleAgendaRequest(jsonRequest({ action: "applyDilemmaVotes" }, setCookie), {}, storeFactory);
+const earlyApplyDilemmaVotes = await handleAgendaRequest(
+  jsonRequest({ action: "applyDilemmaVotes" }, cookieSoladPair),
+  {},
+  storeFactory,
+);
 const earlyApplyDilemmaVotesPayload = (await earlyApplyDilemmaVotes.json()) as any;
 assert.equal(earlyApplyDilemmaVotes.status, 200);
+assert.equal((persisted as GameState).dilemma.updatedBy, tallyAuthorUpdatedByBeforeApply);
 assert.equal(earlyApplyDilemmaVotesPayload.state.dilemma.selectedOutcome, "aye");
 assert.match(earlyApplyDilemmaVotesPayload.state.dilemma.voteNotes, /§4 Vote Resolution/);
 assert.equal(earlyApplyDilemmaVotesPayload.state.canVoteDilemma, false);
+assert.equal(earlyApplyDilemmaVotesPayload.state.canApplyDilemmaVotes, false);
 assert.deepEqual(persisted?.inventories, inventoryBeforeApply);
+
+const tallyResetNonAuthor = await handleAgendaRequest(
+  jsonRequest({ action: "resetDilemma" }, cookieSoladPair),
+  {},
+  storeFactory,
+);
+assert.equal(tallyResetNonAuthor.status, 403);
+
+const tallyPublishNonAuthor = await handleAgendaRequest(
+  jsonRequest({ action: "publishDilemma" }, cookieSoladPair),
+  {},
+  storeFactory,
+);
+assert.equal(tallyPublishNonAuthor.status, 403);
 
 const resetDilemma = await handleAgendaRequest(jsonRequest({ action: "resetDilemma" }, setCookie), {}, storeFactory);
 const resetDilemmaPayload = (await resetDilemma.json()) as any;

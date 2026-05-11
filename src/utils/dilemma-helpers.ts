@@ -12,7 +12,7 @@ import {
 } from "../resources/gameResources";
 import { sanitizeMysteryStickerId } from "../../shared/mystery-stickers.mts";
 import { normalizeCounter, normalizeTextField } from "./normalizers";
-import { getHouseKoreanName, getHouseHoverLabel } from "./house-helpers";
+import { getHouseKoreanName, getHouseHoverLabel, getHouseParenPlayerLine } from "./house-helpers";
 import {
   DilemmaRecord,
   DilemmaOutcome,
@@ -20,11 +20,52 @@ import {
   DilemmaPhoto,
   DilemmaEditLock,
   DilemmaHistoryEntry,
+  DilemmaResolutionChecklist,
   RedactedHouse,
-  HouseId
+  HouseId,
 } from "../types/game";
 
+const RESOLUTION_CHECKLIST_MEMO_MAX = 200;
+
 // ── 딜레마 레코드 ─────────────────────────────────────────────
+
+export function normalizeResolutionChecklist(value: unknown): DilemmaResolutionChecklist {
+  if (!value || typeof value !== "object") {
+    return {};
+  }
+
+  const candidate = value as Record<string, unknown>;
+  const next: DilemmaResolutionChecklist = {};
+
+  (["a", "b", "c", "d", "f"] as const).forEach((key) => {
+    if (candidate[key] === true) {
+      next[key] = true;
+    }
+  });
+
+  if (typeof candidate.memo === "string") {
+    const memo = normalizeTextField(candidate.memo).slice(0, RESOLUTION_CHECKLIST_MEMO_MAX);
+
+    if (memo.trim()) {
+      next.memo = memo.trim();
+    }
+  }
+
+  return next;
+}
+
+export function resolutionChecklistHasProgress(checklist: unknown): boolean {
+  const normalized = normalizeResolutionChecklist(checklist);
+
+  return Boolean(
+    normalized.a ||
+      normalized.b ||
+      normalized.c ||
+      normalized.d ||
+      normalized.f ||
+      normalized.memo?.trim(),
+  );
+}
 
 export function normalizeDilemmaRecord(value: any): DilemmaRecord {
   const candidate = value && typeof value === "object" ? value : {};
@@ -35,6 +76,8 @@ export function normalizeDilemmaRecord(value: any): DilemmaRecord {
     updatedAt: typeof candidate.updatedAt === "string" ? candidate.updatedAt : "",
     updatedBy: typeof candidate.updatedBy === "string" ? candidate.updatedBy : null,
     updatedByName: normalizeTextField(candidate.updatedByName),
+    dilemmaAuthorHouseId:
+      typeof candidate.dilemmaAuthorHouseId === "string" ? candidate.dilemmaAuthorHouseId : null,
     editLock: normalizeDilemmaEditLock(candidate.editLock),
   };
 }
@@ -52,7 +95,10 @@ export function normalizeDilemmaHistoryEntry(value: any): DilemmaHistoryEntry {
   };
 }
 
-export function createDilemmaDraft(value: any = {}): Omit<DilemmaRecord, "updatedAt" | "updatedBy" | "updatedByName" | "editLock"> {
+export function createDilemmaDraft(value: any = {}): Omit<
+  DilemmaRecord,
+  "updatedAt" | "updatedBy" | "updatedByName" | "dilemmaAuthorHouseId" | "editLock"
+> {
   const candidate = (value && typeof value === "object") ? value : {};
 
   return {
@@ -69,8 +115,10 @@ export function createDilemmaDraft(value: any = {}): Omit<DilemmaRecord, "update
     selectedOutcome: (candidate.selectedOutcome === "aye" || candidate.selectedOutcome === "nay") ? candidate.selectedOutcome : "",
     voteNotes: normalizeTextField(candidate.voteNotes),
     resolutionNotes: normalizeTextField(candidate.resolutionNotes),
+    resolutionChecklist: normalizeResolutionChecklist(candidate.resolutionChecklist),
     votes: normalizeDilemmaVotes(candidate.votes),
     photos: normalizeDilemmaPhotos(candidate.photos),
+    resolutionPhotos: normalizeDilemmaPhotos(candidate.resolutionPhotos),
   };
 }
 
@@ -80,6 +128,7 @@ export function createDilemmaPayload(draft: any): DilemmaRecord {
     updatedAt: "",
     updatedBy: null,
     updatedByName: "",
+    dilemmaAuthorHouseId: null,
     editLock: null,
   };
 }
@@ -173,6 +222,25 @@ export function sumDilemmaVotes(votes: Record<string, DilemmaVote>, participants
   }, 0);
 }
 
+/** 집계(apply) 후에만 `voteNotes`가 생김. 동률 또는 전원 기권(0=0) 때만 중재자 결정 단계이며, 권력 차가 나면 다수 확정이어야 한다. */
+export function dilemmaAwaitingModeratorResolution(
+  dilemma: unknown,
+  votes: Record<string, DilemmaVote>,
+  participants: RedactedHouse[],
+): boolean {
+  const record = normalizeDilemmaRecord(dilemma);
+
+  if (record.selectedOutcome) {
+    return false;
+  }
+
+  if (!record.voteNotes?.trim()) {
+    return false;
+  }
+
+  return sumDilemmaVotes(votes, participants, "aye") === sumDilemmaVotes(votes, participants, "nay");
+}
+
 export function getDilemmaSideLeader(votes: Record<string, DilemmaVote>, participants: RedactedHouse[], side: string): { house: RedactedHouse; index: number; vote: DilemmaVote } | null {
   const leaders = participants
     .map((house, index) => ({
@@ -224,22 +292,30 @@ export function createDilemmaVoteGroups(votes: Record<string, DilemmaVote>, hous
       }
 
       const house = housesById.get(houseId) || (HOUSE_CATALOG.find((candidate) => candidate.id === houseId) as any) || null;
-      const houseName = getHouseKoreanName(house);
-      const displayName = normalizedVote.updatedByName || house?.name || houseName;
+      const houseTitle = getHouseKoreanName(house);
+      const displayNameCandidate =
+        (typeof normalizedVote.updatedByName === "string" && normalizedVote.updatedByName.trim()) ||
+        (typeof house?.name === "string" && house.name.trim()) ||
+        null;
+      const secondaryLine = getHouseParenPlayerLine(house, { reporterName: normalizedVote.updatedByName });
 
       return {
         houseId,
         house,
         side: normalizedVote.side,
-        name: displayName,
-        houseName,
-        hoverLabel: getHouseHoverLabel(house, displayName),
+        houseTitle,
+        secondaryLine,
+        hoverLabel: getHouseHoverLabel(house, displayNameCandidate),
         houseNumber: house?.number || 0,
         powerTokens: normalizedVote.powerTokens,
       };
     })
     .filter((item): item is any => Boolean(item))
-    .sort((left, right) => (left.houseNumber as number) - (right.houseNumber as number) || left.name.localeCompare(right.name));
+    .sort(
+      (left, right) =>
+        (left.houseNumber as number) - (right.houseNumber as number) ||
+        left.houseTitle.localeCompare(right.houseTitle),
+    );
 
   return groupDefs.map((group) => ({
     ...group,
@@ -323,10 +399,18 @@ export function isDilemmaBlank(dilemma: any): boolean {
 
   return (
     textFieldsBlank &&
+    !resolutionChecklistHasProgress(draft.resolutionChecklist) &&
     !dilemmaResourceDeltasHaveValues(draft.aye.resourceDeltas) &&
     !dilemmaResourceDeltasHaveValues(draft.nay.resourceDeltas) &&
-    draft.photos.length === 0
+    draft.photos.length === 0 &&
+    draft.resolutionPhotos.length === 0
   );
+}
+
+/** 클라이언트 표시용: 투표 제출 여부. 서버 초기화는 작성자면 별도 surface 없이 허용. */
+export function dilemmaHasVoteActivity(dilemma: unknown): boolean {
+  const votes = normalizeDilemmaVotes((dilemma as any)?.votes);
+  return Object.values(votes).some((vote) => Boolean(vote?.side));
 }
 
 export function formatDilemmaCardLabel(dilemma: DilemmaRecord): string {
@@ -382,6 +466,33 @@ export function getDilemmaPublishBlockReason(dilemma: any, houses: RedactedHouse
   }
 
   return "";
+}
+
+/** 집계 기록 후 · 결과/후속 입력이 아직 덜 된 상태(게시 직전 단계) */
+export function isDilemmaResolutionEntryPending(dilemma: unknown, houses: RedactedHouse[] = []): boolean {
+  const record = normalizeDilemmaRecord(dilemma);
+
+  if (isDilemmaBlank(record)) {
+    return false;
+  }
+
+  if (!isDilemmaVoteCompleteForPublish(record, houses)) {
+    return false;
+  }
+
+  if (!record.voteNotes?.trim()) {
+    return false;
+  }
+
+  if (!record.selectedOutcome) {
+    return true;
+  }
+
+  if (!record.resolutionNotes.trim()) {
+    return true;
+  }
+
+  return false;
 }
 
 export function getDilemmaStatusLabel({

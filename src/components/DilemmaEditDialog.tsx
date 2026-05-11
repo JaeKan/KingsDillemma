@@ -1,177 +1,16 @@
 import React, { useCallback, useEffect, useId, useRef } from "react";
 import { ValueMentionTextarea, MentionRenderedPreview, hasMentionToken, type MentionPart } from "./MentionUI";
-import { 
-  normalizeDilemmaOutcome,
-  dilemmaResourceDeltasHaveValues
-} from "../utils/dilemma-helpers";
-import { dilemmaPhotoLimit, resourceCounters, ko } from "../resources/gameResources";
+import { resourceCounters, ko } from "../resources/gameResources";
 import { TokenIcon } from "./GameIcons";
-import { DilemmaResourceDeltaPreview } from "./DilemmaUI";
-import { DilemmaPhoto, DilemmaEditDraft } from "../types/game";
+import { DilemmaEditDraft } from "../types/game";
 import { MysteryStickerPicker } from "./MysteryStickerPicker";
-
-function getClipboardImageFiles(clipboardData: DataTransfer | null): File[] {
-  if (!clipboardData) {
-    return [];
-  }
-
-  const itemFiles = Array.from(clipboardData.items || [])
-    .filter((item) => item.kind === "file" && item.type.startsWith("image/"))
-    .map((item) => item.getAsFile())
-    .filter((file): file is File => Boolean(file));
-
-  if (itemFiles.length) {
-    return itemFiles;
-  }
-
-  return Array.from(clipboardData.files || []).filter((file) => file.type.startsWith("image/"));
-}
-
-interface DilemmaPhotoEditorProps {
-  busy: boolean;
-  error: string | null;
-  photos: DilemmaPhoto[];
-  onAddPhotos: (files: FileList | File[]) => Promise<void>;
-  onRemovePhoto: (id: string) => void;
-}
-
-function DilemmaPhotoEditor({ busy, error, photos, onAddPhotos, onRemovePhoto }: DilemmaPhotoEditorProps) {
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const remaining = Math.max(dilemmaPhotoLimit - photos.length, 0);
-
-  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const files = event.target.files;
-    if (!files) return;
-    void onAddPhotos(files).finally(() => {
-      if (fileInputRef.current) {
-        fileInputRef.current.value = "";
-      }
-    });
-  };
-
-  return (
-    <section className="dilemma-photo-editor" aria-labelledby="dilemma-photo-title">
-      <div className="dilemma-photo-editor-head">
-        <div>
-          <h3 id="dilemma-photo-title">{ko.dilemmaEdit.photoSectionTitle}</h3>
-          <p>{ko.dilemmaEdit.photoHelp}</p>
-        </div>
-        <label className={`ghost-button dilemma-photo-add${remaining <= 0 ? " disabled" : ""}`}>
-          <TokenIcon type="photo" />
-          <span>{ko.dilemmaEdit.photoAttach}</span>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/*"
-            multiple
-            onChange={handleFileChange}
-            disabled={busy || remaining <= 0}
-          />
-        </label>
-      </div>
-      {photos.length ? (
-        <div className="dilemma-photo-editor-grid">
-          {photos.map((photo) => (
-            <figure key={photo.id} className="dilemma-photo-editor-item">
-              <img src={photo.dataUrl} alt={photo.name || ko.dilemmaEdit.photoAlt} />
-              <figcaption>{photo.name || ko.dilemmaEdit.photoAlt}</figcaption>
-              <button type="button" className="stepper-button" onClick={() => onRemovePhoto(photo.id)} disabled={busy}>
-                <TokenIcon type="trash" />
-              </button>
-            </figure>
-          ))}
-        </div>
-      ) : (
-        <p className="dilemma-photo-empty">{ko.dilemmaEdit.photoEmpty}</p>
-      )}
-      <p className="dilemma-photo-limit">
-        {ko.dilemmaEdit.photoLimitsCaption(photos.length, dilemmaPhotoLimit)}
-      </p>
-      {error ? <p className="dilemma-photo-error" role="alert">{error}</p> : null}
-    </section>
-  );
-}
-
-interface DilemmaOutcomeSelectorProps {
-  value: string;
-  aye: any;
-  nay: any;
-  disabled?: boolean;
-  disabledReason?: string;
-  onChange: (value: string) => void;
-}
-
-function DilemmaOutcomeSelector({ value, aye, nay, disabled = false, disabledReason = "", onChange }: DilemmaOutcomeSelectorProps) {
-  const options = [
-    {
-      value: "",
-      title: ko.dilemmaEdit.undecidedTitle,
-      meta: ko.dilemmaEdit.noResultMeta,
-      icon: "turn",
-      deltas: {},
-    },
-    {
-      value: "aye",
-      title: ko.dilemmaEdit.ayeResultTitle,
-      meta: ko.dilemmaEdit.ayeResultMeta,
-      icon: "plus",
-      deltas: normalizeDilemmaOutcome(aye).resourceDeltas,
-    },
-    {
-      value: "nay",
-      title: ko.dilemmaEdit.nayResultTitle,
-      meta: ko.dilemmaEdit.nayResultMeta,
-      icon: "minus",
-      deltas: normalizeDilemmaOutcome(nay).resourceDeltas,
-    },
-  ];
-
-  return (
-    <fieldset className={`dilemma-outcome-selector${disabled ? " disabled" : ""}`}>
-      <legend>{ko.dilemmaEdit.outcomeLegend}</legend>
-      {disabled ? <p className="dilemma-outcome-selector-note">{disabledReason}</p> : null}
-      <div className="dilemma-outcome-selector-grid">
-        {options.map((option) => {
-          const checked = value === option.value;
-          const hasDeltas = dilemmaResourceDeltasHaveValues(option.deltas);
-
-          return (
-            <label className={`dilemma-outcome-choice${checked ? " selected" : ""}`} key={option.value || "pending"}>
-              <input
-                type="radio"
-                name="selectedOutcome"
-                value={option.value}
-                checked={checked}
-                disabled={disabled}
-                onChange={(event) => onChange(event.target.value)}
-              />
-              <span className="dilemma-outcome-choice-mark" aria-hidden="true">
-                <TokenIcon type={option.icon} />
-              </span>
-              <span className="dilemma-outcome-choice-copy">
-                <strong>{option.title}</strong>
-                <small>{option.meta}</small>
-              </span>
-              {hasDeltas ? (
-                <DilemmaResourceDeltaPreview deltas={option.deltas} />
-              ) : (
-                <span className="dilemma-outcome-choice-empty">{option.value ? ko.dilemmaEdit.unchanged : ko.dilemmaEdit.waiting}</span>
-              )}
-              {checked ? <span className="dilemma-outcome-choice-badge">{ko.dilemmaEdit.outcomePickedBadge}</span> : null}
-            </label>
-          );
-        })}
-      </div>
-    </fieldset>
-  );
-}
+import { DilemmaPhotoUploader, dilemmaEditPhotoUploaderCopy, getClipboardImageFiles } from "./DilemmaPhotoUploader";
 
 interface DilemmaEditDialogProps {
   busy: boolean;
   draft: DilemmaEditDraft;
   isNewDilemma: boolean;
   open: boolean;
-  resolutionDisabled: boolean;
   restoreFocusRef: React.RefObject<HTMLElement>;
   onAddPhotos: (files: FileList | File[]) => Promise<void>;
   onCancel: () => void;
@@ -188,7 +27,6 @@ function DilemmaEditDialog({
   draft,
   isNewDilemma,
   open,
-  resolutionDisabled,
   restoreFocusRef,
   onAddPhotos,
   onCancel,
@@ -314,25 +152,21 @@ function DilemmaEditDialog({
           </div>
         </div>
         <form className="dilemma-form" onSubmit={submit}>
-          <div className="dilemma-dialog-grid compact">
-            <DilemmaInput
-              ref={firstInputRef}
-              label={ko.dilemmaEdit.labelCardCode}
-              value={draft.cardCode}
-              onChange={(value) => onFieldChange("cardCode", value)}
-              placeholder={ko.dilemmaEdit.phCardCode}
-            />
+          <div className="dilemma-dialog-meta">
+            <div className="dilemma-dialog-grid compact">
+              <DilemmaInput
+                ref={firstInputRef}
+                label={ko.dilemmaEdit.labelCardCode}
+                value={draft.cardCode}
+                onChange={(value) => onFieldChange("cardCode", value)}
+                placeholder={ko.dilemmaEdit.phCardCode}
+              />
+            </div>
             <DilemmaInput
               label={ko.dilemmaEdit.labelTitle}
               value={draft.title}
               onChange={(value) => onFieldChange("title", value)}
               placeholder={ko.dilemmaEdit.phTitle}
-            />
-            <DilemmaInput
-              label={ko.dilemmaEdit.labelSlot}
-              value={draft.timeCounterSlot}
-              onChange={(value) => onFieldChange("timeCounterSlot", value)}
-              placeholder={ko.dilemmaEdit.phSlot}
             />
           </div>
           <MysteryStickerPicker
@@ -360,14 +194,7 @@ function DilemmaEditDialog({
             onChange={(value) => onFieldChange("councilNotes", value)}
             placeholder={ko.dilemmaEdit.phMemo}
           />
-          <DilemmaOutcomeSelector
-            value={draft.selectedOutcome}
-            aye={draft.aye}
-            nay={draft.nay}
-            disabled={resolutionDisabled}
-            disabledReason={ko.dilemmaEdit.outcomeDisabled}
-            onChange={(value) => onFieldChange("selectedOutcome", value)}
-          />
+          <p className="dilemma-edit-resolution-hint">{ko.dilemmaEdit.postVoteResolutionHint}</p>
           <div className="dilemma-outcome-edit-grid">
             <DilemmaOutcomeEditor
               label={ko.dilemmaEdit.labelAye}
@@ -382,19 +209,14 @@ function DilemmaEditDialog({
               onChange={(field, value) => onOutcomeChange("nay", field, value)}
             />
           </div>
-          <DilemmaMentionTextarea
-            label={ko.dilemmaEdit.labelResolution}
-            value={draft.resolutionNotes}
-            onChange={(value) => onFieldChange("resolutionNotes", value)}
-            placeholder={resolutionDisabled ? ko.dilemmaEdit.phResolutionLocked : ko.dilemmaEdit.phResolution}
-            disabled={resolutionDisabled}
-          />
-          <DilemmaPhotoEditor
-            busy={busy || photoBusy}
+          <DilemmaPhotoUploader
+            busy={busy}
+            photoBusy={photoBusy}
             error={photoError}
             photos={draft.photos}
             onAddPhotos={onAddPhotos}
             onRemovePhoto={onRemovePhoto}
+            copy={dilemmaEditPhotoUploaderCopy}
           />
           <div className="session-end-actions">
             <button className="ghost-button" type="button" onClick={onCancel} disabled={busy}>

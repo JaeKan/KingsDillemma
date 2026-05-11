@@ -18,6 +18,7 @@ const ScoreGuideDialog = React.lazy(() => import("./components/ScoreGuides").the
 const AchievementEditDialog = React.lazy(() => import("./components/AchievementEditDialog"));
 const SpecialAbilityLegendDialog = React.lazy(() => import("./components/SpecialAbilityLegendDialog"));
 const DilemmaEditDialog = React.lazy(() => import("./components/DilemmaEditDialog"));
+const DilemmaResolutionDialog = React.lazy(() => import("./components/DilemmaResolutionDialog"));
 const DilemmaRoleDialog = React.lazy(() => import("./components/DilemmaRoleDialog"));
 const SecretAgendaScoreDialog = React.lazy(() => import("./components/ScoreGuides").then(m => ({ default: m.SecretAgendaScoreDialog })));
 
@@ -96,9 +97,9 @@ import {
 } from "./utils/house-helpers";
 
 import {
-  isDilemmaVoteCompleteForPublish,
   isDilemmaBlank,
   normalizeDilemmaRecord,
+  normalizeResolutionChecklist,
   createDilemmaDraft,
   createDilemmaPayload,
   createClientId,
@@ -1378,6 +1379,9 @@ function GamePanel({
           dilemmaModerator={state.dilemmaModerator}
           houses={state.houses || []}
           houseId={state.currentHouseId}
+          canEnterDilemmaResolution={state.phase === "complete" ? Boolean(state.canEnterDilemmaResolution) : false}
+          canPublishDilemmaResolution={state.phase === "complete" ? Boolean(state.canPublishDilemmaResolution) : false}
+          canResetDilemmaResult={state.phase === "complete" ? Boolean(state.canResetDilemmaResult) : false}
           busy={busy}
           mutate={mutate}
           onSaveAlignmentReward={handleSaveAlignmentReward}
@@ -1660,6 +1664,9 @@ function PersonalInventoryPanel({
   dilemmaModerator,
   houses,
   houseId,
+  canEnterDilemmaResolution = false,
+  canPublishDilemmaResolution = false,
+  canResetDilemmaResult = false,
   busy,
   mutate,
   onSaveAlignmentReward,
@@ -1674,19 +1681,18 @@ function PersonalInventoryPanel({
   const [progressDraft, setProgressDraft] = useState(serverProgress);
   const [ledgerSaveStatus, setLedgerSaveStatus] = useState("saved");
   const [dilemmaDialogOpen, setDilemmaDialogOpen] = useState(false);
+  const [dilemmaResolutionOpen, setDilemmaResolutionOpen] = useState(false);
   const [dilemmaRoleDialogOpen, setDilemmaRoleDialogOpen] = useState(false);
   const [dilemmaDraft, setDilemmaDraft] = useState(() => createDilemmaDraft(serverDilemma));
+  const [dilemmaResolutionDraft, setDilemmaResolutionDraft] = useState(() => createDilemmaDraft(serverDilemma));
   const [dilemmaEditToken, setDilemmaEditToken] = useState("");
   const [dilemmaPhotoError, setDilemmaPhotoError] = useState("");
   const [dilemmaPhotoBusy, setDilemmaPhotoBusy] = useState(false);
-  const dilemmaVotingComplete = useMemo(
-    () => isDilemmaVoteCompleteForPublish(serverDilemma, houses),
-    [houses, serverDilemma],
-  );
   const dilemmaIsBlank = useMemo(() => isDilemmaBlank(serverDilemma), [serverDilemma]);
   const [achievementEditor, setAchievementEditor] = useState<any>(null);
   const [achievementLegendOpen, setAchievementLegendOpen] = useState(false);
   const dilemmaEditButtonRef = useRef<any>(null);
+  const dilemmaResolutionButtonRef = useRef<any>(null);
   const dilemmaRoleButtonRef = useRef<any>(null);
   const achievementEditButtonRef = useRef<any>(null);
   const achievementLegendButtonRef = useRef<any>(null);
@@ -1732,6 +1738,22 @@ function PersonalInventoryPanel({
       });
     }
   }, [dilemmaDialogOpen, serverDilemma]);
+
+  useEffect(() => {
+    if (!dilemmaResolutionOpen) {
+      return;
+    }
+
+    queueMicrotask(() => {
+      setDilemmaResolutionDraft((prev) => ({
+        ...createDilemmaDraft(serverDilemma),
+        resolutionNotes: prev.resolutionNotes,
+        timeCounterSlot: prev.timeCounterSlot,
+        resolutionPhotos: prev.resolutionPhotos,
+        resolutionChecklist: prev.resolutionChecklist,
+      }));
+    });
+  }, [dilemmaResolutionOpen, serverDilemma]);
 
   useEffect(() => {
     latestLedgerDraftRef.current = {
@@ -2013,6 +2035,8 @@ function PersonalInventoryPanel({
       return;
     }
 
+    setDilemmaResolutionOpen(false);
+
     const result = await mutate({ action: "beginDilemmaEdit" });
 
     if (!result?.dilemmaEditToken) {
@@ -2024,6 +2048,25 @@ function PersonalInventoryPanel({
     setDilemmaPhotoError("");
     setDilemmaDialogOpen(true);
   }, [dilemma, houseId, mutate, serverDilemma]);
+
+  const beginDilemmaResolutionEdit = useCallback(async () => {
+    if (!dilemma || !houseId || !canEnterDilemmaResolution) {
+      return;
+    }
+
+    setDilemmaDialogOpen(false);
+
+    const result = await mutate({ action: "beginDilemmaEdit" });
+
+    if (!result?.dilemmaEditToken) {
+      return;
+    }
+
+    setDilemmaEditToken(result.dilemmaEditToken);
+    setDilemmaResolutionDraft(createDilemmaDraft(result.state?.dilemma || serverDilemma));
+    setDilemmaPhotoError("");
+    setDilemmaResolutionOpen(true);
+  }, [canEnterDilemmaResolution, dilemma, houseId, mutate, serverDilemma]);
 
   const updateDilemmaField = useCallback((field: any, value: any) => {
     setDilemmaDraft((current) => ({
@@ -2045,8 +2088,10 @@ function PersonalInventoryPanel({
   const cancelDilemmaEdit = useCallback(async () => {
     const token = dilemmaEditToken;
     setDilemmaDialogOpen(false);
+    setDilemmaResolutionOpen(false);
     setDilemmaEditToken("");
     setDilemmaDraft(createDilemmaDraft(serverDilemma));
+    setDilemmaResolutionDraft(createDilemmaDraft(serverDilemma));
     setDilemmaPhotoError("");
 
     if (token) {
@@ -2097,19 +2142,75 @@ function PersonalInventoryPanel({
     setDilemmaPhotoError("");
   }, []);
 
+  const addResolutionPhotos = useCallback(async (files: any) => {
+    const fileList = Array.from(files || []);
+
+    if (!fileList.length) {
+      return;
+    }
+
+    const remainingSlots = Math.max(dilemmaPhotoLimit - dilemmaResolutionDraft.resolutionPhotos.length, 0);
+
+    if (remainingSlots <= 0) {
+      setDilemmaPhotoError(ko.app.inventory.photoSlotLimit(dilemmaPhotoLimit));
+      return;
+    }
+
+    setDilemmaPhotoBusy(true);
+    setDilemmaPhotoError("");
+
+    try {
+      const nextPhotos: any[] = [];
+
+      for (const file of fileList.slice(0, remainingSlots)) {
+        nextPhotos.push(await createDilemmaPhotoAttachment(file));
+      }
+
+      setDilemmaResolutionDraft((current) => ({
+        ...current,
+        resolutionPhotos: [...current.resolutionPhotos, ...nextPhotos].slice(0, dilemmaPhotoLimit),
+      }));
+    } catch (photoError: any) {
+      setDilemmaPhotoError(photoError.message || ko.app.inventory.photoAttachFail);
+    } finally {
+      setDilemmaPhotoBusy(false);
+    }
+  }, [dilemmaResolutionDraft.resolutionPhotos.length]);
+
+  const removeResolutionPhoto = useCallback((photoId: any) => {
+    setDilemmaResolutionDraft((current) => ({
+      ...current,
+      resolutionPhotos: current.resolutionPhotos.filter((photo) => photo.id !== photoId),
+    }));
+    setDilemmaPhotoError("");
+  }, []);
+
   const resetDilemma = useCallback(async () => {
+    if (!canResetDilemmaResult) {
+      return;
+    }
+
     if (!window.confirm(ko.app.inventory.dilemmaResetConfirm)) {
       return;
     }
 
     setDilemmaDialogOpen(false);
+    setDilemmaResolutionOpen(false);
     setDilemmaEditToken("");
     setDilemmaDraft(createDilemmaDraft());
+    setDilemmaResolutionDraft(createDilemmaDraft());
     setDilemmaPhotoError("");
     setDilemmaPhotoBusy(false);
 
     await mutate({ action: "resetDilemma" });
-  }, [mutate]);
+  }, [canResetDilemmaResult, mutate]);
+
+  const updateDilemmaResolutionField = useCallback((field: any, value: any) => {
+    setDilemmaResolutionDraft((current) => ({
+      ...current,
+      [field]: value,
+    }));
+  }, []);
 
   const saveDilemma = useCallback(async () => {
     if (!dilemmaEditToken) {
@@ -2121,12 +2222,42 @@ function PersonalInventoryPanel({
       return;
     }
 
-    const dilemmaPayload = createDilemmaPayload(dilemmaDraft);
+    const fromResolution = dilemmaResolutionOpen;
 
-    if (!dilemmaVotingComplete) {
-      dilemmaPayload.selectedOutcome = "";
-      dilemmaPayload.resolutionNotes = "";
+    if (fromResolution) {
+      const liveDraft = createDilemmaDraft(normalizeDilemmaRecord(serverDilemma));
+      const dilemmaPayload = createDilemmaPayload({
+        ...liveDraft,
+        resolutionNotes: dilemmaResolutionDraft.resolutionNotes,
+        timeCounterSlot: dilemmaResolutionDraft.timeCounterSlot,
+        resolutionPhotos: dilemmaResolutionDraft.resolutionPhotos,
+        resolutionChecklist: dilemmaResolutionDraft.resolutionChecklist ?? liveDraft.resolutionChecklist,
+      });
+
+      const result = await mutate({
+        action: "saveDilemma",
+        dilemmaEditToken,
+        dilemma: dilemmaPayload,
+        fromResolution: true,
+      });
+
+      if (result) {
+        setDilemmaDialogOpen(false);
+        setDilemmaResolutionOpen(false);
+        setDilemmaEditToken("");
+      }
+      return;
     }
+
+    const dilemmaPayload = createDilemmaPayload(dilemmaDraft);
+    const live = normalizeDilemmaRecord(serverDilemma);
+    dilemmaPayload.votes = live.votes;
+    dilemmaPayload.voteNotes = live.voteNotes;
+    dilemmaPayload.selectedOutcome = live.selectedOutcome || "";
+    dilemmaPayload.resolutionNotes = live.resolutionNotes || "";
+    dilemmaPayload.timeCounterSlot = live.timeCounterSlot || "";
+    dilemmaPayload.resolutionPhotos = live.resolutionPhotos;
+    dilemmaPayload.resolutionChecklist = normalizeResolutionChecklist(live.resolutionChecklist);
 
     const result = await mutate({
       action: "saveDilemma",
@@ -2136,17 +2267,18 @@ function PersonalInventoryPanel({
 
     if (result) {
       setDilemmaDialogOpen(false);
+      setDilemmaResolutionOpen(false);
       setDilemmaEditToken("");
     }
-  }, [dilemmaDraft, dilemmaEditToken, dilemmaPhotoBusy, dilemmaVotingComplete, mutate]);
+  }, [dilemmaDraft, dilemmaEditToken, dilemmaPhotoBusy, dilemmaResolutionDraft, dilemmaResolutionOpen, mutate, serverDilemma]);
 
   const publishDilemma = useCallback(async () => {
-    if (!houseId || !serverDilemma || isDilemmaBlank(serverDilemma)) {
+    if (!houseId || !serverDilemma || isDilemmaBlank(serverDilemma) || !canPublishDilemmaResolution) {
       return;
     }
 
     await mutate({ action: "publishDilemma" });
-  }, [houseId, mutate, serverDilemma]);
+  }, [canPublishDilemmaResolution, houseId, mutate, serverDilemma]);
 
   const ledgerSaving = ledgerSaveStatus === "saving" || ledgerSaveStatus === "pending" || isDirty;
   const ledgerStatusText =
@@ -2181,9 +2313,14 @@ function PersonalInventoryPanel({
             moderatorHouseId={dilemmaModerator}
             history={dilemmaHistory || []}
             houses={houses || []}
+            canEnterDilemmaResolution={canEnterDilemmaResolution}
+            canPublishDilemmaResolution={canPublishDilemmaResolution}
+            canResetDilemmaResult={canResetDilemmaResult}
             editButtonRef={dilemmaEditButtonRef as any}
+            resolutionButtonRef={dilemmaResolutionButtonRef as any}
             roleButtonRef={dilemmaRoleButtonRef as any}
             onEdit={beginDilemmaEdit}
+            onOpenResolutionEntry={beginDilemmaResolutionEdit}
             onOpenRoleDialog={openDilemmaRoleDialog}
             onPublish={publishDilemma}
             onReset={resetDilemma}
@@ -2409,7 +2546,6 @@ function PersonalInventoryPanel({
           draft={dilemmaDraft}
           isNewDilemma={dilemmaIsBlank}
           open={dilemmaDialogOpen}
-          resolutionDisabled={!dilemmaVotingComplete}
           restoreFocusRef={dilemmaEditButtonRef as any}
           onCancel={cancelDilemmaEdit}
           onAddPhotos={addDilemmaPhotos}
@@ -2419,6 +2555,23 @@ function PersonalInventoryPanel({
           onSave={saveDilemma}
           photoBusy={dilemmaPhotoBusy}
           photoError={dilemmaPhotoError}
+        />
+        <DilemmaResolutionDialog
+          busy={busy}
+          currentHouseId={houseId}
+          dilemmaModeratorId={dilemmaModerator}
+          draft={dilemmaResolutionDraft as any}
+          houses={houses || []}
+          mutate={mutate}
+          open={dilemmaResolutionOpen}
+          restoreFocusRef={dilemmaResolutionButtonRef as any}
+          onCancel={cancelDilemmaEdit}
+          onFieldChange={updateDilemmaResolutionField}
+          onSave={saveDilemma}
+          photoBusy={dilemmaPhotoBusy}
+          photoError={dilemmaPhotoError}
+          onAddResolutionPhotos={addResolutionPhotos}
+          onRemoveResolutionPhoto={removeResolutionPhoto}
         />
         <AchievementEditDialog
           busy={busy}

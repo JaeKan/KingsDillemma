@@ -1,6 +1,7 @@
 import AddOutlinedIcon from "@mui/icons-material/AddOutlined";
 import AnchorOutlinedIcon from "@mui/icons-material/AnchorOutlined";
 import ArticleOutlinedIcon from "@mui/icons-material/ArticleOutlined";
+import AssignmentTurnedInOutlinedIcon from "@mui/icons-material/AssignmentTurnedInOutlined";
 import AutorenewOutlinedIcon from "@mui/icons-material/AutorenewOutlined";
 import BalanceOutlinedIcon from "@mui/icons-material/BalanceOutlined";
 import BiotechOutlinedIcon from "@mui/icons-material/BiotechOutlined";
@@ -124,7 +125,7 @@ export function TokenIcon({ type }: { type: string }) {
 
   if (type === "leader" || type === "fist") {
     return (
-      <span className="token-icon-emoji" aria-hidden="true">
+      <span className="leader-token-emoji" aria-hidden="true">
         {LEADER_FIST_EMOJI}
       </span>
     );
@@ -152,6 +153,7 @@ export function TokenIcon({ type }: { type: string }) {
     morale: FlagOutlinedIcon,
     plus: AddOutlinedIcon,
     photo: PhotoCameraOutlinedIcon,
+    resolution: AssignmentTurnedInOutlinedIcon,
     power: ShieldOutlinedIcon,
     reset: RestartAltOutlinedIcon,
     rotateRight: RotateRightOutlinedIcon,

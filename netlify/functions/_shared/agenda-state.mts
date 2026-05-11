@@ -103,6 +103,15 @@ export type DilemmaPhoto = {
   addedByName: string;
 };
 
+export type DilemmaResolutionChecklist = {
+  a?: boolean;
+  b?: boolean;
+  c?: boolean;
+  d?: boolean;
+  f?: boolean;
+  memo?: string;
+};
+
 export type DilemmaEditLock = {
   houseId: HouseId;
   houseName: string;
@@ -129,11 +138,16 @@ export type DilemmaRecord = {
   selectedOutcome: DilemmaVoteSide;
   voteNotes: string;
   resolutionNotes: string;
+  resolutionChecklist?: DilemmaResolutionChecklist;
   votes: Partial<Record<HouseId, DilemmaVote>>;
   photos: DilemmaPhoto[];
+  /** 후속·결과 단계 첨부 사진 */
+  resolutionPhotos: DilemmaPhoto[];
   updatedAt: string;
   updatedBy: HouseId | null;
   updatedByName: string;
+  /** 최초로 빈 딜레마에 내용을 확정한 가문(saveDilemma). 이후 편집해도 바뀌지 않음. 게시·결과 초기화 권한 기준. */
+  dilemmaAuthorHouseId: HouseId | null;
   editLock: DilemmaEditLock | null;
 };
 
@@ -199,6 +213,12 @@ export type RedactedHouse = {
   isSelf: boolean;
 };
 
+/** `saveDilemma` 옵션 — 클라이언트 결과 입력 흐름에서 서버 검사 시 사용합니다. */
+export type SaveDilemmaRecordOptions = {
+  /** true면 결과 모달 저장으로 간주하여 작성자만 허용(페이로드 감사와 함께). */
+  fromResolution?: boolean;
+};
+
 export type RedactedState = {
   version: number;
   phase: Phase;
@@ -219,6 +239,16 @@ export type RedactedState = {
   canChoose: boolean;
   dilemmaVoteTurn: HouseId | null;
   canVoteDilemma: boolean;
+  /** true면 집계 기록(applyDilemmaVotes) 요청이 서버에서 허용됨 — 로그인 중 참여 가문 중 하나이며 전원 투표 완료(작성자와 무관). */
+  canApplyDilemmaVotes: boolean;
+  /** 딜레마 결과 입력(후속 단계 모달 시작) 가능 — `dilemmaAuthorHouseId`가 세션 가문과 일치할 때만 true */
+  canEnterDilemmaResolution: boolean;
+  /** 딜레마 이력 게시 — `dilemmaAuthorHouseId` 고정 작성자만 true */
+  canPublishDilemmaResolution: boolean;
+  /** 결과 초기화 — `dilemmaAuthorHouseId` 고정 작성자만 true */
+  canResetDilemmaResult: boolean;
+  /** 카드 본문 편집(작성/다이얼로그) — 본문·투표가 있으면 고정 작성자만, 완전 빈 카드는 역할 지정 후 누구나 첫 작성 가능 */
+  canEditDilemmaCard: boolean;
   dilemmaLeader: HouseId | null;
   dilemmaModerator: HouseId | null;
   dilemmaVoteOrder: HouseId[];
@@ -428,6 +458,7 @@ const DILEMMA_PHOTO_DATA_URL_LIMIT = 1_200_000;
 const DILEMMA_PHOTO_ORIGINAL_SIZE_LIMIT = 8_000_000;
 const DILEMMA_RESOURCE_DELTA_LIMIT = 9;
 const DILEMMA_VOTE_POWER_LIMIT = PERSONAL_COUNTER_LIMITS.powerTokens;
+const DILEMMA_CHECKLIST_MEMO_LIMIT = 200;
 const DILEMMA_PHOTO_MIME_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
 const RESOURCE_LABEL_BY_ID = Object.fromEntries(PERSONAL_RESOURCE_TRACKS.map((resource) => [resource.id, resource.label]));
 
@@ -462,11 +493,14 @@ export function createDefaultDilemmaRecord(now = new Date().toISOString()): Dile
     selectedOutcome: "",
     voteNotes: "",
     resolutionNotes: "",
+    resolutionChecklist: {},
     votes: {},
     photos: [],
+    resolutionPhotos: [],
     updatedAt: now,
     updatedBy: null,
     updatedByName: "",
+    dilemmaAuthorHouseId: null,
     editLock: null,
   };
 }
@@ -524,7 +558,8 @@ export function normalizeState(value: unknown, now = new Date().toISOString()): 
   const pool = draftReady ? sanitizePool(candidate.pool, discarded, choices) : AGENDAS.map((agenda) => agenda.id);
   const phase = derivePhase(draftReady, discarded, choices, draftOrder);
   const turn = deriveTurn(migrateUnpickedDraftOrder ? null : candidate.turn, phase, draftOrder, choices);
-  const dilemma = phase === "complete" ? sanitizeDilemmaRecord(candidate.dilemma, now) : createDefaultDilemmaRecord(now);
+  const dilemma =
+    phase === "complete" ? migrateDilemmaAuthorHouseId(sanitizeDilemmaRecord(candidate.dilemma, now)) : createDefaultDilemmaRecord(now);
   const dilemmaLeader =
     phase === "complete"
       ? sanitizeRoleHouseId(candidate.dilemmaLeader, activeHouseIds)
@@ -994,6 +1029,10 @@ export function beginDilemmaEdit(
     throw new AgendaStateError(`${activeLock.houseName} 가문이 딜레마를 수정 중입니다.`, 409);
   }
 
+  if (!isDilemmaRecordBlank(currentDilemma) || dilemmaHasVoteSides(currentDilemma)) {
+    assertDilemmaAuthorHouseMatches(currentDilemma, houseId, "딜레마를 처음 작성한 가문만 편집할 수 있습니다.");
+  }
+
   return {
     ...state,
     dilemma: {
@@ -1032,6 +1071,99 @@ export function cancelDilemmaEdit(
   };
 }
 
+function migrateDilemmaAuthorHouseId(dilemma: DilemmaRecord): DilemmaRecord {
+  if (dilemma.dilemmaAuthorHouseId || isDilemmaRecordBlank(dilemma) || !isHouseId(dilemma.updatedBy)) {
+    return dilemma;
+  }
+
+  return { ...dilemma, dilemmaAuthorHouseId: dilemma.updatedBy };
+}
+
+function resolveDilemmaAuthorHouseIdForSave(
+  currentDilemma: DilemmaRecord,
+  sanitizedDraft: DilemmaRecord,
+  savingHouseId: HouseId,
+): HouseId | null {
+  if (currentDilemma.dilemmaAuthorHouseId) {
+    return currentDilemma.dilemmaAuthorHouseId;
+  }
+
+  /**
+   * `dilemmaAuthorHouseId` 미도입·null 레거시: 비어 있지 않은 레코드를 **처음 채운** 가문은
+   * `updatedBy`(당시 저장 주체)에 남습니다. 다른 가문이 이후 수정·저장해도 `updatedBy`만 덮일 뿐
+   * `migrateDilemmaAuthorHouseId` 가 마지막 저장자를 작성자로 오인하지 않도록, 여기서 고정합니다.
+   */
+  if (!isDilemmaRecordBlank(currentDilemma) && isHouseId(currentDilemma.updatedBy)) {
+    return currentDilemma.updatedBy;
+  }
+
+  if (!isDilemmaRecordBlank(sanitizedDraft)) {
+    if (isDilemmaRecordBlank(currentDilemma)) {
+      return savingHouseId;
+    }
+  }
+
+  return null;
+}
+
+function serializeResolutionPhotosForAuthorityCheck(photos: DilemmaPhoto[]): string {
+  return JSON.stringify(
+    photos.map((p) => ({
+      id: p.id,
+      mimeType: p.mimeType,
+      dataUrl: p.dataUrl,
+      name: p.name,
+      size: p.size,
+    })),
+  );
+}
+
+/** 투표·결과·후속·타임 칸 등 — 작성자(saveDilemma 작성자 고정 필드)만 바꿀 수 있는 필드 변화 여부 */
+function dilemmaAuthorOnlySliceChanged(before: DilemmaRecord, after: DilemmaRecord): boolean {
+  if (before.selectedOutcome !== after.selectedOutcome) {
+    return true;
+  }
+
+  if (before.voteNotes.trim() !== after.voteNotes.trim()) {
+    return true;
+  }
+
+  if (before.resolutionNotes.trim() !== after.resolutionNotes.trim()) {
+    return true;
+  }
+
+  if (before.timeCounterSlot.trim() !== after.timeCounterSlot.trim()) {
+    return true;
+  }
+
+  if (serializeResolutionPhotosForAuthorityCheck(before.resolutionPhotos) !== serializeResolutionPhotosForAuthorityCheck(after.resolutionPhotos)) {
+    return true;
+  }
+
+  return JSON.stringify(before.resolutionChecklist ?? {}) !== JSON.stringify(after.resolutionChecklist ?? {});
+}
+
+/** 권한 판정: `dilemmaAuthorHouseId` 우선. null이면 normalize·저장 누락 레거시용으로 `migrateDilemmaAuthorHouseId`와 동일하게 본문이 있는 레코드의 `updatedBy`를 사용합니다. */
+function getEffectiveDilemmaAuthorHouseId(dilemma: DilemmaRecord): HouseId | null {
+  if (dilemma.dilemmaAuthorHouseId && isHouseId(dilemma.dilemmaAuthorHouseId)) {
+    return dilemma.dilemmaAuthorHouseId;
+  }
+
+  if (!isDilemmaRecordBlank(dilemma) && isHouseId(dilemma.updatedBy)) {
+    return dilemma.updatedBy;
+  }
+
+  return null;
+}
+
+function assertDilemmaAuthorHouseMatches(dilemma: DilemmaRecord, houseId: HouseId, forbiddenMessage: string) {
+  const authorId = getEffectiveDilemmaAuthorHouseId(dilemma);
+
+  if (!authorId || authorId !== houseId) {
+    throw new AgendaStateError(forbiddenMessage, 403);
+  }
+}
+
 export function saveDilemmaRecord(
   state: GameState,
   houseId: HouseId,
@@ -1039,15 +1171,33 @@ export function saveDilemmaRecord(
   draft: unknown,
   historyId: unknown,
   now = new Date().toISOString(),
+  opts?: SaveDilemmaRecordOptions,
 ): GameState {
   assertCanEditDilemma(state);
 
   const currentDilemma = sanitizeDilemmaRecord(state.dilemma, now);
   assertDilemmaLockOwner(currentDilemma, houseId, token);
+
+  if (opts?.fromResolution !== true) {
+    if (!isDilemmaRecordBlank(currentDilemma) || dilemmaHasVoteSides(currentDilemma)) {
+      assertDilemmaAuthorHouseMatches(currentDilemma, houseId, "딜레마를 처음 작성한 가문만 편집할 수 있습니다.");
+    }
+  }
+
   const sanitizedDraft = sanitizeDilemmaRecord(draft, now);
   const nextHistoryId =
     currentDilemma.historyId || sanitizeSingleLineText(historyId, DILEMMA_HISTORY_ID_LIMIT);
   const votesComplete = areDilemmaVotesComplete(state, sanitizedDraft, now);
+
+  const resolvedAuthorHouseId = resolveDilemmaAuthorHouseIdForSave(currentDilemma, sanitizedDraft, houseId);
+  const authorOnlyDirty =
+    opts?.fromResolution === true || dilemmaAuthorOnlySliceChanged(currentDilemma, sanitizedDraft);
+
+  if (authorOnlyDirty) {
+    if (!resolvedAuthorHouseId || resolvedAuthorHouseId !== houseId) {
+      throw new AgendaStateError("딜레마를 처음 작성한 가문만 결과·해결 정보를 저장할 수 있습니다.", 403);
+    }
+  }
 
   if (!nextHistoryId) {
     throw new AgendaStateError("딜레마 이력 식별값을 만들 수 없습니다.");
@@ -1061,13 +1211,23 @@ export function saveDilemmaRecord(
     throw new AgendaStateError("로그인 중인 모든 가문이 투표한 뒤 해결 후속을 입력할 수 있습니다.", 409);
   }
 
+  if (!votesComplete && resolutionChecklistHasContent(sanitizedDraft.resolutionChecklist)) {
+    throw new AgendaStateError("로그인 중인 모든 가문이 투표한 뒤 딜레마 해결 절차 체크를 저장할 수 있습니다.", 409);
+  }
+
+  if (!votesComplete && sanitizedDraft.resolutionPhotos.length) {
+    throw new AgendaStateError("로그인 중인 모든 가문이 투표한 뒤 후속·결과 사진을 첨부할 수 있습니다.", 409);
+  }
+
   const nextDilemma: DilemmaRecord = {
     ...sanitizedDraft,
     historyId: nextHistoryId,
     photos: stampDilemmaPhotos(sanitizedDraft.photos, state, houseId, now),
+    resolutionPhotos: stampDilemmaPhotos(sanitizedDraft.resolutionPhotos, state, houseId, now),
     updatedAt: now,
     updatedBy: houseId,
     updatedByName: getHouseLabel(state, houseId),
+    dilemmaAuthorHouseId: resolvedAuthorHouseId,
     editLock: null,
   };
 
@@ -1097,6 +1257,8 @@ export function publishDilemmaRecord(
     throw new AgendaStateError("게시할 딜레마 기록이 없습니다.", 409);
   }
 
+  assertDilemmaAuthorHouseMatches(currentDilemma, houseId, "딜레마를 처음 작성한 가문만 게시할 수 있습니다.");
+
   assertDilemmaPublishReady(state, currentDilemma, now);
 
   const nextHistoryId =
@@ -1110,6 +1272,7 @@ export function publishDilemmaRecord(
     ...currentDilemma,
     historyId: nextHistoryId,
     photos: stampDilemmaPhotos(currentDilemma.photos, state, houseId, now),
+    resolutionPhotos: stampDilemmaPhotos(currentDilemma.resolutionPhotos, state, houseId, now),
     editLock: null,
   };
 
@@ -1136,6 +1299,8 @@ export function resetDilemmaRecord(
   if (currentDilemma.editLock && currentDilemma.editLock.houseId !== houseId) {
     throw new AgendaStateError(`${currentDilemma.editLock.houseName} 가문이 딜레마를 수정 중입니다.`, 409);
   }
+
+  assertCanResetDilemma(currentDilemma, houseId);
 
   return {
     ...state,
@@ -1204,9 +1369,6 @@ export function saveDilemmaVote(
           updatedByName: getHouseLabel(state, houseId),
         },
       },
-      updatedAt: now,
-      updatedBy: houseId,
-      updatedByName: getHouseLabel(state, houseId),
     },
     version: state.version + 1,
     updatedAt: now,
@@ -1220,6 +1382,11 @@ export function applyDilemmaVotes(
 ): GameState {
   const currentDilemma = getDilemmaForVoting(state, houseId, now);
   const participants = getDilemmaVotingParticipants(state);
+
+  // 집계 기록(`voteNotes` 확정)은 로그인 중 투표 참여 가문 누구나 진행 가능. `updatedBy`는 마지막 편집 저장 가문 추적용이며 여기서 덮어쓰지 않습니다.
+  if (!participants.includes(houseId)) {
+    throw new AgendaStateError("로그인 중인 딜레마 참여 가문만 투표 집계를 기록할 수 있습니다.", 403);
+  }
 
   if (currentDilemma.selectedOutcome) {
     throw new AgendaStateError("이미 결과가 선택된 딜레마 투표입니다.", 409);
@@ -1283,8 +1450,6 @@ export function applyDilemmaVotes(
       voteNotes,
       ...(selectedOutcome ? { selectedOutcome } : {}),
       updatedAt: now,
-      updatedBy: houseId,
-      updatedByName: getHouseLabel(state, houseId),
     },
     version: state.version + 1,
     updatedAt: now,
@@ -1359,8 +1524,6 @@ export function resolveModeratorDecision(
       votes: Object.fromEntries(participants.map((participantId) => [participantId, votes[participantId]])),
       selectedOutcome: side,
       updatedAt: now,
-      updatedBy: houseId,
-      updatedByName: getHouseLabel(state, houseId),
     },
     version: state.version + 1,
     updatedAt: now,
@@ -1578,6 +1741,7 @@ export function redactState(state: GameState, houseId: HouseId | null): Redacted
   const dilemmaVoteTurn = getCurrentDilemmaVoteTurn(state, now);
   const dilemmaForVote = sanitizeDilemmaRecord(state.dilemma, now);
   const tallyLocked = Boolean(dilemmaForVote.voteNotes?.trim());
+  const participantsForTally = getDilemmaVotingParticipants(state);
   const canVoteDilemma =
     houseId !== null &&
     state.phase === "complete" &&
@@ -1585,7 +1749,60 @@ export function redactState(state: GameState, houseId: HouseId | null): Redacted
     !dilemmaForVote.editLock &&
     !dilemmaForVote.selectedOutcome &&
     !tallyLocked &&
-    getDilemmaVotingParticipants(state).includes(houseId);
+    participantsForTally.includes(houseId);
+  const canApplyDilemmaVotes =
+    houseId !== null &&
+    state.phase === "complete" &&
+    !isDilemmaRecordBlank(dilemmaForVote) &&
+    !dilemmaForVote.editLock &&
+    !dilemmaForVote.selectedOutcome &&
+    !tallyLocked &&
+    participantsForTally.includes(houseId) &&
+    areDilemmaVotesComplete(state, dilemmaForVote, now);
+  const dilemmaNonBlank = !isDilemmaRecordBlank(dilemmaForVote);
+  const effectiveAuthor = getEffectiveDilemmaAuthorHouseId(dilemmaForVote);
+  const dilemmaLockedByOther =
+    Boolean(dilemmaForVote.editLock) &&
+    houseId !== null &&
+    dilemmaForVote.editLock!.houseId !== houseId;
+  const rolesReadyForDilemma = Boolean(state.dilemmaLeader && state.dilemmaModerator);
+  const dilemmaResolutionPending =
+    dilemmaNonBlank &&
+    rolesReadyForDilemma &&
+    Boolean(dilemmaForVote.voteNotes?.trim()) &&
+    areDilemmaVotesComplete(state, dilemmaForVote, now) &&
+    (!dilemmaForVote.selectedOutcome || !dilemmaForVote.resolutionNotes.trim());
+  /** 고정 작성자는 투표·집계 여부와 관계없이 언제든 결과 초기화 가능(서버 `resetDilemmaRecord`에서 실제로 지울 내역이 없으면 no-op에 가깝게 처리). */
+  const authorMayResetResult = houseId !== null && Boolean(effectiveAuthor) && effectiveAuthor === houseId;
+  const canEnterDilemmaResolution =
+    houseId !== null &&
+    state.phase === "complete" &&
+    rolesReadyForDilemma &&
+    Boolean(effectiveAuthor) &&
+    effectiveAuthor === houseId &&
+    dilemmaResolutionPending &&
+    !dilemmaLockedByOther;
+  const canPublishDilemmaResolution =
+    houseId !== null &&
+    state.phase === "complete" &&
+    !dilemmaForVote.editLock &&
+    dilemmaNonBlank &&
+    Boolean(effectiveAuthor) &&
+    effectiveAuthor === houseId &&
+    isDilemmaPublishRequirementsMet(state, dilemmaForVote, now);
+  const canResetDilemmaResult =
+    houseId !== null &&
+    state.phase === "complete" &&
+    !dilemmaLockedByOther &&
+    authorMayResetResult;
+  const bodyEditNeedsAuthor =
+    !isDilemmaRecordBlank(dilemmaForVote) || dilemmaHasVoteSides(dilemmaForVote);
+  const canEditDilemmaCard =
+    houseId !== null &&
+    state.phase === "complete" &&
+    rolesReadyForDilemma &&
+    !dilemmaLockedByOther &&
+    (!bodyEditNeedsAuthor || (Boolean(effectiveAuthor) && effectiveAuthor === houseId));
   const houses = HOUSE_CATALOG.map((house) => {
     const id = house.id;
     const hasPassword = Boolean(state.credentials[id]);
@@ -1633,6 +1850,10 @@ export function redactState(state: GameState, houseId: HouseId | null): Redacted
     canChoose,
     dilemmaVoteTurn,
     canVoteDilemma,
+    canApplyDilemmaVotes,
+    canEnterDilemmaResolution,
+    canPublishDilemmaResolution,
+    canResetDilemmaResult,
     dilemmaLeader: state.dilemmaLeader,
     dilemmaModerator: state.dilemmaModerator,
     dilemmaVoteOrder: pickStoredDilemmaVoteOrder(state.dilemmaVoteOrder, getLoggedInHouseIds(state)),
@@ -1858,6 +2079,16 @@ function getDilemmaVoteReadiness(state: GameState, dilemma: DilemmaRecord, now: 
     participants,
     missingHouse: participants.find((participantId) => !votes[participantId]?.side) || null,
   };
+}
+
+function isDilemmaPublishRequirementsMet(state: GameState, dilemma: DilemmaRecord, now: string): boolean {
+  const readiness = getDilemmaVoteReadiness(state, dilemma, now);
+  return (
+    readiness.participants.length > 0 &&
+    !readiness.missingHouse &&
+    Boolean(dilemma.selectedOutcome) &&
+    Boolean(dilemma.resolutionNotes.trim())
+  );
 }
 
 function getDilemmaVotingParticipants(state: GameState) {
@@ -2140,6 +2371,44 @@ function isUsablePlayerName(value: unknown): value is string {
   return typeof value === "string" && value.trim().length >= 1 && value.trim().length <= 32;
 }
 
+function sanitizeResolutionChecklist(value: unknown): DilemmaResolutionChecklist {
+  if (!value || typeof value !== "object") {
+    return {};
+  }
+
+  const candidate = value as Record<string, unknown>;
+  const next: DilemmaResolutionChecklist = {};
+
+  for (const key of ["a", "b", "c", "d", "f"] as const) {
+    if (candidate[key] === true) {
+      next[key] = true;
+    }
+  }
+
+  if (typeof candidate.memo === "string") {
+    const memo = sanitizeSingleLineText(candidate.memo, DILEMMA_CHECKLIST_MEMO_LIMIT).trim();
+
+    if (memo) {
+      next.memo = memo;
+    }
+  }
+
+  return next;
+}
+
+function resolutionChecklistHasContent(checklist: unknown): boolean {
+  const normalized = sanitizeResolutionChecklist(checklist);
+
+  return Boolean(
+    normalized.a ||
+      normalized.b ||
+      normalized.c ||
+      normalized.d ||
+      normalized.f ||
+      normalized.memo?.trim(),
+  );
+}
+
 function sanitizeDilemmaRecord(value: unknown, now: string): DilemmaRecord {
   if (!value || typeof value !== "object") {
     return createDefaultDilemmaRecord(now);
@@ -2161,11 +2430,14 @@ function sanitizeDilemmaRecord(value: unknown, now: string): DilemmaRecord {
     selectedOutcome: sanitizeDilemmaVoteSide(candidate.selectedOutcome),
     voteNotes: sanitizeMultilineText(candidate.voteNotes, DILEMMA_LONG_TEXT_LIMIT),
     resolutionNotes: sanitizeMultilineText(candidate.resolutionNotes, DILEMMA_LONG_TEXT_LIMIT),
+    resolutionChecklist: sanitizeResolutionChecklist(candidate.resolutionChecklist),
     votes: sanitizeDilemmaVotes(candidate.votes, now),
     photos: sanitizeDilemmaPhotos(candidate.photos, now),
+    resolutionPhotos: sanitizeDilemmaPhotos(candidate.resolutionPhotos, now),
     updatedAt: typeof candidate.updatedAt === "string" ? candidate.updatedAt : now,
     updatedBy: isHouseId(candidate.updatedBy) ? candidate.updatedBy : null,
     updatedByName: sanitizeSingleLineText(candidate.updatedByName, DILEMMA_HOUSE_NAME_LIMIT),
+    dilemmaAuthorHouseId: isHouseId(candidate.dilemmaAuthorHouseId) ? candidate.dilemmaAuthorHouseId : null,
     editLock: sanitizeDilemmaEditLock(candidate.editLock, now),
   };
 }
@@ -2324,6 +2596,10 @@ function sumDilemmaVotePower(votes: Partial<Record<HouseId, DilemmaVote>>, parti
   }, 0);
 }
 
+function dilemmaHasVoteSides(dilemma: DilemmaRecord): boolean {
+  return Object.values(dilemma.votes ?? {}).some((vote) => Boolean(vote?.side));
+}
+
 function isDilemmaRecordBlank(dilemma: DilemmaRecord) {
   const textFieldsBlank = [
     dilemma.cardCode,
@@ -2344,10 +2620,20 @@ function isDilemmaRecordBlank(dilemma: DilemmaRecord) {
 
   return (
     textFieldsBlank &&
+    !resolutionChecklistHasContent(dilemma.resolutionChecklist) &&
     !hasDilemmaResourceDeltas(dilemma.aye.resourceDeltas) &&
     !hasDilemmaResourceDeltas(dilemma.nay.resourceDeltas) &&
-    dilemma.photos.length === 0
+    dilemma.photos.length === 0 &&
+    dilemma.resolutionPhotos.length === 0
   );
+}
+
+function assertCanResetDilemma(dilemma: DilemmaRecord, houseId: HouseId) {
+  const author = getEffectiveDilemmaAuthorHouseId(dilemma);
+
+  if (!author || author !== houseId) {
+    throw new AgendaStateError("딜레마를 처음 작성한 가문만 결과를 초기화할 수 있습니다.", 403);
+  }
 }
 
 function hasDilemmaResourceDeltas(value: DilemmaResourceDeltas) {

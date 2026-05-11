@@ -15,7 +15,7 @@
     "docker:down": "docker compose down",
     "build": "vite build",
     "start": "tsx server/index.mts",
-    "test": "tsx tests/agenda-state.test.ts && tsx tests/agenda-api.test.ts && tsx tests/mystery-stickers.test.ts",
+    "test": "tsx tests/agenda-state.test.ts && tsx tests/agenda-api.test.ts && tsx tests/mystery-stickers.test.ts && tsx tests/dilemma-resolution-pending.test.ts",
     "mysql:import": "tsx scripts/import-state-to-mysql.mts",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",

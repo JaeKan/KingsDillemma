@@ -19,6 +19,7 @@ import {
   registerSession,
   redactState,
   resetDilemmaRecord,
+  resolveModeratorDecision,
   saveAlignmentOrder,
   saveAlignmentReward,
   saveDilemmaRecord,
@@ -527,6 +528,10 @@ assert.throws(() => beginDilemmaEdit(state, "gamam", "draft-token", now), /리�
 state = saveDilemmaRoles(state, "gamam", { leaderHouseId: "gamam", moderatorHouseId: "solad" }, now);
 assert.equal(redactState(state, "gamam").dilemmaLeader, "gamam");
 assert.equal(redactState(state, "gamam").dilemmaModerator, "solad");
+assert.equal(redactState(state, "gamam").canResetDilemmaResult, false);
+assert.equal(redactState(state, "solad").canResetDilemmaResult, false);
+assert.equal(redactState(state, "natar").canResetDilemmaResult, false);
+assert.throws(() => resetDilemmaRecord(state, "natar", now), /처음 작성/);
 
 let editingDilemma = beginDilemmaEdit(state, "gamam", "edit-token", now);
 assert.equal(editingDilemma.dilemma.editLock?.houseId, "gamam");
@@ -606,11 +611,16 @@ assert.deepEqual(state.dilemma.nay.resourceDeltas, { morale: -9, knowledge: 2 })
 assert.equal(state.dilemma.photos.length, 1);
 assert.equal(state.dilemma.photos[0].addedBy, "gamam");
 assert.equal(state.dilemmaHistory.length, 0);
+assert.equal(state.dilemma.dilemmaAuthorHouseId, "gamam");
+assert.equal(redactState(state, "gamam").canResetDilemmaResult, true);
+assert.equal(redactState(state, "solad").canResetDilemmaResult, false);
+assert.throws(() => resetDilemmaRecord(state, "solad", now), /처음 작성/);
 const resetDilemmaState = resetDilemmaRecord(state, "gamam", now);
 assert.deepEqual(resetDilemmaState.dilemma, createDefaultDilemmaRecord(now));
 assert.equal(resetDilemmaState.dilemmaLeader, null);
 assert.equal(resetDilemmaState.dilemmaModerator, null);
 assert.equal(resetDilemmaState.dilemmaHistory.length, 0);
+assert.throws(() => resetDilemmaRecord(resetDilemmaState, "gamam", now), /처음 작성/);
 assert.throws(() => publishDilemmaRecord(state, "gamam", "history-1", now), /모든 가문.*투표/);
 state = {
   ...state,
@@ -627,12 +637,25 @@ state = {
     },
   },
 };
+assert.throws(() => publishDilemmaRecord(state, "solad", "history-1", now), /처음 작성/);
 assert.throws(() => publishDilemmaRecord(state, "gamam", "history-1", now), /해결 후속/);
 state = {
   ...state,
   dilemma: {
     ...state.dilemma,
     resolutionNotes: "Apply resource movement, check stability, then place card on time counter.",
+    resolutionPhotos: [
+      {
+        id: "reso-photo-1",
+        name: "board-after.jpg",
+        mimeType: "image/jpeg",
+        dataUrl: "data:image/jpeg;base64,aGVsbG8=",
+        size: 900,
+        addedAt: "",
+        addedBy: null,
+        addedByName: "",
+      },
+    ],
   },
 };
 state = publishDilemmaRecord(state, "gamam", "history-1", now);
@@ -640,6 +663,8 @@ assert.equal(state.dilemmaHistory.length, 1);
 assert.equal(state.dilemmaHistory[0].historyId, "history-1");
 assert.deepEqual(state.dilemmaHistory[0].aye.resourceDeltas, { wealth: -2, morale: 1 });
 assert.equal(state.dilemmaHistory[0].photos.length, 1);
+assert.equal(state.dilemmaHistory[0].resolutionPhotos.length, 1);
+assert.equal(state.dilemmaHistory[0].resolutionPhotos[0].addedBy, "gamam");
 assert.deepEqual(state.dilemma, createDefaultDilemmaRecord(now));
 assert.equal(state.dilemmaLeader, null);
 assert.equal(state.dilemmaModerator, null);
@@ -666,6 +691,51 @@ votingState = saveDilemmaRecord(
   "history-vote",
   now,
 );
+assert.equal(votingState.dilemma.dilemmaAuthorHouseId, "gamam");
+const dilemmaGamamAuthoredSnapshot = votingState;
+/** `dilemmaAuthorHouseId` 가 null 인 레코드만 남았을 때 다른 가문이 저장해도 최초 저장자 행 유지 */
+{
+  const legacyNullCoedit = {
+    ...dilemmaGamamAuthoredSnapshot,
+    dilemma: { ...dilemmaGamamAuthoredSnapshot.dilemma, dilemmaAuthorHouseId: null },
+  };
+  assert.equal(legacyNullCoedit.dilemma.updatedBy, "gamam");
+  let coeditState = beginDilemmaEdit(legacyNullCoedit, "solad", "legacy-solad-edit", now);
+  coeditState = saveDilemmaRecord(
+    coeditState,
+    "solad",
+    "legacy-solad-edit",
+    {
+      title: "Bridge famine (legacy co)",
+      question: "Should the council ration the bridge grain?",
+      aye: { preview: "Spend power", result: "Ration grain." },
+      nay: { preview: "Hold stores", result: "Keep private stores." },
+    },
+    "history-vote",
+    now,
+  );
+  assert.equal(coeditState.dilemma.dilemmaAuthorHouseId, "gamam");
+  assert.equal(coeditState.dilemma.updatedBy, "solad");
+  assert.equal(redactState(coeditState, "gamam").canResetDilemmaResult, true);
+  assert.equal(redactState(coeditState, "solad").canResetDilemmaResult, false);
+}
+let soladEditState = beginDilemmaEdit(votingState, "solad", "solad-edit", now);
+soladEditState = saveDilemmaRecord(
+  soladEditState,
+  "solad",
+  "solad-edit",
+  {
+    title: "Bridge famine (solad)",
+    question: "Should the council ration the bridge grain?",
+    aye: { preview: "Spend power", result: "Ration grain." },
+    nay: { preview: "Hold stores", result: "Keep private stores." },
+  },
+  "history-vote",
+  now,
+);
+assert.equal(soladEditState.dilemma.dilemmaAuthorHouseId, "gamam");
+assert.equal(soladEditState.dilemma.updatedBy, "solad");
+assert.throws(() => publishDilemmaRecord(soladEditState, "solad", "history-vote", now), /처음 작성/);
 assert.throws(
   () => saveDilemmaVoteOrder(votingState, "gamam", ["gamam", "solad", "coden", "olwyn", "natar"], now),
   /진행 중/,
@@ -723,6 +793,8 @@ assert.equal(redactState(votingState, "gamam").dilemmaModerator, "solad");
 assert.throws(() => saveDilemmaVote(votingState, "gamam", { side: "aye", powerTokens: 9 }, now), /8개/);
 const votingStateBeforeAnyVote = votingState;
 votingState = saveDilemmaVote(votingState, "gamam", { side: "aye", powerTokens: 2 }, now);
+assert.equal(redactState(votingState, "gamam").canResetDilemmaResult, true);
+assert.equal(redactState(votingState, "solad").canResetDilemmaResult, false);
 votingState = saveDilemmaVote(votingState, "gamam", { side: "nay", powerTokens: 1 }, now);
 assert.equal(votingState.dilemma.votes.gamam?.side, "nay");
 assert.equal(redactState(votingState, "natar").dilemmaVoteTurn, null);
@@ -734,6 +806,7 @@ votingState = saveDilemmaVote(votingState, "natar", { side: "aye", powerTokens: 
 votingState = saveDilemmaVote(votingState, "coden", { side: "pass", powerTokens: 6 }, now);
 assert.equal(votingState.dilemma.votes.coden?.powerTokens, 0);
 assert.throws(() => applyDilemmaVotes(votingState, "gamam", now), /모든 가문/);
+assert.equal(redactState(votingState, "gamam").canApplyDilemmaVotes, false);
 
 let tieLine = saveDilemmaVote(votingStateBeforeAnyVote, "gamam", { side: "aye", powerTokens: 2 }, now);
 tieLine = saveDilemmaVote(tieLine, "natar", { side: "aye", powerTokens: 2 }, now);
@@ -741,9 +814,59 @@ tieLine = saveDilemmaVote(tieLine, "solad", { side: "nay", powerTokens: 3 }, now
 tieLine = saveDilemmaVote(tieLine, "coden", { side: "nay", powerTokens: 1 }, now);
 assert.throws(() => applyDilemmaVotes(tieLine, "gamam", now), /모든 가문/);
 tieLine = saveDilemmaVote(tieLine, "olwyn", { side: "pass", powerTokens: 0 }, now);
-const tiedTallyState = applyDilemmaVotes(tieLine, "gamam", now);
+assert.equal(redactState(tieLine, "gamam").canApplyDilemmaVotes, true);
+assert.equal(redactState(tieLine, "solad").canApplyDilemmaVotes, true);
+const tiedTallyState = applyDilemmaVotes(tieLine, "solad", now);
 assert.equal(tiedTallyState.dilemma.selectedOutcome, "");
 assert.match(tiedTallyState.dilemma.voteNotes, /찬성 4 \/ 반대 4 \/ 기권 1/);
+assert.equal(
+  tiedTallyState.dilemma.updatedBy,
+  "gamam",
+  "집계 기록 적용 후에도 `updatedBy`는 마지막 편집 저장 가문 유지.",
+);
+assert.throws(() => publishDilemmaRecord(tiedTallyState, "solad", "history-tie-publish", now), /처음 작성/);
+assert.throws(() => resetDilemmaRecord(tiedTallyState, "solad", now), /처음 작성/);
+assert.equal(
+  redactState(tiedTallyState, "gamam").canResetDilemmaResult,
+  true,
+  "집계 후 voteNotes·미확정 selectedOutcome 상태에서 작성자에게 초기화 가능",
+);
+const tiedTallyLegacyAuthor = normalizeState(
+  { ...tiedTallyState, dilemma: { ...tiedTallyState.dilemma, dilemmaAuthorHouseId: null } },
+  now,
+);
+assert.equal(tiedTallyLegacyAuthor.dilemma.dilemmaAuthorHouseId, "gamam");
+assert.equal(redactState(tiedTallyLegacyAuthor, "gamam").canResetDilemmaResult, true);
+
+assert.throws(() => saveDilemmaVote(tiedTallyState, "gamam", { side: "aye", powerTokens: 1 }, now), /집계/);
+assert.throws(() => resolveModeratorDecision(tieLine, "solad", "aye", now), /먼저 투표 집계/);
+assert.throws(() => resolveModeratorDecision(tiedTallyState, "gamam", "aye", now), /중재자만/);
+assert.throws(() => resolveModeratorDecision(tiedTallyState, "solad", "maybe", now), /중재 결정은/);
+const moderatorResolvedState = resolveModeratorDecision(tiedTallyState, "solad", "nay", now);
+assert.equal(moderatorResolvedState.dilemma.selectedOutcome, "nay");
+assert.equal(
+  moderatorResolvedState.dilemma.updatedBy,
+  "gamam",
+  "중재자 결정 후에도 `updatedBy`(마지막 편집 저장)는 유지된다(`dilemmaAuthorHouseId`와 별개).",
+);
+assert.equal(redactState(moderatorResolvedState, "gamam").canResetDilemmaResult, true);
+assert.equal(redactState(moderatorResolvedState, "solad").canResetDilemmaResult, false);
+const legacyAuthorBackfill = normalizeState(
+  { ...moderatorResolvedState, dilemma: { ...moderatorResolvedState.dilemma, dilemmaAuthorHouseId: null } },
+  now,
+);
+assert.equal(legacyAuthorBackfill.dilemma.dilemmaAuthorHouseId, "gamam");
+assert.throws(() => resolveModeratorDecision(moderatorResolvedState, "solad", "aye", now), /이미 결과/);
+
+let allPassLine = saveDilemmaVote(votingStateBeforeAnyVote, "gamam", { side: "pass", powerTokens: 0 }, now);
+allPassLine = saveDilemmaVote(allPassLine, "natar", { side: "pass", powerTokens: 0 }, now);
+allPassLine = saveDilemmaVote(allPassLine, "solad", { side: "pass", powerTokens: 0 }, now);
+allPassLine = saveDilemmaVote(allPassLine, "coden", { side: "pass", powerTokens: 0 }, now);
+allPassLine = saveDilemmaVote(allPassLine, "olwyn", { side: "pass", powerTokens: 0 }, now);
+const allPassTally = applyDilemmaVotes(allPassLine, "gamam", now);
+assert.equal(allPassTally.dilemma.selectedOutcome, "");
+assert.match(allPassTally.dilemma.voteNotes, /찬성 0 \/ 반대 0 \/ 기권 5/);
+assert.equal(resolveModeratorDecision(allPassTally, "solad", "aye", now).dilemma.selectedOutcome, "aye");
 
 votingState = saveDilemmaVote(votingState, "olwyn", { side: "nay", powerTokens: 2 }, now);
 const inventoriesBeforeDilemmaApply = votingState.inventories;
@@ -751,11 +874,32 @@ votingState = applyDilemmaVotes(votingState, "gamam", now);
 assert.equal(votingState.dilemma.selectedOutcome, "aye");
 assert.match(votingState.dilemma.voteNotes, /찬성 5 \/ 반대 3 \/ 기권 1/);
 assert.match(votingState.dilemma.voteNotes, /§4 Vote Resolution/);
+const majorityTallyMissingOutcomeHack = {
+  ...votingState,
+  dilemma: { ...votingState.dilemma, selectedOutcome: "" as const },
+};
+assert.throws(
+  () => resolveModeratorDecision(majorityTallyMissingOutcomeHack as typeof votingState, "solad", "aye", now),
+  /찬성과 반대 권력 합계가 같을 때만/,
+);
 assert.throws(() => publishDilemmaRecord(votingState, "gamam", "history-manual", now), /해결 후속/);
 assert.deepEqual(votingState.inventories, inventoriesBeforeDilemmaApply);
 assert.equal(redactState(votingState, "natar").dilemmaVoteTurn, null);
 assert.equal(redactState(votingState, "natar").canVoteDilemma, false);
 assert.throws(() => saveDilemmaVote(votingState, "natar", { side: "nay", powerTokens: 0 }, now), /이미 결과/);
+const authorResolutionLock = beginDilemmaEdit(votingState, "solad", "sol-ban-resolu", now);
+assert.throws(
+  () =>
+    saveDilemmaRecord(
+      authorResolutionLock,
+      "solad",
+      "sol-ban-resolu",
+      { ...votingState.dilemma, resolutionNotes: "작성 가문 외 수정 시도" },
+      "history-vote",
+      now,
+    ),
+  /처음 작성한 가문만 결과/,
+);
 
 editingDilemma = beginDilemmaEdit(state, "gamam", "edit-token-2", now);
 const canceledDilemma = cancelDilemmaEdit(editingDilemma, "gamam", "edit-token-2", now);
