@@ -1110,8 +1110,8 @@
   align-content: start;
   gap: 7px;
   min-width: 0;
-  max-height: min(62dvh, 620px);
-  overflow-y: auto;
+  max-height: none;
+  overflow-y: visible;
 }
 
 .dilemma-history-item {

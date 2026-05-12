@@ -21,11 +21,17 @@ import {
   DilemmaEditLock,
   DilemmaHistoryEntry,
   DilemmaResolutionChecklist,
+  DilemmaResolutionBoardState,
+  DilemmaVoteSettlement,
+  DilemmaOutcomeEffect,
   RedactedHouse,
   HouseId,
+  PersonalResourceId,
+  DilemmaKingDeathReason,
 } from "../types/game";
 
 const RESOLUTION_CHECKLIST_MEMO_MAX = 200;
+const DILEMMA_OUTCOME_NOTE_MAX = 500;
 
 // ── 딜레마 레코드 ─────────────────────────────────────────────
 
@@ -37,7 +43,7 @@ export function normalizeResolutionChecklist(value: unknown): DilemmaResolutionC
   const candidate = value as Record<string, unknown>;
   const next: DilemmaResolutionChecklist = {};
 
-  (["a", "b", "c", "d", "f"] as const).forEach((key) => {
+  (["a", "b", "c", "d", "e", "f"] as const).forEach((key) => {
     if (candidate[key] === true) {
       next[key] = true;
     }
@@ -62,6 +68,7 @@ export function resolutionChecklistHasProgress(checklist: unknown): boolean {
       normalized.b ||
       normalized.c ||
       normalized.d ||
+      normalized.e ||
       normalized.f ||
       normalized.memo?.trim(),
   );
@@ -100,6 +107,13 @@ export function createDilemmaDraft(value: any = {}): Omit<
   "updatedAt" | "updatedBy" | "updatedByName" | "dilemmaAuthorHouseId" | "editLock"
 > {
   const candidate = (value && typeof value === "object") ? value : {};
+  const aye = normalizeDilemmaOutcome(candidate.aye);
+  const nay = normalizeDilemmaOutcome(candidate.nay);
+  const selectedOutcome = (candidate.selectedOutcome === "aye" || candidate.selectedOutcome === "nay") ? candidate.selectedOutcome : "";
+  const resolutionBoardState = applyDilemmaOutcomeEndEffects(
+    normalizeDilemmaResolutionBoardState(candidate.resolutionBoardState),
+    selectedOutcome === "aye" ? aye : selectedOutcome === "nay" ? nay : null,
+  );
 
   return {
     historyId: normalizeTextField(candidate.historyId),
@@ -110,13 +124,15 @@ export function createDilemmaDraft(value: any = {}): Omit<
     context: normalizeTextField(candidate.context),
     question: normalizeTextField(candidate.question),
     councilNotes: normalizeTextField(candidate.councilNotes),
-    aye: normalizeDilemmaOutcome(candidate.aye),
-    nay: normalizeDilemmaOutcome(candidate.nay),
-    selectedOutcome: (candidate.selectedOutcome === "aye" || candidate.selectedOutcome === "nay") ? candidate.selectedOutcome : "",
+    aye,
+    nay,
+    selectedOutcome,
     voteNotes: normalizeTextField(candidate.voteNotes),
     resolutionNotes: normalizeTextField(candidate.resolutionNotes),
     resolutionChecklist: normalizeResolutionChecklist(candidate.resolutionChecklist),
+    resolutionBoardState,
     votes: normalizeDilemmaVotes(candidate.votes),
+    voteSettlement: normalizeDilemmaVoteSettlement(candidate.voteSettlement),
     photos: normalizeDilemmaPhotos(candidate.photos),
     resolutionPhotos: normalizeDilemmaPhotos(candidate.resolutionPhotos),
   };
@@ -133,19 +149,336 @@ export function createDilemmaPayload(draft: any): DilemmaRecord {
   };
 }
 
+export function normalizeDilemmaVoteSettlement(value: any): DilemmaVoteSettlement {
+  const candidate = value && typeof value === "object" ? value : {};
+  const proposalCandidate = candidate.proposal && typeof candidate.proposal === "object" ? candidate.proposal : null;
+  const outcome =
+    proposalCandidate?.outcome === "aye" || proposalCandidate?.outcome === "nay" ? proposalCandidate.outcome : "";
+  const proposal =
+    proposalCandidate && outcome
+      ? {
+          participants: Array.isArray(proposalCandidate.participants)
+            ? proposalCandidate.participants.filter((id: any) => typeof id === "string")
+            : [],
+          outcome,
+          tally: {
+            ayePower: normalizeCounter(proposalCandidate.tally?.ayePower, 999, 0),
+            nayPower: normalizeCounter(proposalCandidate.tally?.nayPower, 999, 0),
+            passCount: normalizeCounter(proposalCandidate.tally?.passCount, 5, 0),
+            moderatorPassCount: normalizeCounter(proposalCandidate.tally?.moderatorPassCount, 1, 0),
+          },
+          neutralPowerBefore: normalizeCounter(proposalCandidate.neutralPowerBefore, 999, 0),
+          neutralPowerDistributed: normalizeCounter(proposalCandidate.neutralPowerDistributed, 999, 0),
+          neutralPowerAfter: normalizeCounter(proposalCandidate.neutralPowerAfter, 999, 0),
+          inventoryDeltas:
+            proposalCandidate.inventoryDeltas && typeof proposalCandidate.inventoryDeltas === "object"
+              ? Object.fromEntries(
+                  Object.entries(proposalCandidate.inventoryDeltas).map(([houseId, delta]: any) => [
+                    houseId,
+                    {
+                      coins: normalizeSignedCounter(delta?.coins, 99),
+                      powerTokens: normalizeSignedCounter(delta?.powerTokens, 99),
+                    },
+                  ]),
+                )
+              : {},
+          leaderHouseId: typeof proposalCandidate.leaderHouseId === "string" ? proposalCandidate.leaderHouseId : null,
+          moderatorHouseId: typeof proposalCandidate.moderatorHouseId === "string" ? proposalCandidate.moderatorHouseId : null,
+          warnings: Array.isArray(proposalCandidate.warnings)
+            ? proposalCandidate.warnings.filter((warning: any) => typeof warning === "string")
+            : [],
+          createdAt: typeof proposalCandidate.createdAt === "string" ? proposalCandidate.createdAt : "",
+        }
+      : null;
+  const status =
+    candidate.status === "applied" && proposal
+      ? "applied"
+      : candidate.status === "proposed" && proposal
+        ? "proposed"
+        : "none";
+
+  return {
+    status,
+    proposal: status === "none" ? null : proposal,
+    appliedAt: typeof candidate.appliedAt === "string" ? candidate.appliedAt : "",
+    appliedBy: typeof candidate.appliedBy === "string" ? candidate.appliedBy : null,
+  };
+}
+
+export function normalizeDilemmaResolutionBoardState(value: any): DilemmaResolutionBoardState {
+  const candidate = value && typeof value === "object" ? value : {};
+
+  return {
+    resourceStartPositions: normalizeResourcePositions(candidate.resourceStartPositions),
+    resourceMovements: normalizeResourceMovements(candidate.resourceMovements),
+    resourceFinalPositions: normalizeResourcePositions(candidate.resourceFinalPositions),
+    resourceMomentum: normalizeResourceMomentum(candidate.resourceMomentum),
+    resourceMomentumMarkers: normalizeResourceMomentumMarkers(candidate.resourceMomentumMarkers),
+    resourceFinalMomentum: normalizeResourceMomentum(candidate.resourceFinalMomentum),
+    resourceFinalMomentumMarkers: normalizeResourceMomentumMarkers(candidate.resourceFinalMomentumMarkers),
+    stabilityStart: normalizeCounter(candidate.stabilityStart, 13, 0),
+    stabilityMovement: normalizeSignedCounter(candidate.stabilityMovement, 13),
+    stabilityFinal: normalizeCounter(candidate.stabilityFinal, 13, 0),
+    endTrigger: normalizeDilemmaEndTrigger(candidate.endTrigger),
+    kingDeathReason: normalizeKingDeathReason(candidate.kingDeathReason),
+    memo: normalizeTextField(candidate.memo).slice(0, 500),
+  };
+}
+
+function applyDilemmaOutcomeEndEffects(
+  boardState: DilemmaResolutionBoardState,
+  outcome: DilemmaOutcome | null,
+): DilemmaResolutionBoardState {
+  const kingDeath = outcome?.effects.find(
+    (effect): effect is Extract<DilemmaOutcomeEffect, { type: "king_death" }> => effect.type === "king_death",
+  );
+
+  if (!kingDeath) {
+    return boardState;
+  }
+
+  return {
+    ...boardState,
+    endTrigger: "king_death",
+    kingDeathReason: boardState.kingDeathReason || kingDeath.reason,
+  };
+}
+
+function normalizeResourcePositions(value: any): Record<string, number> {
+  const candidate = value && typeof value === "object" ? value : {};
+
+  return Object.fromEntries(
+    resourceCounters
+      .map((resource) => [resource.id, normalizeCounter(candidate[resource.id], 17, 0)] as const)
+      .filter(([, position]) => position > 0),
+  );
+}
+
+function normalizeResourceMovements(value: any): Record<string, number> {
+  const candidate = value && typeof value === "object" ? value : {};
+
+  return Object.fromEntries(
+    resourceCounters
+      .map((resource) => [resource.id, normalizeSignedCounter(candidate[resource.id], 17)] as const)
+      .filter(([, movement]) => movement !== 0),
+  );
+}
+
+function normalizeResourceMomentum(value: any): DilemmaResolutionBoardState["resourceMomentum"] {
+  const candidate = value && typeof value === "object" ? value : {};
+
+  return Object.fromEntries(
+    resourceCounters
+      .map((resource) => [resource.id, normalizeMomentumDirection(candidate[resource.id])] as const)
+      .filter(([, direction]) => direction),
+  ) as DilemmaResolutionBoardState["resourceMomentum"];
+}
+
+function normalizeResourceMomentumMarkers(value: any): DilemmaResolutionBoardState["resourceMomentumMarkers"] {
+  const candidate = value && typeof value === "object" ? value : {};
+
+  return Object.fromEntries(
+    resourceCounters
+      .map((resource) => [resource.id, candidate[resource.id] === true] as const)
+      .filter(([, hasMarker]) => hasMarker),
+  ) as DilemmaResolutionBoardState["resourceMomentumMarkers"];
+}
+
+function normalizeMomentumDirection(value: any): "" | "positive" | "negative" {
+  return value === "positive" || value === "negative" ? value : "";
+}
+
+function normalizeDilemmaEndTrigger(value: any): DilemmaResolutionBoardState["endTrigger"] {
+  return value === "none" || value === "king_death" || value === "abdication_top" || value === "abdication_bottom"
+    ? value
+    : "";
+}
+
+function normalizeKingDeathReason(value: any): DilemmaResolutionBoardState["kingDeathReason"] {
+  return value === "death_symbol" || value === "fifth_card" || value === "card_text" ? value : "";
+}
+
+function normalizeSignedCounter(value: any, maxAbs: number): number {
+  const number = typeof value === "number" ? value : Number(value);
+
+  if (!Number.isFinite(number)) {
+    return 0;
+  }
+
+  return Math.max(-maxAbs, Math.min(maxAbs, Math.trunc(number)));
+}
+
 // ── 딜레마 결과 ───────────────────────────────────────────────
 
 export function normalizeDilemmaOutcome(value: any): DilemmaOutcome {
   const candidate = value && typeof value === "object" ? value : {};
+  const resourceDeltas = normalizeDilemmaResourceDeltas(candidate.resourceDeltas);
+  const effects = normalizeDilemmaOutcomeEffects(candidate.effects);
+  const normalizedEffects = effects.length ? effects : deriveDilemmaResourceEffects(resourceDeltas);
+  const normalizedResourceDeltas = dilemmaResourceDeltasHaveValues(resourceDeltas)
+    ? resourceDeltas
+    : summarizeDilemmaResourceEffects(normalizedEffects);
+  const resourcePolarities = normalizeDilemmaResourcePolarities(candidate.resourcePolarities, normalizedResourceDeltas);
 
   return {
     preview: normalizeTextField(candidate.preview),
     result: normalizeTextField(candidate.result),
-    resourceDeltas: normalizeDilemmaResourceDeltas(candidate.resourceDeltas),
+    resourcePolarities,
+    resourceDeltas: normalizedResourceDeltas,
+    effects: normalizedEffects,
   };
 }
 
 // ── 딜레마 자원 변화 ──────────────────────────────────────────
+
+export function deriveDilemmaResourceEffects(value: any): DilemmaOutcomeEffect[] {
+  const deltas = normalizeDilemmaResourceDeltas(value);
+
+  return resourceCounters
+    .map((resource) => {
+      const amount = deltas[resource.id as PersonalResourceId] || 0;
+
+      if (amount === 0) {
+        return null;
+      }
+
+      return {
+        id: `resource-${resource.id}`,
+        type: "resource",
+        resourceId: resource.id as PersonalResourceId,
+        amount,
+      } satisfies DilemmaOutcomeEffect;
+    })
+    .filter((effect): effect is Extract<DilemmaOutcomeEffect, { type: "resource" }> => Boolean(effect));
+}
+
+export function getOrderedDilemmaResourceEffects(outcome: DilemmaOutcome | null | undefined): Array<{
+  resourceId: PersonalResourceId;
+  amount: number;
+}> {
+  if (!outcome) {
+    return [];
+  }
+
+  const effects = normalizeDilemmaOutcomeEffects((outcome as any).effects);
+  const ordered = effects
+    .filter((effect): effect is Extract<DilemmaOutcomeEffect, { type: "resource" }> => effect.type === "resource")
+    .map((effect) => ({ resourceId: effect.resourceId, amount: effect.amount }));
+
+  if (ordered.length) {
+    return ordered;
+  }
+
+  return deriveDilemmaResourceEffects(outcome.resourceDeltas)
+    .filter((effect): effect is Extract<DilemmaOutcomeEffect, { type: "resource" }> => effect.type === "resource")
+    .map((effect) => ({ resourceId: effect.resourceId, amount: effect.amount }));
+}
+
+export function getDilemmaOutcomeKingDeathReason(
+  outcome: DilemmaOutcome | null | undefined,
+): DilemmaKingDeathReason {
+  const effect = normalizeDilemmaOutcomeEffects((outcome as any)?.effects).find(
+    (candidate): candidate is Extract<DilemmaOutcomeEffect, { type: "king_death" }> =>
+      candidate.type === "king_death",
+  );
+
+  return effect?.reason || "";
+}
+
+export function shouldTriggerFifthCardKingDeath(currentSessionCardNumber: unknown, placedOnKingDeathSpace: boolean): boolean {
+  const number = Number(currentSessionCardNumber);
+
+  return placedOnKingDeathSpace && Number.isFinite(number) && Math.trunc(number) >= 5;
+}
+
+export function summarizeDilemmaResourceEffects(effects: DilemmaOutcomeEffect[]): Record<string, number> {
+  const deltas: Record<string, number> = {};
+
+  for (const effect of effects) {
+    if (effect.type !== "resource") {
+      continue;
+    }
+
+    deltas[effect.resourceId] = clampDilemmaResourceDelta((deltas[effect.resourceId] || 0) + effect.amount);
+  }
+
+  return normalizeDilemmaResourceDeltas(deltas);
+}
+
+export function normalizeDilemmaOutcomeEffects(value: any): DilemmaOutcomeEffect[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .map((item, index) => normalizeDilemmaOutcomeEffect(item, index))
+    .filter((effect): effect is DilemmaOutcomeEffect => Boolean(effect));
+}
+
+function normalizeDilemmaOutcomeEffect(value: any, index: number): DilemmaOutcomeEffect | null {
+  const candidate = value && typeof value === "object" ? value : {};
+  const id = normalizeTextField(candidate.id) || `effect-${index + 1}`;
+
+  if (candidate.type === "resource") {
+    const resourceId = normalizePersonalResourceId(candidate.resourceId);
+    const amount = clampDilemmaResourceDelta(candidate.amount);
+
+    return resourceId && amount !== 0 ? { id, type: "resource", resourceId, amount } : null;
+  }
+
+  if (candidate.type === "chronicle") {
+    const resourceId = normalizePersonalResourceId(candidate.resourceId);
+    const polarity = normalizeChroniclePolarity(candidate.polarity);
+    const stickerCode = normalizeTextField(candidate.stickerCode);
+
+    return resourceId && polarity && stickerCode ? { id, type: "chronicle", resourceId, polarity, stickerCode } : null;
+  }
+
+  if (candidate.type === "envelope") {
+    const envelopeCode = normalizeTextField(candidate.envelopeCode);
+    return envelopeCode ? { id, type: "envelope", envelopeCode } : null;
+  }
+
+  if (candidate.type === "story" || candidate.type === "event") {
+    const cardCode = normalizeTextField(candidate.cardCode);
+    const status = normalizeCampaignCardStatus(candidate.status);
+    return cardCode && status ? { id, type: candidate.type, cardCode, status } : null;
+  }
+
+  if (candidate.type === "mystery") {
+    const dossierLetter = normalizeTextField(candidate.dossierLetter);
+    const storylineSymbol = normalizeTextField(candidate.storylineSymbol);
+    const slotKey = normalizeTextField(candidate.slotKey);
+
+    return dossierLetter && storylineSymbol && slotKey
+      ? { id, type: "mystery", dossierLetter, storylineSymbol, slotKey }
+      : null;
+  }
+
+  if (candidate.type === "king_death") {
+    const reason = normalizeKingDeathReason(candidate.reason);
+    return reason ? { id, type: "king_death", reason } : null;
+  }
+
+  if (candidate.type === "note") {
+    const text = normalizeTextField(candidate.text).slice(0, DILEMMA_OUTCOME_NOTE_MAX);
+    return text ? { id, type: "note", text } : null;
+  }
+
+  return null;
+}
+
+function normalizePersonalResourceId(value: any): PersonalResourceId | "" {
+  return resourceCounters.some((resource) => resource.id === value) ? value : "";
+}
+
+function normalizeChroniclePolarity(value: any): "positive" | "negative" | "" {
+  return value === "positive" || value === "negative" ? value : "";
+}
+
+function normalizeCampaignCardStatus(value: any): "active" | "completed" | "archived" | "" {
+  return value === "active" || value === "completed" || value === "archived" ? value : "";
+}
 
 export function normalizeDilemmaResourceDeltas(value: any): Record<string, number> {
   const candidate = value && typeof value === "object" ? value : {};
@@ -160,6 +493,32 @@ export function normalizeDilemmaResourceDeltas(value: any): Record<string, numbe
   });
 
   return nextDeltas;
+}
+
+export function normalizeDilemmaResourcePolarities(
+  value: any,
+  fallbackDeltas: any = {},
+): Record<string, "positive" | "negative"> {
+  const candidate = value && typeof value === "object" ? value : {};
+  const deltas = normalizeDilemmaResourceDeltas(fallbackDeltas);
+  const polarities: Record<string, "positive" | "negative"> = {};
+
+  resourceCounters.forEach((resource) => {
+    const raw = candidate[resource.id];
+    if (raw === "positive" || raw === "negative") {
+      polarities[resource.id] = raw;
+      return;
+    }
+
+    const delta = deltas[resource.id] || 0;
+    if (delta > 0) {
+      polarities[resource.id] = "positive";
+    } else if (delta < 0) {
+      polarities[resource.id] = "negative";
+    }
+  });
+
+  return polarities;
 }
 
 export function clampDilemmaResourceDelta(value: any): number {
@@ -188,6 +547,37 @@ export function dilemmaResourceDeltasHaveValues(value: any): boolean {
   return resourceCounters.some((resource) => (deltas[resource.id] || 0) !== 0);
 }
 
+export function dilemmaResourcePolaritiesHaveValues(value: any): boolean {
+  const polarities = normalizeDilemmaResourcePolarities(value);
+
+  return resourceCounters.some((resource) => polarities[resource.id] === "positive" || polarities[resource.id] === "negative");
+}
+
+export function dilemmaBoardResolutionHasProgress(value: any): boolean {
+  const board = normalizeDilemmaResolutionBoardState(value);
+
+  return (
+    dilemmaResourceDeltasHaveValues(board.resourceStartPositions) ||
+    dilemmaResourceDeltasHaveValues(board.resourceMovements) ||
+    dilemmaResourceDeltasHaveValues(board.resourceFinalPositions) ||
+    resourceCounters.some((resource) => {
+      const resourceId = resource.id as PersonalResourceId;
+      return (
+        Boolean(board.resourceMomentum[resourceId]) ||
+        Boolean(board.resourceMomentumMarkers[resourceId]) ||
+        Boolean(board.resourceFinalMomentum[resourceId]) ||
+        Boolean(board.resourceFinalMomentumMarkers[resourceId])
+      );
+    }) ||
+    board.stabilityStart > 0 ||
+    board.stabilityMovement !== 0 ||
+    board.stabilityFinal > 0 ||
+    Boolean(board.endTrigger) ||
+    Boolean(board.kingDeathReason) ||
+    Boolean(board.memo.trim())
+  );
+}
+
 // ── 딜레마 투표 ───────────────────────────────────────────────
 
 export function normalizeDilemmaVotes(value: any): Record<string, DilemmaVote> {
@@ -204,12 +594,16 @@ export function normalizeDilemmaVotes(value: any): Record<string, DilemmaVote> {
 
 export function normalizeDilemmaVote(value: any): DilemmaVote {
   const candidate = value && typeof value === "object" ? value : {};
-  const validSides = ["aye", "nay", "pass", "pass_moderator"];
-  const side = validSides.includes(candidate.side) ? (candidate.side as DilemmaVote["side"]) : "";
+  const side =
+    candidate.side === "pass_moderator"
+      ? "pass"
+      : ["aye", "nay", "pass"].includes(candidate.side)
+        ? (candidate.side as DilemmaVote["side"])
+        : "";
 
   return {
     side,
-    powerTokens: (side === "pass" || side === "pass_moderator") ? 0 : normalizeCounter(candidate.powerTokens, inventoryCounterMax.powerTokens, 0),
+    powerTokens: side === "pass" ? 0 : normalizeCounter(candidate.powerTokens, inventoryCounterMax.powerTokens, 0),
     updatedAt: typeof candidate.updatedAt === "string" ? candidate.updatedAt : "",
     updatedByName: normalizeTextField(candidate.updatedByName),
   };
@@ -327,7 +721,7 @@ export function createDilemmaVoteGroups(votes: Record<string, DilemmaVote>, hous
 }
 
 export function formatDilemmaVoteGroupMetric(group: any): string {
-  if (group.side === "pass" || group.side === "pass_moderator") {
+  if (group.side === "pass") {
     return ko.dilemmaHelpers.passCount(group.items.length);
   }
 
@@ -400,6 +794,9 @@ export function isDilemmaBlank(dilemma: any): boolean {
   return (
     textFieldsBlank &&
     !resolutionChecklistHasProgress(draft.resolutionChecklist) &&
+    !dilemmaBoardResolutionHasProgress(draft.resolutionBoardState) &&
+    !dilemmaResourcePolaritiesHaveValues(draft.aye.resourcePolarities) &&
+    !dilemmaResourcePolaritiesHaveValues(draft.nay.resourcePolarities) &&
     !dilemmaResourceDeltasHaveValues(draft.aye.resourceDeltas) &&
     !dilemmaResourceDeltasHaveValues(draft.nay.resourceDeltas) &&
     draft.photos.length === 0 &&

@@ -1,17 +1,28 @@
 import {
   AgendaStateError,
   PLAYER_COUNT,
+  addChronicleSticker,
+  ageChroniclesForNextGame,
   applyChoose,
   applyDiscard,
+  applyDilemmaVoteSettlement,
+  applyCampaignBackfill,
   applyDilemmaVotes,
+  applyNextGameSetupAutomation,
+  applyOpenAgendaAssignments,
+  applySessionEndRewards,
   beginDilemmaEdit,
   calculateFinalScores,
   cancelDilemmaEdit,
   clearSession,
   createInitialState,
+  deleteChronicleSticker,
+  deleteCampaignCard,
+  deleteCampaignEnvelope,
   deleteDilemmaHistoryEntry,
+  deleteMysterySticker,
   endSession,
-  getClaimedHouseIds,
+  getActiveSessionHouseIds,
   normalizeState,
   parseHouseId,
   publishDilemmaRecord,
@@ -25,19 +36,26 @@ import {
   saveDilemmaVote,
   saveDilemmaVoteOrder,
   saveAlignmentReward,
+  saveCampaignCard,
+  saveCampaignEnvelope,
   saveHouseProgress,
+  saveMysterySticker,
+  saveNextGameSetupChecklist,
   savePlayerInventory,
   setRandomDiscardEnabled,
   setHouseCredential,
   setHouseName,
   startDraftPhase,
   startDraftIfReady,
+  touchSession,
+  updateChronicleSticker,
   type GameState,
   type HouseId,
   type SeatCredential,
 } from "../netlify/functions/_shared/agenda-state.mts";
 
 export const COOKIE_NAME = "kd_agenda_session";
+export const ADMIN_COOKIE_NAME = "kd_agenda_admin";
 export const STORE_NAME = "kings-dilemma-agenda";
 export const STORE_KEY = "active-game";
 
@@ -52,7 +70,7 @@ export function resolveAgendaStateRowKey(_requestUrl: string): string {
 }
 
 /** `?session=` 슬롯마다 다른 HttpOnly 쿠키(같은 origin에서 탭별 로그인 분리). */
-export function resolveAgendaSessionCookieName(requestUrl: string): string {
+function resolveAgendaSessionCookieName(requestUrl: string): string {
   let url: URL;
 
   try {
@@ -98,7 +116,7 @@ export type AgendaStateStore = {
 
 export type AgendaStateStoreFactory = (rowKey: string) => AgendaStateStore;
 
-export type AgendaRequestContext = {
+type AgendaRequestContext = {
   cookies?: { get: (name: string) => string | undefined };
   deployContext?: string;
   loginCode?: string;
@@ -115,17 +133,25 @@ export async function handleAgendaRequest(
 
   try {
     if (req.method === "GET") {
-      const state = await loadState(store);
+      let state = await loadState(store);
       const houseId = getAuthenticatedHouse(req, context, state);
+      const admin = await getAuthenticatedAdmin(req, context);
+
+      if (houseId) {
+        state = touchSession(state, houseId);
+        await saveState(store, state);
+      }
+
       return json(
         {
           ok: true,
           authenticated: Boolean(houseId),
+          admin,
           realtimeEnabled: Boolean(context.realtimeUpdatesEnabled),
           state: redactState(state, houseId),
         },
         200,
-        houseId ? NO_STORE_HEADERS : ANONYMOUS_GET_CACHE_HEADERS,
+        houseId || admin ? NO_STORE_HEADERS : ANONYMOUS_GET_CACHE_HEADERS,
       );
     }
 
@@ -144,14 +170,20 @@ export async function handleAgendaRequest(
       return json({ ok: false, error: "Unknown action." }, 400, NO_STORE_HEADERS);
     }
 
-    const state = await loadState(store);
+    let state = await loadState(store);
 
     if (action === "login") {
-      return await handleLogin(req, store, state, body);
+      return await handleLogin(req, context, store, state, body);
     }
 
     if (action === "logout") {
       return await handleLogout(req, context, store, state);
+    }
+
+    const admin = await getAuthenticatedAdmin(req, context);
+
+    if (action === "kickSession") {
+      return await handleKickSession(req, store, state, body, admin);
     }
 
     const houseId = getAuthenticatedHouse(req, context, state);
@@ -159,6 +191,8 @@ export async function handleAgendaRequest(
     if (!houseId) {
       return json({ ok: false, error: "Login required." }, 401, NO_STORE_HEADERS);
     }
+
+    state = touchSession(state, houseId);
 
     if (action === "discard") {
       const agendaId = typeof body.agendaId === "string" ? body.agendaId : null;
@@ -285,6 +319,12 @@ export async function handleAgendaRequest(
       return json({ ok: true, state: redactState(nextState, houseId) }, 200, NO_STORE_HEADERS);
     }
 
+    if (action === "applyDilemmaVoteSettlement") {
+      const nextState = applyDilemmaVoteSettlement(state, houseId);
+      await saveState(store, nextState);
+      return json({ ok: true, state: redactState(nextState, houseId) }, 200, NO_STORE_HEADERS);
+    }
+
     if (action === "setRandomDiscardEnabled") {
       const nextState = setRandomDiscardEnabled(state, body.enabled);
       await saveState(store, nextState);
@@ -299,6 +339,96 @@ export async function handleAgendaRequest(
 
     if (action === "calculateFinalScores") {
       return json({ ok: true, scoring: calculateFinalScores(state, body.board) }, 200, NO_STORE_HEADERS);
+    }
+
+    if (action === "applySessionEndRewards") {
+      const nextState = applySessionEndRewards(state, houseId, body.board, body.cause);
+      await saveState(store, nextState);
+      return json({ ok: true, state: redactState(nextState, houseId) }, 200, NO_STORE_HEADERS);
+    }
+
+    if (action === "applyOpenAgendaAssignments") {
+      const nextState = applyOpenAgendaAssignments(state, houseId, body.assignments);
+      await saveState(store, nextState);
+      return json({ ok: true, state: redactState(nextState, houseId) }, 200, NO_STORE_HEADERS);
+    }
+
+    if (action === "saveNextGameSetupChecklist") {
+      const nextState = saveNextGameSetupChecklist(state, houseId, body.checklist);
+      await saveState(store, nextState);
+      return json({ ok: true, state: redactState(nextState, houseId) }, 200, NO_STORE_HEADERS);
+    }
+
+    if (action === "applyNextGameSetupAutomation") {
+      const nextState = applyNextGameSetupAutomation(state, houseId, body.force);
+      await saveState(store, nextState);
+      return json({ ok: true, state: redactState(nextState, houseId) }, 200, NO_STORE_HEADERS);
+    }
+
+    if (action === "addChronicleSticker") {
+      const nextState = addChronicleSticker(state, houseId, body.input);
+      await saveState(store, nextState);
+      return json({ ok: true, state: redactState(nextState, houseId) }, 200, NO_STORE_HEADERS);
+    }
+
+    if (action === "updateChronicleSticker") {
+      const nextState = updateChronicleSticker(state, houseId, body.stickerId, body.patch);
+      await saveState(store, nextState);
+      return json({ ok: true, state: redactState(nextState, houseId) }, 200, NO_STORE_HEADERS);
+    }
+
+    if (action === "deleteChronicleSticker") {
+      const nextState = deleteChronicleSticker(state, houseId, body.stickerId);
+      await saveState(store, nextState);
+      return json({ ok: true, state: redactState(nextState, houseId) }, 200, NO_STORE_HEADERS);
+    }
+
+    if (action === "saveCampaignEnvelope") {
+      const nextState = saveCampaignEnvelope(state, houseId, body.envelope);
+      await saveState(store, nextState);
+      return json({ ok: true, state: redactState(nextState, houseId) }, 200, NO_STORE_HEADERS);
+    }
+
+    if (action === "deleteCampaignEnvelope") {
+      const nextState = deleteCampaignEnvelope(state, houseId, body.code);
+      await saveState(store, nextState);
+      return json({ ok: true, state: redactState(nextState, houseId) }, 200, NO_STORE_HEADERS);
+    }
+
+    if (action === "saveCampaignCard") {
+      const nextState = saveCampaignCard(state, houseId, body.cardKind, body.card);
+      await saveState(store, nextState);
+      return json({ ok: true, state: redactState(nextState, houseId) }, 200, NO_STORE_HEADERS);
+    }
+
+    if (action === "deleteCampaignCard") {
+      const nextState = deleteCampaignCard(state, houseId, body.cardKind, body.code);
+      await saveState(store, nextState);
+      return json({ ok: true, state: redactState(nextState, houseId) }, 200, NO_STORE_HEADERS);
+    }
+
+    if (action === "saveMysterySticker") {
+      const nextState = saveMysterySticker(state, houseId, body.sticker);
+      await saveState(store, nextState);
+      return json({ ok: true, state: redactState(nextState, houseId) }, 200, NO_STORE_HEADERS);
+    }
+
+    if (action === "deleteMysterySticker") {
+      const nextState = deleteMysterySticker(state, houseId, body.slotKey);
+      await saveState(store, nextState);
+      return json({ ok: true, state: redactState(nextState, houseId) }, 200, NO_STORE_HEADERS);
+    }
+
+    if (action === "applyCampaignBackfill") {
+      const nextState = applyCampaignBackfill(state, houseId, body.backfill);
+      await saveState(store, nextState);
+      return json({ ok: true, state: redactState(nextState, houseId) }, 200, NO_STORE_HEADERS);
+    }
+
+    if (action === "ageChroniclesForNextGame") {
+      const nextState = ageChroniclesForNextGame(state, houseId);
+      await saveState(store, nextState);
+      return json({ ok: true, state: redactState(nextState, houseId) }, 200, NO_STORE_HEADERS);
     }
 
     if (action === "endSession") {
@@ -326,6 +456,7 @@ function isKnownStateAction(action: string) {
   return (
     action === "login" ||
     action === "logout" ||
+    action === "kickSession" ||
     action === "discard" ||
     action === "choose" ||
     action === "saveInventory" ||
@@ -344,8 +475,24 @@ function isKnownStateAction(action: string) {
     action === "startDraftPhase" ||
     action === "applyDilemmaVotes" ||
     action === "resolveModeratorDecision" ||
+    action === "applyDilemmaVoteSettlement" ||
     action === "setRandomDiscardEnabled" ||
     action === "calculateFinalScores" ||
+    action === "applySessionEndRewards" ||
+    action === "applyOpenAgendaAssignments" ||
+    action === "saveNextGameSetupChecklist" ||
+    action === "applyNextGameSetupAutomation" ||
+    action === "addChronicleSticker" ||
+    action === "updateChronicleSticker" ||
+    action === "deleteChronicleSticker" ||
+    action === "saveCampaignEnvelope" ||
+    action === "deleteCampaignEnvelope" ||
+    action === "saveCampaignCard" ||
+    action === "deleteCampaignCard" ||
+    action === "saveMysterySticker" ||
+    action === "deleteMysterySticker" ||
+    action === "applyCampaignBackfill" ||
+    action === "ageChroniclesForNextGame" ||
     action === "endSession"
   );
 }
@@ -361,22 +508,35 @@ function isAgendaStateErrorLike(error: unknown): error is AgendaStateError {
 
 async function handleLogin(
   req: Request,
+  context: AgendaRequestContext,
   store: AgendaStateStore,
   state: GameState,
   body: Record<string, unknown>,
 ) {
-  const houseId = parseHouseId(body.houseId ?? body.player);
   const password = parsePassword(body.password);
+  const loginCode = getLoginCode(context);
+
+  if (loginCode && password === loginCode) {
+    return json(
+      { ok: true, authenticated: false, admin: true, state: redactState(state, null) },
+      200,
+      { ...NO_STORE_HEADERS, "Set-Cookie": await createAdminSessionCookie(req, loginCode) },
+    );
+  }
+
+  const houseId = parseHouseId(body.houseId ?? body.player);
   const credential = state.credentials[houseId];
   const needsDisplayName = !state.playerNames[houseId];
+  const activeHouseIds = getActiveSessionHouseIds(state);
+  const isActiveHouse = activeHouseIds.includes(houseId);
   let nextState = state;
 
   if (!credential && state.phase !== "house-select") {
-    return json({ ok: false, error: "이미 드래프트가 시작되어 새 가문을 선택할 수 없습니다." }, 409);
+    return spectatorLoginResponse(req, state);
   }
 
-  if (!credential && getClaimedHouseIds(state).length >= PLAYER_COUNT) {
-    return json({ ok: false, error: "이번 의회의 5개 가문이 이미 모두 선택되었습니다." }, 409);
+  if (!isActiveHouse && activeHouseIds.length >= PLAYER_COUNT) {
+    return spectatorLoginResponse(req, state);
   }
 
   if (credential) {
@@ -403,6 +563,14 @@ async function handleLogin(
     { ok: true, authenticated: true, state: redactState(nextSessionState, houseId) },
     200,
     { ...NO_STORE_HEADERS, "Set-Cookie": createSessionCookie(req, houseId, token) },
+  );
+}
+
+function spectatorLoginResponse(req: Request, state: GameState) {
+  return json(
+    { ok: true, authenticated: false, admin: false, spectator: true, state: redactState(state, null) },
+    200,
+    { ...NO_STORE_HEADERS, "Set-Cookie": clearSessionCookie(req) },
   );
 }
 
@@ -530,10 +698,31 @@ async function handleLogout(
   }
 
   return json(
-    { ok: true, authenticated: false, state: redactState(nextState, null) },
+    { ok: true, authenticated: false, spectator: false, state: redactState(nextState, null) },
     200,
     { ...NO_STORE_HEADERS, "Set-Cookie": clearSessionCookie(req) },
   );
+}
+
+async function handleKickSession(
+  _req: Request,
+  store: AgendaStateStore,
+  state: GameState,
+  body: Record<string, unknown>,
+  admin: boolean,
+) {
+  if (!admin) {
+    return json({ ok: false, error: "Admin required." }, 401, NO_STORE_HEADERS);
+  }
+
+  const houseId = parseHouseId(body.houseId);
+  const nextState = clearSession(state, houseId);
+
+  if (nextState !== state) {
+    await saveState(store, nextState);
+  }
+
+  return json({ ok: true, authenticated: false, admin: true, state: redactState(nextState, null) }, 200, NO_STORE_HEADERS);
 }
 
 async function handleReset(
@@ -609,6 +798,36 @@ export function getAuthenticatedHouse(
   }
 }
 
+async function getAuthenticatedAdmin(req: Request, context: AgendaRequestContext): Promise<boolean> {
+  const loginCode = getLoginCode(context);
+
+  if (!loginCode) {
+    return false;
+  }
+
+  const rawCookie =
+    context.cookies?.get(ADMIN_COOKIE_NAME) || parseCookie(req.headers.get("cookie"))[ADMIN_COOKIE_NAME];
+
+  if (!rawCookie) {
+    return false;
+  }
+
+  let marker: string;
+  let token: string | undefined;
+
+  try {
+    [marker, token] = decodeURIComponent(rawCookie).split(":");
+  } catch {
+    return false;
+  }
+
+  if (marker !== "admin" || !token) {
+    return false;
+  }
+
+  return timingSafeEqual(token, await createAdminSessionToken(loginCode));
+}
+
 async function readBody(req: Request): Promise<Record<string, unknown>> {
   try {
     const body = await req.json();
@@ -633,6 +852,17 @@ function createSessionCookie(req: Request, houseId: HouseId, token: string) {
   const value = encodeURIComponent(`${houseId}:${token}`);
   const cookieName = resolveAgendaSessionCookieName(req.url);
   return `${cookieName}=${value}; HttpOnly; Path=/; SameSite=Lax; Max-Age=28800${secure}`;
+}
+
+async function createAdminSessionCookie(req: Request, loginCode: string) {
+  const secure = new URL(req.url).protocol === "https:" ? "; Secure" : "";
+  const value = encodeURIComponent(`admin:${await createAdminSessionToken(loginCode)}`);
+  return `${ADMIN_COOKIE_NAME}=${value}; HttpOnly; Path=/; SameSite=Lax; Max-Age=28800${secure}`;
+}
+
+async function createAdminSessionToken(loginCode: string) {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(`admin:${loginCode}`));
+  return bytesToHex(new Uint8Array(digest));
 }
 
 function clearSessionCookie(req: Request) {

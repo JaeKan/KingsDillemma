@@ -229,6 +229,8 @@ const saveDilemmaRolesPayload = (await saveDilemmaRoles.json()) as any;
 assert.equal(saveDilemmaRoles.status, 200);
 assert.equal(saveDilemmaRolesPayload.state.dilemmaLeader, "gamam");
 assert.equal(saveDilemmaRolesPayload.state.dilemmaModerator, "gamam");
+assert.equal(saveDilemmaRolesPayload.state.canEditDilemmaRoles, true);
+assert.equal(saveDilemmaRolesPayload.state.canEditDilemmaCard, true);
 
 const beginDilemmaEdit = await handleAgendaRequest(jsonRequest({ action: "beginDilemmaEdit" }, setCookie), {}, storeFactory);
 const beginDilemmaEditPayload = (await beginDilemmaEdit.json()) as any;
@@ -376,12 +378,14 @@ const publishDilemma = await handleAgendaRequest(jsonRequest({ action: "publishD
 const publishDilemmaPayload = (await publishDilemma.json()) as any;
 assert.equal(publishDilemma.status, 200);
 assert.equal(publishDilemmaPayload.state.dilemmaHistory.length, 1);
+assert.equal(publishDilemmaPayload.state.currentSessionResolvedDilemmaCount, 1);
 assert.equal(publishDilemmaPayload.state.dilemmaHistory[0].title, "Harbor levy");
 assert.equal(publishDilemmaPayload.state.dilemmaHistory[0].resolutionPhotos.length, 1);
 assert.equal(publishDilemmaPayload.state.dilemma.title, "");
 assert.equal(publishDilemmaPayload.state.dilemma.historyId, "");
 assert.equal(persisted?.dilemma.title, "");
 assert.equal(persisted?.dilemmaHistory.length, 1);
+assert.equal(persisted?.currentSessionResolvedDilemmaCount, 1);
 
 const republishDilemma = await handleAgendaRequest(jsonRequest({ action: "publishDilemma" }, setCookie), {}, storeFactory);
 const republishDilemmaPayload = (await republishDilemma.json()) as any;
@@ -534,5 +538,6 @@ assert.equal(resetDilemma.status, 200);
 assert.equal(resetDilemmaPayload.state.dilemma.title, "");
 assert.equal(resetDilemmaPayload.state.dilemmaLeader, null);
 assert.equal(resetDilemmaPayload.state.dilemmaModerator, null);
+assert.equal(resetDilemmaPayload.state.canEditDilemmaRoles, true);
 
 console.log("agenda-api tests passed");

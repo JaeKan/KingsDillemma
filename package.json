@@ -15,7 +15,7 @@
     "docker:down": "docker compose down",
     "build": "vite build",
     "start": "tsx server/index.mts",
-    "test": "tsx tests/agenda-state.test.ts && tsx tests/agenda-api.test.ts && tsx tests/mystery-stickers.test.ts && tsx tests/dilemma-resolution-pending.test.ts",
+    "test": "tsx tests/agenda-state.test.ts && tsx tests/agenda-api.test.ts && tsx tests/mystery-stickers.test.ts && tsx tests/dilemma-resolution-pending.test.ts && tsx tests/chronicle-ledger.test.mts && tsx tests/agenda-chronicle-api.test.mts && tsx tests/agenda-campaign-api.test.mts && tsx tests/agenda-backfill-api.test.mts",
     "mysql:import": "tsx scripts/import-state-to-mysql.mts",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
@@ -25,7 +25,6 @@
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
     "@dnd-kit/sortable": "^10.0.0",
-    "@dnd-kit/utilities": "^3.2.2",
     "@emotion/react": "^11.14.0",
     "@emotion/styled": "^11.14.1",
     "@mui/icons-material": "^9.0.0",

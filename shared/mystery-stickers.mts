@@ -12,8 +12,6 @@ export const MYSTERY_STICKER_ENTRIES = [
   { id: "rulebook-42-6", publicPath: "/mystery-stickers/6.png" },
 ] as const;
 
-export type MysteryStickerCatalogId = (typeof MYSTERY_STICKER_ENTRIES)[number]["id"];
-
 const ALLOWED_IDS = new Set<string>(MYSTERY_STICKER_ENTRIES.map((e) => e.id));
 
 /** 옛 `placeholder-*` ID는 규칙서 아이콘과 1:1 대응이 없어 항상 미선택으로 정리합니다. */

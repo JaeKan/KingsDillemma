@@ -14,6 +14,7 @@ import {
   formatDilemmaVoteAdvantage,
   normalizeDilemmaOutcome,
   normalizeDilemmaResourceDeltas,
+  normalizeDilemmaResourcePolarities,
   createDilemmaVoteGroups,
   formatDilemmaVoteGroupMetric,
   normalizeDilemmaVote,
@@ -21,7 +22,6 @@ import {
   getDilemmaStatusLabel,
   dilemmaAwaitingModeratorResolution,
   isDilemmaResolutionEntryPending,
-  dilemmaHasVoteActivity,
   normalizeResolutionChecklist,
   resolutionChecklistHasProgress,
 } from "../utils/dilemma-helpers";
@@ -135,6 +135,10 @@ function formatResolutionChecklistSummary(dilemma: DilemmaRecord): string {
     marks.push("D");
   }
 
+  if (checklist.e) {
+    marks.push("E");
+  }
+
   if (checklist.f) {
     marks.push("F");
   }
@@ -169,8 +173,10 @@ export function DilemmaTextPreview({ label, value }: { label: string; value: str
 
 export function DilemmaOutcomePreview({ label, outcome, selected }: { label: string; outcome: any; selected: boolean }) {
   const normalizedOutcome = normalizeDilemmaOutcome(outcome);
-  const hasResourceDeltas = resourceCounters.some(
-    (resource) => ((normalizedOutcome.resourceDeltas as any)[resource.id] || 0) !== 0,
+  const hasResourcePolarities = resourceCounters.some(
+    (resource) =>
+      normalizedOutcome.resourcePolarities?.[resource.id] === "positive" ||
+      normalizedOutcome.resourcePolarities?.[resource.id] === "negative",
   );
 
   return (
@@ -179,8 +185,8 @@ export function DilemmaOutcomePreview({ label, outcome, selected }: { label: str
         <strong>{label}</strong>
         {selected ? <span>{ko.dilemmaUi.outcomeSelectedChip}</span> : null}
       </header>
-      {hasResourceDeltas ? (
-        <DilemmaResourceDeltaPreview deltas={normalizedOutcome.resourceDeltas} />
+      {hasResourcePolarities ? (
+        <DilemmaResourcePolarityPreview polarities={normalizedOutcome.resourcePolarities} />
       ) : (
         <p className="dilemma-outcome-empty">{ko.dilemmaUi.outcomeEmptyPreview}</p>
       )}
@@ -255,6 +261,7 @@ interface DilemmaSummaryCardProps {
   moderatorHouseId: string | null;
   history?: any[];
   houses?: RedactedHouse[];
+  canEditDilemmaRoles?: boolean;
   canEditDilemmaCard?: boolean;
   editButtonRef?: React.RefObject<HTMLButtonElement>;
   resolutionButtonRef?: React.RefObject<HTMLButtonElement>;
@@ -280,6 +287,7 @@ export function DilemmaSummaryCard({
   moderatorHouseId,
   history = [],
   houses = [],
+  canEditDilemmaRoles = false,
   canEditDilemmaCard,
   editButtonRef,
   resolutionButtonRef,
@@ -307,6 +315,7 @@ export function DilemmaSummaryCard({
   const leaderHouse = houseById.get(leaderHouseId as string) || null;
   const moderatorHouse = houseById.get(moderatorHouseId as string) || null;
   const rolesReady = Boolean(leaderHouse && moderatorHouse);
+  const hasDilemmaFlowState = !isBlank || rolesReady;
   const voteComplete = isDilemmaVoteCompleteForPublish(dilemma, houses);
   const publishBlockReason = getDilemmaPublishBlockReason(dilemma, houses);
   const status = getDilemmaStatusLabel({
@@ -319,14 +328,19 @@ export function DilemmaSummaryCard({
     voteComplete,
   });
   
-  const canSetRoles = Boolean(currentHouseId) && isBlank && !locked;
+  const hasAssignedRoles = Boolean(leaderHouseId || moderatorHouseId);
+  const canSetRoles =
+    Boolean(currentHouseId) &&
+    isBlank &&
+    !locked &&
+    (!hasAssignedRoles || canEditDilemmaRoles);
   const canEdit =
     typeof canEditDilemmaCard === "boolean"
       ? canEditDilemmaCard
       : Boolean(currentHouseId) && !lockedByOther && rolesReady;
   const publishReadyClient = Boolean(currentHouseId) && !locked && !isBlank && !publishBlockReason;
   const canPublish = publishReadyClient && canPublishDilemmaResolution;
-  const canReset = Boolean(currentHouseId) && !lockedByOther && canResetDilemmaResult;
+  const canReset = Boolean(currentHouseId) && !lockedByOther && hasDilemmaFlowState && canResetDilemmaResult;
   const resolutionEntryPending = isDilemmaResolutionEntryPending(dilemma, houses);
   const resolutionLockOk = !dilemma.editLock || dilemma.editLock.houseId === currentHouseId;
   const canOpenResolutionEntry =
@@ -341,7 +355,9 @@ export function DilemmaSummaryCard({
     ? ko.dilemmaUi.roleTooltipLocked
     : !isBlank
       ? ko.dilemmaUi.roleTooltipWrongPhase
-      : ko.dilemmaUi.roleTooltipOk;
+      : !hasAssignedRoles || canEditDilemmaRoles
+        ? ko.dilemmaUi.roleTooltipOk
+        : ko.dilemmaUi.roleTooltipOwnerOnly;
   const editTooltip = lockedByOther
     ? ko.dilemmaUi.editTooltipWait
     : !rolesReady
@@ -365,7 +381,9 @@ export function DilemmaSummaryCard({
           : ko.dilemmaUi.publishTooltipDefault);
   const resetTooltip = lockedByOther
     ? ko.dilemmaUi.resetTooltipWait
-    : !canResetDilemmaResult
+    : !hasDilemmaFlowState
+      ? ko.dilemmaUi.resetTooltipNone
+      : !canResetDilemmaResult
       ? ko.dilemmaUi.resetTooltipAuthorOnly
       : ko.dilemmaUi.resetTooltipOk;
   const resolutionEntryTooltip = !resolutionLockOk
@@ -687,7 +705,11 @@ export function DilemmaResourceDeltaPreview({ deltas }: { deltas: any }) {
 
 export function HouseVoteResultLabel({ side, powerTokens }: { side: string; powerTokens: number }) {
   const sideLabel =
-    side === "aye" ? ko.dilemmaHelpers.sideAye : side === "nay" ? ko.dilemmaHelpers.sideNay : ko.dilemmaHelpers.sidePass;
+    side === "aye"
+      ? ko.dilemmaHelpers.sideAye
+      : side === "nay"
+        ? ko.dilemmaHelpers.sideNay
+        : ko.dilemmaHelpers.sidePass;
   const tone = side === "aye" ? "aye" : side === "nay" ? "nay" : "pass";
 
   return (
@@ -935,14 +957,17 @@ export function DilemmaVotingPanel({ state, busy, mutate }: DilemmaVotingPanelPr
   const tieAwaitingModerator = dilemmaAwaitingModeratorResolution(dilemma, votes, participants);
   const isModerator = Boolean(state.currentHouseId && state.dilemmaModerator === state.currentHouseId);
   const passCount = participants.filter((house) => votes[house.id]?.side === "pass").length;
+  const neutralPower = normalizeCounter(state.neutralPowerPool?.powerTokens, 999, 0);
+  const settlement = dilemma.voteSettlement;
   const roster = getHouses(state);
   const leaderHouse =
     state.dilemmaLeader ? roster.find((h) => h.id === state.dilemmaLeader) ?? null : null;
   const moderatorHouse =
     state.dilemmaModerator ? roster.find((h) => h.id === state.dilemmaModerator) ?? null : null;
   const advantageText = formatDilemmaVoteAdvantage(ayePower, nayPower);
-  const activePower = side === "pass" ? 0 : Math.min(powerTokens, ownPowerTokens);
-  const hasValidWager = side === "pass" || activePower >= 1;
+  const isPassing = side === "pass";
+  const activePower = isPassing ? 0 : Math.min(powerTokens, ownPowerTokens);
+  const hasValidWager = isPassing || activePower >= 1;
   const canSaveVote =
     Boolean(state.currentHouseId) && state.canVoteDilemma && !busy && !selectedOutcome && tallyPending && side && hasValidWager;
   const canApplyTally = Boolean(state.canApplyDilemmaVotes) && !busy;
@@ -994,6 +1019,12 @@ export function DilemmaVotingPanel({ state, busy, mutate }: DilemmaVotingPanelPr
     setStatusText(result ? ko.dilemmaUi.moderatorResolveOk : ko.dilemmaUi.moderatorResolveFail);
   };
 
+  const applySettlement = async () => {
+    setStatusText("");
+    const result = await mutate({ action: "applyDilemmaVoteSettlement" });
+    setStatusText(result ? ko.dilemmaUi.settlementApplyOk : ko.dilemmaUi.settlementApplyFail);
+  };
+
   return (
     <div className={`dilemma-vote-panel${selectedOutcome ? " applied" : ""}`}>
       <div className="dilemma-vote-summary">
@@ -1034,6 +1065,10 @@ export function DilemmaVotingPanel({ state, busy, mutate }: DilemmaVotingPanelPr
           <strong>
             <HouseRoleNameStack house={moderatorHouse} emptyMark={ko.common.notSpecified} />
           </strong>
+        </span>
+        <span>
+          <small>{ko.common.powerTokensLabel}</small>
+          <strong>{ko.dilemmaUi.neutralPower(neutralPower)}</strong>
         </span>
         <span>
           <small>{ko.dilemmaUi.ayeLead}</small>
@@ -1105,12 +1140,12 @@ export function DilemmaVotingPanel({ state, busy, mutate }: DilemmaVotingPanelPr
                 type="button"
                 aria-label={ko.dilemmaUi.stepperMinusAria}
                 onClick={() => adjustPower(-1)}
-                disabled={busy || side === "pass" || activePower <= 0}
+                disabled={busy || isPassing || activePower <= 0}
               >
                 <TokenIcon type="minus" />
               </button>
               <output aria-label={ko.dilemmaUi.wagerOutputAria}>
-                {side === "pass" ? 0 : activePower}
+                {isPassing ? 0 : activePower}
                 <span>/{ownPowerTokens}</span>
               </output>
               <button
@@ -1118,7 +1153,7 @@ export function DilemmaVotingPanel({ state, busy, mutate }: DilemmaVotingPanelPr
                 type="button"
                 aria-label={ko.dilemmaUi.stepperPlusAria}
                 onClick={() => adjustPower(1)}
-                disabled={busy || side === "pass" || activePower >= ownPowerTokens}
+                disabled={busy || isPassing || activePower >= ownPowerTokens}
               >
                 <TokenIcon type="plus" />
               </button>
@@ -1145,7 +1180,133 @@ export function DilemmaVotingPanel({ state, busy, mutate }: DilemmaVotingPanelPr
           ) : null}
         </div>
       ) : null}
+      {selectedOutcome ? (
+        <DilemmaSettlementSummary
+          settlement={settlement}
+          roster={roster}
+          busy={busy}
+          currentHouseId={state.currentHouseId}
+          onApply={applySettlement}
+        />
+      ) : null}
       {statusText ? <p className="dilemma-vote-status" aria-live="polite">{statusText}</p> : null}
     </div>
   );
+}
+
+export function DilemmaResourcePolarityPreview({ polarities }: { polarities: any }) {
+  const normalizedPolarities = normalizeDilemmaResourcePolarities(polarities);
+  const entries = resourceCounters
+    .map((resource) => ({
+      ...resource,
+      polarity: normalizedPolarities[resource.id],
+    }))
+    .filter((resource) => resource.polarity === "positive" || resource.polarity === "negative");
+
+  if (!entries.length) {
+    return null;
+  }
+
+  return (
+    <div className="dilemma-resource-delta-preview" aria-label={ko.dilemmaUi.resourcePolarityAria}>
+      {entries.map((resource) => {
+        const polarityLabel =
+          resource.polarity === "positive"
+            ? ko.dilemmaUi.resourcePolarityPositive
+            : ko.dilemmaUi.resourcePolarityNegative;
+
+        return (
+          <Tooltip
+            className={`dilemma-resource-delta-chip tone-${resource.tone} ${resource.polarity}`}
+            key={resource.id}
+            label={`${resource.label} ${polarityLabel}`}
+          >
+            <TokenIcon type={resource.icon} />
+            <span>{resource.label}</span>
+            <strong>{polarityLabel}</strong>
+          </Tooltip>
+        );
+      })}
+    </div>
+  );
+}
+
+function DilemmaSettlementSummary({
+  settlement,
+  roster,
+  busy,
+  currentHouseId,
+  onApply,
+}: {
+  settlement: any;
+  roster: RedactedHouse[];
+  busy: boolean;
+  currentHouseId: string | null;
+  onApply: () => void;
+}) {
+  const proposal = settlement?.proposal;
+
+  if (!proposal) {
+    return (
+      <div className="dilemma-settlement-panel">
+        <h4>{ko.dilemmaUi.settlementTitle}</h4>
+        <p>{ko.dilemmaUi.settlementEmpty}</p>
+      </div>
+    );
+  }
+
+  const statusApplied = settlement.status === "applied";
+
+  return (
+    <div className="dilemma-settlement-panel">
+      <div>
+        <h4>{ko.dilemmaUi.settlementTitle}</h4>
+        <p>{ko.dilemmaUi.settlementHelp}</p>
+      </div>
+      <p>{ko.dilemmaUi.settlementPoolLine(
+        proposal.neutralPowerBefore,
+        proposal.neutralPowerDistributed,
+        proposal.neutralPowerAfter,
+      )}</p>
+      <div className="dilemma-settlement-deltas">
+        {proposal.participants.map((houseId: string) => {
+          const delta = proposal.inventoryDeltas?.[houseId] || { coins: 0, powerTokens: 0 };
+          return (
+            <span key={houseId}>
+              {ko.dilemmaUi.settlementDeltaLine(getSettlementHouseName(roster, houseId), delta.coins, delta.powerTokens)}
+            </span>
+          );
+        })}
+      </div>
+      <div className="dilemma-settlement-roles">
+        <span>{ko.dilemmaUi.settlementLeaderLine(getSettlementHouseName(roster, proposal.leaderHouseId))}</span>
+        <span>{ko.dilemmaUi.settlementModeratorLine(getSettlementHouseName(roster, proposal.moderatorHouseId))}</span>
+      </div>
+      {proposal.warnings?.length ? (
+        <div className="dilemma-settlement-warnings">
+          <strong>{ko.dilemmaUi.settlementWarningTitle}</strong>
+          {proposal.warnings.map((warning: string) => (
+            <span key={warning}>{warning}</span>
+          ))}
+        </div>
+      ) : null}
+      <button
+        className="primary-button compact"
+        type="button"
+        onClick={onApply}
+        disabled={busy || !currentHouseId || statusApplied}
+      >
+        {statusApplied ? ko.dilemmaUi.settlementApplied : ko.dilemmaUi.settlementApply}
+      </button>
+    </div>
+  );
+}
+
+function getSettlementHouseName(roster: RedactedHouse[], houseId: string | null | undefined) {
+  if (!houseId) {
+    return ko.common.notSpecified;
+  }
+
+  const house = roster.find((entry) => entry.id === houseId);
+  return house ? getHouseKoreanName(house) : houseId;
 }

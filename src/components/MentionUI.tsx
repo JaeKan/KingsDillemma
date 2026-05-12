@@ -76,7 +76,7 @@ export function hasMentionToken(text: string) {
   return parseMentionText(text).some((part) => part.type === "mention");
 }
 
-export interface MentionRenderedPreviewProps {
+interface MentionRenderedPreviewProps {
   text: string;
   /** Classes merged onto `MentionTokenView` (after `mention-token-preview`). */
   tokenViewClassName?: string;
@@ -114,7 +114,7 @@ interface MentionTokenChipProps {
   onClick?: () => void;
 }
 
-export function MentionTokenChip({ mention, onClick }: MentionTokenChipProps) {
+function MentionTokenChip({ mention, onClick }: MentionTokenChipProps) {
   const label = `${mention.item.label}${typeof mention.amount === "number" ? ` ${formatMentionDisplayAmount(mention.amount)}` : ""}`;
   const content = (
     <>

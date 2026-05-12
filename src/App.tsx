@@ -14,11 +14,15 @@ const SessionEndDialog = React.lazy(() => import("./components/SessionEndDialog"
 const VoteOrderDialog = React.lazy(() => import("./components/VoteOrderDialog"));
 const OpenAgendaScoreDialog = React.lazy(() => import("./components/ScoreGuides").then(m => ({ default: m.OpenAgendaScoreDialog })));
 const DilemmaHistoryDialog = React.lazy(() => import("./components/DilemmaHistoryDialog"));
+const ChronicleLedgerDialog = React.lazy(() => import("./components/ChronicleLedgerDialog"));
+const CampaignLedgerDialog = React.lazy(() => import("./components/CampaignLedgerDialog"));
+const CampaignBackfillDialog = React.lazy(() => import("./components/CampaignBackfillDialog"));
 const ScoreGuideDialog = React.lazy(() => import("./components/ScoreGuides").then(m => ({ default: m.ScoreGuideDialog })));
 const AchievementEditDialog = React.lazy(() => import("./components/AchievementEditDialog"));
 const SpecialAbilityLegendDialog = React.lazy(() => import("./components/SpecialAbilityLegendDialog"));
 const DilemmaEditDialog = React.lazy(() => import("./components/DilemmaEditDialog"));
 const DilemmaResolutionDialog = React.lazy(() => import("./components/DilemmaResolutionDialog"));
+const NextGameSetupDialog = React.lazy(() => import("./components/NextGameSetupDialog"));
 const DilemmaRoleDialog = React.lazy(() => import("./components/DilemmaRoleDialog"));
 const SecretAgendaScoreDialog = React.lazy(() => import("./components/ScoreGuides").then(m => ({ default: m.SecretAgendaScoreDialog })));
 
@@ -70,6 +74,7 @@ import {
   REQUIRED_HOUSE_COUNT,
   resourceCounters,
   rulebookPdfUrl,
+  rulebookReferenceTips,
   scoreTrackCounters,
   sessionEndChecklistItems,
   sessionEndUnavailableMessage,
@@ -214,11 +219,16 @@ function App() {
   const [finalBoardDraft, setFinalBoardDraft] = useState(createFinalBoardDraft);
   const [finalScoring, setFinalScoring] = useState(null);
   const [finalScoringBusy, setFinalScoringBusy] = useState(false);
+  const [sessionEndCause, setSessionEndCause] = useState("");
   const [scoreGuideOpen, setScoreGuideOpen] = useState(false);
   const [openAgendaGuideOpen, setOpenAgendaGuideOpen] = useState(false);
   const [secretAgendaGuideOpen, setSecretAgendaGuideOpen] = useState(false);
   const [dilemmaHistoryOpen, setDilemmaHistoryOpen] = useState(false);
+  const [chronicleLedgerOpen, setChronicleLedgerOpen] = useState(false);
+  const [campaignLedgerOpen, setCampaignLedgerOpen] = useState(false);
+  const [campaignBackfillOpen, setCampaignBackfillOpen] = useState(false);
   const [voteOrderDialogOpen, setVoteOrderDialogOpen] = useState(false);
+  const [nextGameSetupOpen, setNextGameSetupOpen] = useState(false);
   const [bgmMuted, setBgmMuted] = useState(readStoredBgmMuted);
   const [bgmVolume, setBgmVolume] = useState(readStoredBgmVolume);
   const finalScoringRequest = useRef(0);
@@ -226,6 +236,9 @@ function App() {
   const settingsToggleRef = useRef(null);
   const tipsToggleRef = useRef(null);
   const dilemmaHistoryToggleRef = useRef(null);
+  const chronicleLedgerRestoreFocusRef = useRef(null);
+  const campaignLedgerRestoreFocusRef = useRef(null);
+  const campaignBackfillRestoreFocusRef = useRef(null);
   const voteOrderToggleRef = useRef(null);
   const openAgendaGuideToggleRef = useRef(null);
   const secretAgendaGuideToggleRef = useRef(null);
@@ -240,6 +253,8 @@ function App() {
   const apiRequest = useCallback((options = {}) => agendaRequest(options), []);
   const state = agendaQuery.data?.state ?? null;
   const authenticated = Boolean(agendaQuery.data?.authenticated);
+  const admin = Boolean(agendaQuery.data?.admin);
+  const spectator = Boolean(agendaQuery.data?.spectator);
   const realtimeEnabled = Boolean(agendaQuery.data?.realtimeEnabled);
   const sessionStatus = agendaQuery.isPending ? "checking" : "ready";
   const parallelAgendaSessionParam =
@@ -248,7 +263,7 @@ function App() {
   useEffect(() => {
     if (
       !realtimeEnabled ||
-      !authenticated ||
+      (!authenticated && !admin && state?.phase === "house-select") ||
       sessionStatus === "checking" ||
       sessionEndDialogOpen
     ) {
@@ -278,12 +293,14 @@ function App() {
     };
   }, [
     authenticated,
+    admin,
     mutationInFlight,
     parallelAgendaSessionParam,
     realtimeEnabled,
     refresh,
     sessionEndDialogOpen,
     sessionStatus,
+    state?.phase,
   ]);
 
   useEffect(() => {
@@ -406,7 +423,7 @@ function App() {
       displayName: needsDisplayName ? displayName.trim() : undefined,
     });
 
-    if ((result as any)?.authenticated) {
+    if ((result as any)?.authenticated || (result as any)?.admin || (result as any)?.spectator) {
       setHouseInput("");
       setDisplayName("");
       setSeatPassword("");
@@ -454,7 +471,18 @@ function App() {
     setFinalBoardDraft(createFinalBoardDraft());
     setFinalScoring(null);
     setFinalScoringBusy(false);
+    const savedEndCause =
+      state?.sessionEndCause === "king_death" ||
+      state?.sessionEndCause === "abdication_top" ||
+      state?.sessionEndCause === "abdication_bottom"
+        ? state.sessionEndCause
+        : "";
+    setSessionEndCause(getSessionEndCauseFromDilemma(state?.dilemma) || savedEndCause);
     setSessionEndDialogOpen(true);
+  };
+
+  const handleKickSession = async (houseId: any) => {
+    await mutate({ action: "kickSession", houseId });
   };
 
   const handleFinalBoardChange = (resourceId: any, value: any) => {
@@ -479,6 +507,35 @@ function App() {
 
   const handleCancelSessionEnd = () => {
     setSessionEndDialogOpen(false);
+  };
+
+  const handleApplySessionEndRewards = async () => {
+    if (!sessionEndCause) {
+      setError(ko.app.errors.sessionEndCauseRequired);
+      return;
+    }
+
+    if (!finalBoardComplete || !finalScoring) {
+      setError(ko.app.errors.sessionEndScoreRequired);
+      return;
+    }
+
+    const result = await mutate({
+      action: "applySessionEndRewards",
+      cause: sessionEndCause,
+      board: createFinalBoardPayload(finalBoardDraft),
+    });
+
+    if (!result) {
+      return;
+    }
+
+    setSessionEndChecklist((current) => ({
+      ...current,
+      scores: true,
+      progress: true,
+    }));
+    setError("");
   };
 
   const handleConfirmSessionEnd = async () => {
@@ -515,6 +572,15 @@ function App() {
     await handleEndSession();
   };
 
+  const handleOpenNextGameSetup = () => {
+    setSettingsOpen(false);
+    setNextGameSetupOpen(true);
+  };
+
+  const handleCloseNextGameSetup = () => {
+    setNextGameSetupOpen(false);
+  };
+
   const handleToggleSettings = useCallback(() => {
     setTipsOpen(false);
     setSettingsOpen((current) => !current);
@@ -539,10 +605,41 @@ function App() {
     setDilemmaHistoryOpen(false);
   }, []);
 
+  const handleOpenChronicleLedger = useCallback((event: any) => {
+    chronicleLedgerRestoreFocusRef.current = settingsToggleRef.current || event?.currentTarget || null;
+    closeFloatingMenus();
+    setChronicleLedgerOpen(true);
+  }, [closeFloatingMenus]);
+
+  const handleCloseChronicleLedger = useCallback(() => {
+    setChronicleLedgerOpen(false);
+  }, []);
+
+  const handleOpenCampaignLedger = useCallback((event: any) => {
+    campaignLedgerRestoreFocusRef.current = settingsToggleRef.current || event?.currentTarget || null;
+    closeFloatingMenus();
+    setCampaignLedgerOpen(true);
+  }, [closeFloatingMenus]);
+
+  const handleCloseCampaignLedger = useCallback(() => {
+    setCampaignLedgerOpen(false);
+  }, []);
+
+  const handleOpenCampaignBackfill = useCallback((event: any) => {
+    campaignBackfillRestoreFocusRef.current = settingsToggleRef.current || event?.currentTarget || null;
+    closeFloatingMenus();
+    setCampaignBackfillOpen(true);
+  }, [closeFloatingMenus]);
+
+  const handleCloseCampaignBackfill = useCallback(() => {
+    setCampaignBackfillOpen(false);
+  }, []);
+
   const handleOpenVoteOrderDialog = useCallback((eventOrOptions: any) => {
     closeFloatingMenus();
 
-    const restoreFocusTarget = eventOrOptions?.restoreFocusTarget || eventOrOptions?.currentTarget;
+    const restoreFocusTarget =
+      eventOrOptions?.restoreFocusTarget || settingsToggleRef.current || eventOrOptions?.currentTarget || null;
 
     if (restoreFocusTarget) {
       voteOrderToggleRef.current = restoreFocusTarget;
@@ -661,7 +758,7 @@ function App() {
   }, [mutate, state]);
 
   const sessionChecking = sessionStatus === "checking";
-  const isCouncilRoute = Boolean(authenticated && state);
+  const isCouncilRoute = Boolean(state && (authenticated || admin || spectator));
   const voteOrderLocked = Boolean(state && isVoteOrderSettingLocked(state));
   const canEditVoteOrder = Boolean(authenticated && state && getVoteOrderHouses(state).length > 0 && !voteOrderLocked);
   const routeClass = sessionChecking ? "is-session-checking" : isCouncilRoute ? "is-council" : "is-entry";
@@ -675,7 +772,9 @@ function App() {
       </header>
       {!sessionChecking ? (
         <FloatingSettings
+          admin={admin}
           authenticated={authenticated}
+          spectator={spectator}
           bgmMuted={bgmMuted}
           bgmVolume={bgmVolume}
           busy={busy}
@@ -690,11 +789,17 @@ function App() {
           open={settingsOpen}
           historyCount={state?.dilemmaHistory?.length || 0}
           randomDiscardEnabled={state?.randomDiscardEnabled ?? true}
+          state={state}
           tipsOpen={tipsOpen}
           onEndSession={handleSettingsEndSession}
           onLogout={handleSettingsLogout}
+          onOpenNextGameSetup={handleOpenNextGameSetup}
           onOpenDilemmaHistory={handleOpenDilemmaHistory}
+          onOpenChronicleLedger={handleOpenChronicleLedger}
+          onOpenCampaignLedger={handleOpenCampaignLedger}
+          onOpenCampaignBackfill={handleOpenCampaignBackfill}
           onOpenVoteOrderDialog={handleOpenVoteOrderDialog}
+          onKickSession={handleKickSession}
           onOpenScoreGuide={handleOpenScoreGuide}
           onReset={handleSettingsReset}
           onBgmVolumeChange={handleBgmVolumeChange}
@@ -704,7 +809,6 @@ function App() {
           onToggle={handleToggleSettings}
           onToggleTips={handleToggleTips}
           historyToggleRef={dilemmaHistoryToggleRef}
-          voteOrderToggleRef={voteOrderToggleRef}
           tipsToggleRef={tipsToggleRef}
           toggleRef={settingsToggleRef}
           voteOrderLocked={voteOrderLocked}
@@ -750,14 +854,25 @@ function App() {
           boardDraft={finalBoardDraft}
           busy={busy}
           checks={sessionEndChecklist}
+          endCause={sessionEndCause}
+          rewardsApplied={Boolean(state?.sessionEndRewardsAppliedAt)}
           scoring={finalScoring}
           scoringBusy={finalScoringBusy}
           open={sessionEndDialogOpen}
           ready={sessionEndChecklistComplete}
           onBoardChange={handleFinalBoardChange}
+          onApplyRewards={handleApplySessionEndRewards}
           onCancel={handleCancelSessionEnd}
           onConfirm={handleConfirmSessionEnd}
+          onEndCauseChange={setSessionEndCause}
           onToggle={handleToggleSessionEndCheck}
+        />
+        <NextGameSetupDialog
+          open={nextGameSetupOpen}
+          state={state}
+          busy={busy}
+          mutate={mutate}
+          onClose={handleCloseNextGameSetup}
         />
         <ScoreGuideDialog open={scoreGuideOpen} onClose={handleCloseScoreGuide} restoreFocusRef={tipsToggleRef as any} />
         <OpenAgendaScoreDialog
@@ -779,6 +894,36 @@ function App() {
           onDelete={handleDeleteDilemmaHistory}
           restoreFocusRef={dilemmaHistoryToggleRef as any}
         />
+        {chronicleLedgerOpen ? (
+          <ChronicleLedgerDialog
+            busy={busy}
+            mutate={mutate}
+            open={chronicleLedgerOpen}
+            state={state}
+            onClose={handleCloseChronicleLedger}
+            restoreFocusRef={chronicleLedgerRestoreFocusRef as any}
+          />
+        ) : null}
+        {campaignLedgerOpen ? (
+          <CampaignLedgerDialog
+            busy={busy}
+            mutate={mutate}
+            open={campaignLedgerOpen}
+            state={state}
+            onClose={handleCloseCampaignLedger}
+            restoreFocusRef={campaignLedgerRestoreFocusRef as any}
+          />
+        ) : null}
+        {campaignBackfillOpen ? (
+          <CampaignBackfillDialog
+            busy={busy}
+            mutate={mutate}
+            open={campaignBackfillOpen}
+            state={state}
+            onClose={handleCloseCampaignBackfill}
+            restoreFocusRef={campaignBackfillRestoreFocusRef as any}
+          />
+        ) : null}
         <VoteOrderDialog
           busy={busy}
           open={voteOrderDialogOpen}
@@ -807,8 +952,15 @@ function SessionCheckPanel() {
   );
 }
 
+function getSessionEndCauseFromDilemma(dilemma: any) {
+  const trigger = dilemma?.resolutionBoardState?.endTrigger;
+  return trigger === "king_death" || trigger === "abdication_top" || trigger === "abdication_bottom" ? trigger : "";
+}
+
 function FloatingSettings({
+  admin,
   authenticated,
+  spectator,
   bgmMuted,
   bgmVolume,
   busy,
@@ -818,11 +970,17 @@ function FloatingSettings({
   historyCount,
   open,
   randomDiscardEnabled,
+  state,
   tipsOpen,
   onEndSession,
   onLogout,
+  onOpenNextGameSetup,
   onOpenDilemmaHistory,
+  onOpenChronicleLedger,
+  onOpenCampaignLedger,
+  onOpenCampaignBackfill,
   onOpenVoteOrderDialog,
+  onKickSession,
   onOpenScoreGuide,
   onReset,
   onBgmVolumeChange,
@@ -832,7 +990,6 @@ function FloatingSettings({
   onToggleTips,
   onClose,
   historyToggleRef,
-  voteOrderToggleRef,
   tipsToggleRef,
   toggleRef,
   voteOrderLocked,
@@ -899,6 +1056,7 @@ function FloatingSettings({
       </div>
       {tipsOpen ? (
         <div className="settings-menu tips-menu" id="tips-menu">
+          <p className="section-label">{ko.app.settings.referencesSection}</p>
           <button className="ghost-button wide" type="button" onClick={onOpenScoreGuide}>
             <TokenIcon type="balance" />
             {ko.app.settings.secretScoreLink}
@@ -908,10 +1066,139 @@ function FloatingSettings({
             {ko.app.settings.rulebookPdf}
             <TokenIcon type="external" />
           </a>
+          <div className="tips-collection" aria-label={ko.app.settings.tipsCollectionTitle}>
+            <div className="tips-collection-heading">
+              <strong>{ko.app.settings.tipsCollectionTitle}</strong>
+              <span>{ko.app.settings.tipsCollectionHint}</span>
+            </div>
+            <div className="tips-collection-list">
+              {rulebookReferenceTips.map((tip) => (
+                <article className="tips-card" key={tip.id}>
+                  <h3>{tip.title}</h3>
+                  <p>{tip.body}</p>
+                  <small>{tip.reference}</small>
+                </article>
+              ))}
+            </div>
+          </div>
         </div>
       ) : null}
       {open ? (
         <div className="settings-menu" id="settings-menu">
+          {authenticated ? (
+            <>
+              <p className="section-label">{ko.app.settings.gameFlowSection}</p>
+              <Tooltip
+                className="settings-tooltip-anchor"
+                label={
+                  voteOrderLocked
+                    ? ko.app.settings.voteOrderLocked
+                    : canEditVoteOrder
+                      ? ko.app.settings.voteOrderHint
+                      : ko.app.settings.voteOrderNeedFive
+                }
+              >
+                <button
+                  className="ghost-button wide"
+                  type="button"
+                  onClick={onOpenVoteOrderDialog}
+                  disabled={busy || !canEditVoteOrder}
+                >
+                  <TokenIcon type="turn" />
+                  {ko.app.settings.voteOrderButton}
+                </button>
+              </Tooltip>
+              <Tooltip
+                className="settings-tooltip-anchor"
+                label={canEndSession ? ko.app.settings.sessionEndReady : sessionEndUnavailableMessage}
+              >
+                <button
+                  className="ghost-button wide session-end-button"
+                  type="button"
+                  onClick={onEndSession}
+                  disabled={busy || !canEndSession}
+                >
+                  <TokenIcon type="seal" />
+                  {ko.app.settings.sessionEndPrep}
+                </button>
+              </Tooltip>
+              <Tooltip className="settings-tooltip-anchor" label={ko.app.settings.nextGameSetupHint}>
+                <button
+                  className="ghost-button wide"
+                  type="button"
+                  onClick={onOpenNextGameSetup}
+                  disabled={busy}
+                >
+                  <TokenIcon type="scroll" />
+                  {ko.app.settings.nextGameSetup}
+                </button>
+              </Tooltip>
+            </>
+          ) : null}
+          <p className="section-label">{ko.app.settings.physicalBoardSection}</p>
+          {authenticated ? (
+            <>
+              <button
+                className="ghost-button wide"
+                type="button"
+                aria-haspopup="dialog"
+                onClick={onOpenChronicleLedger}
+                disabled={busy}
+              >
+                <TokenIcon type="history" />
+                {ko.app.settings.chronicleLedger}
+              </button>
+              <button
+                className="ghost-button wide"
+                type="button"
+                aria-haspopup="dialog"
+                onClick={onOpenCampaignLedger}
+                disabled={busy}
+              >
+                <TokenIcon type="sheet" />
+                {ko.app.settings.campaignLedger}
+              </button>
+              <button
+                className="ghost-button wide"
+                type="button"
+                aria-haspopup="dialog"
+                onClick={onOpenCampaignBackfill}
+                disabled={busy}
+              >
+                <TokenIcon type="save" />
+                {ko.app.settings.campaignBackfill}
+              </button>
+            </>
+          ) : null}
+          <a className="settings-link" href={sharedBoardSheetUrl} target="_blank" rel="noreferrer">
+            <TokenIcon type="sheet" />
+            {ko.app.settings.sharedSheet}
+            <TokenIcon type="external" />
+          </a>
+          {admin ? (
+            <>
+              <p className="section-label">{ko.app.settings.adminSection}</p>
+              {(state?.houses || []).filter((house: any) => house.hasSession).length ? (
+                (state?.houses || [])
+                  .filter((house: any) => house.hasSession)
+                  .map((house: any) => (
+                    <button
+                      className="ghost-button wide"
+                      type="button"
+                      key={house.id}
+                      onClick={() => onKickSession(house.id)}
+                      disabled={busy}
+                    >
+                      <TokenIcon type="exit" />
+                      {ko.app.settings.kickHouse(getHouseKoreanName(house))}
+                    </button>
+                  ))
+              ) : (
+                <p className="settings-empty">{ko.app.settings.noActiveSessions}</p>
+              )}
+            </>
+          ) : null}
+          <p className="section-label">{ko.app.settings.appSection}</p>
           <button
             className="ghost-button wide"
             type="button"
@@ -952,53 +1239,11 @@ function FloatingSettings({
               <span className={!randomDiscardEnabled ? "active" : ""}>OFF</span>
             </span>
           </button>
-          <a className="settings-link" href={sharedBoardSheetUrl} target="_blank" rel="noreferrer">
-            <TokenIcon type="sheet" />
-            {ko.app.settings.sharedSheet}
-            <TokenIcon type="external" />
-          </a>
-          {authenticated ? (
-            <>
-              <Tooltip
-                className="settings-tooltip-anchor"
-                label={
-                  voteOrderLocked
-                    ? ko.app.settings.voteOrderLocked
-                    : canEditVoteOrder
-                      ? ko.app.settings.voteOrderHint
-                      : ko.app.settings.voteOrderNeedFive
-                }
-              >
-                <button
-                  ref={voteOrderToggleRef}
-                  className="ghost-button wide"
-                  type="button"
-                  onClick={onOpenVoteOrderDialog}
-                  disabled={busy || !canEditVoteOrder}
-                >
-                  <TokenIcon type="turn" />
-                  {ko.app.settings.voteOrderButton}
-                </button>
-              </Tooltip>
-              <Tooltip
-                className="settings-tooltip-anchor"
-                label={canEndSession ? ko.app.settings.sessionEndReady : sessionEndUnavailableMessage}
-              >
-                <button
-                  className="ghost-button wide session-end-button"
-                  type="button"
-                  onClick={onEndSession}
-                  disabled={busy || !canEndSession}
-                >
-                  <TokenIcon type="seal" />
-                  {ko.app.settings.sessionEndPrep}
-                </button>
-              </Tooltip>
-              <button className="ghost-button wide" type="button" onClick={onLogout} disabled={busy}>
-                <TokenIcon type="exit" />
-                {ko.app.settings.leaveCouncil}
-              </button>
-            </>
+          {authenticated || spectator ? (
+            <button className="ghost-button wide" type="button" onClick={onLogout} disabled={busy}>
+              <TokenIcon type="exit" />
+              {ko.app.settings.leaveCouncil}
+            </button>
           ) : null}
           <button className="ghost-button wide" type="button" onClick={onReset} disabled={busy}>
             <TokenIcon type="reset" />
@@ -1054,10 +1299,11 @@ function LoginPanel({
     (state?.claimedHouseCount || 0) >= (state?.requiredHouseCount || REQUIRED_HOUSE_COUNT);
   const needsDisplayName = selectedHouse != null && (!selectedHouse.hasPassword || !selectedHouse.hasCustomName);
   const passwordReady =
-    selectedHouse != null &&
-    seatPassword.length >= 4 &&
-    (!needsDisplayName || isCustomNameReady(displayName)) &&
-    (selectedHouse.hasPassword || seatPassword === seatPasswordConfirm);
+    (!selectedHouse && seatPassword.length >= 4) ||
+    (selectedHouse != null &&
+      seatPassword.length >= 4 &&
+      (!needsDisplayName || isCustomNameReady(displayName)) &&
+      (selectedHouse.hasPassword || seatPassword === seatPasswordConfirm));
   const selectHouse = (houseId: any) => {
     setHouseInput(houseId);
     setDisplayName("");
@@ -1154,7 +1400,7 @@ function LoginPanel({
         />
         <button className="primary-button wide" type="submit" disabled={busy || !passwordReady}>
           <TokenIcon type="key" />
-              {busy ? ko.common.saving : ko.common.save}
+          {busy ? ko.common.saving : selectedHouse ? ko.common.save : ko.app.login.adminLogin}
         </button>
       </form>
     </section>
@@ -1173,10 +1419,25 @@ function PasswordPanel({
 }: any) {
   if (!selectedHouse) {
     return (
-      <p className="password-hint">
-        <TokenIcon type="seal" />
-        {ko.app.login.passwordHint}
-      </p>
+      <div className="password-panel">
+        <p className="password-hint">
+          <TokenIcon type="seal" />
+          {ko.app.login.passwordHint}
+        </p>
+        <label className="credential-field">
+          <span className="field-label">{ko.app.login.fieldAdminCode}</span>
+          <input
+            value={seatPassword}
+            onChange={(event) => setSeatPassword(event.target.value)}
+            type="password"
+            minLength={4}
+            maxLength={64}
+            autoComplete="current-password"
+            aria-label={ko.app.login.fieldAdminCode}
+            placeholder={ko.app.login.fieldAdminCode}
+          />
+        </label>
+      </div>
     );
   }
 
@@ -1331,7 +1592,7 @@ function GamePanel({
             </section>
             <Suspense fallback={null}>
               <div className="status-stack">
-                <StatusItem icon="house" label={ko.app.gamePanel.myHouse} value={currentHouseChosenName || "-"} />
+                <StatusItem icon="house" label={ko.app.gamePanel.myHouse} value={currentHouseChosenName || ko.app.gamePanel.spectator} />
                 <StatusItem
                   icon="turn"
                   label={state.phase === "complete" ? ko.app.gamePanel.voteTurn : ko.app.gamePanel.turn}
@@ -1401,10 +1662,12 @@ function GamePanel({
           ownChoice={state.ownChoice}
           dilemma={state.phase === "complete" ? state.dilemma : null}
           dilemmaHistory={state.dilemmaHistory || []}
+          currentSessionResolvedDilemmaCount={state.currentSessionResolvedDilemmaCount || 0}
           dilemmaLeader={state.dilemmaLeader}
           dilemmaModerator={state.dilemmaModerator}
           houses={state.houses || []}
           houseId={state.currentHouseId}
+          canEditDilemmaRoles={state.phase === "complete" ? Boolean(state.canEditDilemmaRoles) : false}
           canEditDilemmaCard={state.phase === "complete" ? state.canEditDilemmaCard : undefined}
           canEnterDilemmaResolution={state.phase === "complete" ? Boolean(state.canEnterDilemmaResolution) : false}
           canPublishDilemmaResolution={state.phase === "complete" ? Boolean(state.canPublishDilemmaResolution) : false}
@@ -1687,10 +1950,12 @@ function PersonalInventoryPanel({
   ownChoice,
   dilemma,
   dilemmaHistory,
+  currentSessionResolvedDilemmaCount = 0,
   dilemmaLeader,
   dilemmaModerator,
   houses,
   houseId,
+  canEditDilemmaRoles = false,
   canEditDilemmaCard,
   canEnterDilemmaResolution = false,
   canPublishDilemmaResolution = false,
@@ -2260,6 +2525,7 @@ function PersonalInventoryPanel({
         timeCounterSlot: dilemmaResolutionDraft.timeCounterSlot,
         resolutionPhotos: dilemmaResolutionDraft.resolutionPhotos,
         resolutionChecklist: dilemmaResolutionDraft.resolutionChecklist ?? liveDraft.resolutionChecklist,
+        resolutionBoardState: (dilemmaResolutionDraft as any).resolutionBoardState ?? (liveDraft as any).resolutionBoardState,
       });
 
       const result = await mutate({
@@ -2286,6 +2552,7 @@ function PersonalInventoryPanel({
     dilemmaPayload.timeCounterSlot = live.timeCounterSlot || "";
     dilemmaPayload.resolutionPhotos = live.resolutionPhotos;
     dilemmaPayload.resolutionChecklist = normalizeResolutionChecklist(live.resolutionChecklist);
+    (dilemmaPayload as any).resolutionBoardState = live.resolutionBoardState;
 
     const result = await mutate({
       action: "saveDilemma",
@@ -2341,6 +2608,7 @@ function PersonalInventoryPanel({
             moderatorHouseId={dilemmaModerator}
             history={dilemmaHistory || []}
             houses={houses || []}
+            canEditDilemmaRoles={canEditDilemmaRoles}
             canEditDilemmaCard={canEditDilemmaCard}
             canEnterDilemmaResolution={canEnterDilemmaResolution}
             canPublishDilemmaResolution={canPublishDilemmaResolution}
@@ -2588,8 +2856,10 @@ function PersonalInventoryPanel({
         <DilemmaResolutionDialog
           busy={busy}
           currentHouseId={houseId}
+          currentSessionResolvedDilemmaCount={currentSessionResolvedDilemmaCount}
           dilemmaModeratorId={dilemmaModerator}
           draft={dilemmaResolutionDraft as any}
+          history={dilemmaHistory || []}
           houses={houses || []}
           mutate={mutate}
           open={dilemmaResolutionOpen}
@@ -3577,7 +3847,7 @@ function formatAchievementEffectEntriesText(entries: any) {
 
 function normalizeAchievementText(value: any) {
   return typeof value === "string"
-    ? value.replace(/\r\n?/g, "\n").trim().slice(0, achievementDetailTextMaxLength)
+    ? value.replace(/\r\n?/g, "\n").slice(0, achievementDetailTextMaxLength)
     : "";
 }
 

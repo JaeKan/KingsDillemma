@@ -5,11 +5,48 @@ function formatSignedScore(value: number): string {
   return value > 0 ? `+${value}` : String(value);
 }
 
+type SessionEndCause = "king_death" | "abdication_top" | "abdication_bottom";
+
+const sessionEndRewardTable: Record<
+  SessionEndCause,
+  { ranks: Record<number, { prestige: number; crave: number }>; last: { prestige: number; crave: number } }
+> = {
+  king_death: {
+    ranks: {
+      1: { prestige: 2, crave: 0 },
+      2: { prestige: 2, crave: 0 },
+      3: { prestige: 1, crave: 1 },
+      4: { prestige: 1, crave: 1 },
+    },
+    last: { prestige: 0, crave: 2 },
+  },
+  abdication_top: {
+    ranks: {
+      1: { prestige: 3, crave: 0 },
+      2: { prestige: 2, crave: 0 },
+      3: { prestige: 1, crave: 0 },
+      4: { prestige: 1, crave: 0 },
+    },
+    last: { prestige: 0, crave: 2 },
+  },
+  abdication_bottom: {
+    ranks: {
+      1: { prestige: 0, crave: 2 },
+      2: { prestige: 0, crave: 1 },
+      3: { prestige: 0, crave: 1 },
+      4: { prestige: 0, crave: 1 },
+    },
+    last: { prestige: 2, crave: 0 },
+  },
+};
+
 interface SessionEndDialogProps {
   boardComplete: boolean;
   boardDraft: Record<string, string>;
   busy: boolean;
   checks: Record<string, boolean>;
+  endCause: string;
+  rewardsApplied: boolean;
   scoring: any;
   scoringBusy: boolean;
   open: boolean;
@@ -17,6 +54,8 @@ interface SessionEndDialogProps {
   onBoardChange: (resourceId: string, value: string) => void;
   onCancel: () => void;
   onConfirm: () => void;
+  onEndCauseChange: (cause: string) => void;
+  onApplyRewards: () => void;
   onToggle: (itemId: string) => void;
 }
 
@@ -25,6 +64,8 @@ function SessionEndDialog({
   boardDraft,
   busy,
   checks,
+  endCause,
+  rewardsApplied,
   scoring,
   scoringBusy,
   open,
@@ -32,6 +73,8 @@ function SessionEndDialog({
   onBoardChange,
   onCancel,
   onConfirm,
+  onEndCauseChange,
+  onApplyRewards,
   onToggle,
 }: SessionEndDialogProps) {
   if (!open) {
@@ -63,6 +106,15 @@ function SessionEndDialog({
           scoringBusy={scoringBusy}
           onBoardChange={onBoardChange}
         />
+        <SessionRewardPanel
+          busy={busy}
+          endCause={endCause}
+          rewardsApplied={rewardsApplied}
+          scoring={scoring}
+          scoringBusy={scoringBusy}
+          onApplyRewards={onApplyRewards}
+          onEndCauseChange={onEndCauseChange}
+        />
         <div className="session-end-checklist">
           {sessionEndChecklistItems.map((item) => (
             <label className="session-end-check" key={item.id}>
@@ -88,6 +140,114 @@ function SessionEndDialog({
       </section>
     </div>
   );
+}
+
+interface SessionRewardPanelProps {
+  busy: boolean;
+  endCause: string;
+  rewardsApplied: boolean;
+  scoring: any;
+  scoringBusy: boolean;
+  onApplyRewards: () => void;
+  onEndCauseChange: (cause: string) => void;
+}
+
+function SessionRewardPanel({
+  busy,
+  endCause,
+  rewardsApplied,
+  scoring,
+  scoringBusy,
+  onApplyRewards,
+  onEndCauseChange,
+}: SessionRewardPanelProps) {
+  const cause = isSessionEndCause(endCause) ? endCause : "";
+  const canApply = Boolean(cause && scoring?.rows?.length && !scoringBusy && !rewardsApplied);
+
+  return (
+    <section className="session-score-panel session-reward-panel" aria-labelledby="session-reward-title">
+      <div className="session-score-heading">
+        <div>
+          <p className="section-label">{ko.sessionEnd.causeTitle}</p>
+          <h3 id="session-reward-title">{ko.sessionEnd.rewardTitle}</h3>
+        </div>
+        <span>{rewardsApplied ? ko.sessionEnd.rewardsApplied : ko.sessionEnd.rewardApply}</span>
+      </div>
+      <p className="session-score-status">{ko.sessionEnd.causeHelp}</p>
+      <div className="session-end-cause-grid">
+        {[
+          ["king_death", ko.sessionEnd.causeKingDeath],
+          ["abdication_top", ko.sessionEnd.causeAbdicationTop],
+          ["abdication_bottom", ko.sessionEnd.causeAbdicationBottom],
+        ].map(([id, label]) => (
+          <label className="session-end-cause-option" key={id}>
+            <input
+              type="radio"
+              name="session-end-cause"
+              value={id}
+              checked={endCause === id}
+              onChange={() => onEndCauseChange(id)}
+              disabled={busy || rewardsApplied}
+            />
+            <span>{label}</span>
+          </label>
+        ))}
+      </div>
+      <SessionRewardSummary cause={cause} scoring={scoring} scoringBusy={scoringBusy} />
+      <p className="session-score-status">{ko.sessionEnd.rewardHelp}</p>
+      <button className="primary-button compact" type="button" onClick={onApplyRewards} disabled={busy || !canApply}>
+        <TokenIcon type="seal" />
+        {rewardsApplied ? ko.sessionEnd.rewardsApplied : ko.sessionEnd.rewardApply}
+      </button>
+    </section>
+  );
+}
+
+function SessionRewardSummary({ cause, scoring, scoringBusy }: { cause: SessionEndCause | ""; scoring: any; scoringBusy: boolean }) {
+  if (!cause) {
+    return <p className="session-score-status">{ko.sessionEnd.rewardNeedCause}</p>;
+  }
+
+  if (scoringBusy || !scoring?.rows?.length) {
+    return <p className="session-score-status">{ko.sessionEnd.rewardNeedScore}</p>;
+  }
+
+  const lastRank = Math.max(...scoring.rows.map((row: any) => row.ranks.total));
+
+  return (
+    <div className="final-score-table-wrap" aria-live="polite">
+      <table className="final-score-table">
+        <thead>
+          <tr>
+            <th scope="col">{ko.sessionEnd.tableHouse}</th>
+            <th scope="col">{ko.sessionEnd.tableRank}</th>
+            <th scope="col">{ko.sessionEnd.tableReward}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {scoring.rows.map((row: any) => {
+            const reward = getSessionEndReward(cause, row.ranks.total, row.ranks.total === lastRank);
+            return (
+              <tr key={row.houseId}>
+                <th scope="row">{row.houseName}</th>
+                <td>{row.ranks.total}{ko.sessionEnd.rankSuffix}</td>
+                <td>{ko.sessionEnd.rewardCell(reward.prestige, reward.crave)}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function isSessionEndCause(value: string): value is SessionEndCause {
+  return value === "king_death" || value === "abdication_top" || value === "abdication_bottom";
+}
+
+function getSessionEndReward(cause: SessionEndCause, rank: number, isLast: boolean) {
+  const rewards = sessionEndRewardTable[cause];
+  return isLast ? rewards.last : rewards.ranks[rank] || { prestige: 0, crave: 0 };
 }
 
 interface SessionScorePanelProps {

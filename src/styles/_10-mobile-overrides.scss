@@ -42,6 +42,14 @@
     height: auto;
     max-height: none;
     overflow: visible;
+    width: 100%;
+  }
+
+  .council-sidebar-column,
+  .council-sidebar,
+  .sidebar-status-section,
+  .council-main > * {
+    width: 100%;
   }
 
   .progress-section.has-own-choice .progress-choice-layout {

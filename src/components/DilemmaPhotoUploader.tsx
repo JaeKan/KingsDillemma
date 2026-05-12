@@ -1,7 +1,12 @@
-import React, { useRef } from "react";
+import React, { useId, useRef } from "react";
 import { dilemmaPhotoLimit, ko } from "../resources/gameResources";
 import { TokenIcon } from "./GameIcons";
-import { DilemmaPhoto } from "../types/game";
+
+export type PhotoAttachmentLike = {
+  id: string;
+  name?: string;
+  dataUrl: string;
+};
 
 export function getClipboardImageFiles(clipboardData: DataTransfer | null): File[] {
   if (!clipboardData) {
@@ -37,17 +42,21 @@ export function DilemmaPhotoUploader({
   onAddPhotos,
   onRemovePhoto,
   copy,
+  maxPhotos = dilemmaPhotoLimit,
 }: {
   busy: boolean;
   photoBusy: boolean;
   error: string | null;
-  photos: DilemmaPhoto[];
+  photos: PhotoAttachmentLike[];
   onAddPhotos: (files: FileList | File[]) => Promise<void>;
   onRemovePhoto: (id: string) => void;
   copy: DilemmaPhotoUploaderCopy;
+  maxPhotos?: number;
 }) {
+  const titleId = useId();
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const remaining = Math.max(dilemmaPhotoLimit - photos.length, 0);
+  const remaining = Math.max(maxPhotos - photos.length, 0);
+  const disabled = busy || photoBusy || remaining <= 0;
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
@@ -59,11 +68,28 @@ export function DilemmaPhotoUploader({
     });
   };
 
+  const handlePaste = (event: React.ClipboardEvent<HTMLElement>) => {
+    const files = getClipboardImageFiles(event.clipboardData);
+
+    if (!files.length) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    if (disabled) {
+      return;
+    }
+
+    void onAddPhotos(files);
+  };
+
   return (
-    <section className="dilemma-photo-editor" aria-labelledby="dilemma-photo-upload-title">
+    <section className="dilemma-photo-editor" aria-labelledby={titleId} onPaste={handlePaste}>
       <div className="dilemma-photo-editor-head">
         <div>
-          <h3 id="dilemma-photo-upload-title">{copy.sectionTitle}</h3>
+          <h3 id={titleId}>{copy.sectionTitle}</h3>
           <p>{copy.sectionHelp}</p>
         </div>
         <label className={`ghost-button dilemma-photo-add${remaining <= 0 ? " disabled" : ""}`}>
@@ -75,7 +101,7 @@ export function DilemmaPhotoUploader({
             accept="image/*"
             multiple
             onChange={handleFileChange}
-            disabled={busy || photoBusy || remaining <= 0}
+            disabled={disabled}
           />
         </label>
       </div>
@@ -94,13 +120,35 @@ export function DilemmaPhotoUploader({
       ) : (
         <p className="dilemma-photo-empty">{copy.empty}</p>
       )}
-      <p className="dilemma-photo-limit">{copy.limitsCaption(photos.length, dilemmaPhotoLimit)}</p>
+      <p className="dilemma-photo-limit">{copy.limitsCaption(photos.length, maxPhotos)}</p>
       {error ? (
         <p className="dilemma-photo-error" role="alert">
           {error}
         </p>
       ) : null}
     </section>
+  );
+}
+
+export function RecordPhotoStrip({
+  photos = [],
+  ariaLabel = ko.dilemmaUi.photoStripAria,
+}: {
+  photos?: PhotoAttachmentLike[];
+  ariaLabel?: string;
+}) {
+  if (!photos.length) {
+    return null;
+  }
+
+  return (
+    <div className="dilemma-photo-strip" aria-label={ariaLabel}>
+      {photos.map((photo) => (
+        <a href={photo.dataUrl} target="_blank" rel="noreferrer" key={photo.id} title={photo.name || ko.dilemmaHelpers.defaultPhotoName}>
+          <img src={photo.dataUrl} alt={photo.name || ko.dilemmaHelpers.defaultPhotoName} />
+        </a>
+      ))}
+    </div>
   );
 }
 
@@ -120,4 +168,13 @@ export const dilemmaResolutionPhotoUploaderCopy: DilemmaPhotoUploaderCopy = {
   empty: ko.dilemmaEdit.photoEmpty,
   limitsCaption: ko.dilemmaEdit.photoLimitsCaption,
   photoAlt: ko.dilemmaResolution.photoAlt,
+};
+
+export const ledgerPhotoUploaderCopy: DilemmaPhotoUploaderCopy = {
+  sectionTitle: ko.chronicleLedger.photoSectionTitle,
+  sectionHelp: ko.chronicleLedger.photoHelp,
+  attach: ko.dilemmaEdit.photoAttach,
+  empty: ko.dilemmaEdit.photoEmpty,
+  limitsCaption: ko.dilemmaEdit.photoLimitsCaption,
+  photoAlt: ko.chronicleLedger.photoAlt,
 };

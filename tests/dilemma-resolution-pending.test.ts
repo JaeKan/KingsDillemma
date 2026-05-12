@@ -3,8 +3,13 @@ import type { RedactedHouse } from "../src/types/game.ts";
 import {
   isDilemmaResolutionEntryPending,
   createDilemmaDraft,
+  shouldTriggerFifthCardKingDeath,
+  getOrderedDilemmaResourceEffects,
+  getDilemmaOutcomeKingDeathReason,
+  normalizeDilemmaOutcome,
   normalizeResolutionChecklist,
 } from "../src/utils/dilemma-helpers.ts";
+import { normalizeAchievementEffectEntries } from "../src/utils/normalizers.ts";
 
 const fiveVoteHouses = [
   { id: "gamam", hasSession: true },
@@ -87,3 +92,61 @@ assert.equal(
 
 assert.deepEqual(normalizeResolutionChecklist({ a: true, memo: "x", bogus: 1 }), { a: true, memo: "x" });
 assert.deepEqual(normalizeResolutionChecklist({ b: false }), {});
+assert.equal(normalizeAchievementEffectEntries([{ icon: "instant", text: "coin " }])[0]?.text, "coin ");
+
+assert.deepEqual(
+  normalizeDilemmaOutcome({
+    resourceDeltas: { influence: 1, wealth: -2 },
+  }).effects,
+  [
+    { id: "resource-influence", type: "resource", resourceId: "influence", amount: 1 },
+    { id: "resource-wealth", type: "resource", resourceId: "wealth", amount: -2 },
+  ],
+);
+assert.deepEqual(
+  normalizeDilemmaOutcome({
+    resourceDeltas: { influence: 1, wealth: -2 },
+  }).resourcePolarities,
+  { influence: "positive", wealth: "negative" },
+);
+assert.deepEqual(
+  normalizeDilemmaOutcome({
+    resourcePolarities: { wealth: "positive", morale: "negative", knowledge: "bad" },
+    resourceDeltas: { wealth: -2, welfare: 1 },
+  }).resourcePolarities,
+  { wealth: "positive", morale: "negative", welfare: "positive" },
+);
+
+const normalizedEffects = normalizeDilemmaOutcome({
+  effects: [
+    { id: "r1", type: "resource", resourceId: "wealth", amount: 3 },
+    { id: "bad", type: "resource", resourceId: "unknown", amount: 4 },
+    { id: "death", type: "king_death", reason: "death_symbol" },
+    { id: "note", type: "note", text: "x".repeat(600) },
+    { id: "spoiler", type: "story", status: "active", text: "hidden story text" },
+  ],
+});
+
+assert.deepEqual(getOrderedDilemmaResourceEffects(normalizedEffects), [
+  { resourceId: "wealth", amount: 3 },
+]);
+assert.deepEqual(normalizedEffects.resourceDeltas, { wealth: 3 });
+assert.deepEqual(normalizedEffects.resourcePolarities, { wealth: "positive" });
+assert.equal(normalizedEffects.effects.some((effect) => effect.type === "king_death"), true);
+assert.equal(getDilemmaOutcomeKingDeathReason(normalizedEffects), "death_symbol");
+assert.equal(normalizedEffects.effects.some((effect) => effect.type === "story"), false);
+assert.equal(normalizedEffects.effects.find((effect) => effect.type === "note")?.text.length, 500);
+assert.equal(
+  createDilemmaDraft({
+    ...baseCard,
+    selectedOutcome: "aye",
+    aye: {
+      effects: [{ id: "death", type: "king_death", reason: "card_text" }],
+    },
+  }).resolutionBoardState.endTrigger,
+  "king_death",
+);
+assert.equal(shouldTriggerFifthCardKingDeath(4, true), false);
+assert.equal(shouldTriggerFifthCardKingDeath(5, false), false);
+assert.equal(shouldTriggerFifthCardKingDeath(5, true), true);
+assert.equal(shouldTriggerFifthCardKingDeath("5.9", true), true);

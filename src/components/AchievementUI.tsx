@@ -1,9 +1,9 @@
 import { ko } from "../resources/gameResources";
-import { getAchievementEffectOption, normalizeAchievementEffectEntries, normalizeAchievementEffects, normalizeAchievementEffectIcon } from "../utils/normalizers";
+import { getAchievementEffectOption, normalizeAchievementEffectEntries, normalizeAchievementEffectIcon } from "../utils/normalizers";
 import { AchievementEffectOptionIcon } from "./GameIcons";
 import { MentionTokenView } from "./MentionUI";
 
-export interface AchievementEffectEntry {
+interface AchievementEffectEntry {
   icon: string;
   text: string;
 }
@@ -47,18 +47,6 @@ function AchievementEffectEntrySummary({ entry }: { entry: AchievementEffectEntr
   );
 }
 
-function AchievementEffectBadges({ detail, effects }: { detail: any; effects?: any[] }) {
-  const normalizedEffects = effects || normalizeAchievementEffects(detail?.effects, detail?.effectIcon, detail?.effectAmount);
-
-  return (
-    <span className="achievement-effect-badges" aria-hidden="true">
-      {normalizedEffects.map((effect) => (
-        <AchievementEffectBadge effect={effect} key={effect.icon} />
-      ))}
-    </span>
-  );
-}
-
 function AchievementEffectBadge({ effect }: { effect: any }) {
   const effectIcon = normalizeAchievementEffectIcon(effect?.icon);
   const option = getAchievementEffectOption(effectIcon);
@@ -76,7 +64,4 @@ function AchievementEffectBadge({ effect }: { effect: any }) {
 
 export {
   AchievementEffectMemo,
-  AchievementEffectEntrySummary,
-  AchievementEffectBadges,
-  AchievementEffectBadge
 };

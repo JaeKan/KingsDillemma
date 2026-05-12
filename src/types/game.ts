@@ -1,11 +1,92 @@
 export type HouseId = string;
-export type Phase = "house-select" | "discard" | "choose" | "complete";
+type Phase = "house-select" | "discard" | "choose" | "complete";
 
 export type PersonalResourceId = "influence" | "wealth" | "morale" | "welfare" | "knowledge";
 export type DilemmaResourceDeltas = Partial<Record<PersonalResourceId, number>>;
 export type OpenAgendaTokenPolarity = "positive" | "negative";
+export type ChronicleResourceId = PersonalResourceId;
+export type ChroniclePolarity = "positive" | "negative";
+export type DilemmaResourcePolarities = Partial<Record<PersonalResourceId, ChroniclePolarity>>;
 
-export type Agenda = {
+export type RecordAttachment = {
+  id: string;
+  name: string;
+  mimeType: string;
+  dataUrl: string;
+  createdAt: string;
+};
+
+export type ChronicleStickerEntry = {
+  id: string;
+  stickerCode: string;
+  resourceId: ChronicleResourceId;
+  polarity: ChroniclePolarity;
+  signedByHouseId: string;
+  signedByName: string;
+  ageMarks: number;
+  slotIndex: number;
+  sourceDilemmaHistoryId: string;
+  sourceCardCode: string;
+  placedAt: string;
+  updatedAt: string;
+  replacedAt: string;
+  note: string;
+  photos?: RecordAttachment[];
+};
+
+export type ChronicleLedger = Record<ChronicleResourceId, ChronicleStickerEntry[]>;
+
+export type CampaignEnvelopeEntry = {
+  code: string;
+  openedAt: string;
+  sourceDilemmaHistoryId: string;
+  note: string;
+  photos?: RecordAttachment[];
+};
+
+export type CampaignCardStatus = "active" | "completed" | "archived";
+
+export type CampaignCardEntry = {
+  code: string;
+  status: CampaignCardStatus;
+  sourceEnvelopeCode: string;
+  sourceDilemmaHistoryId: string;
+  note: string;
+  updatedAt: string;
+  photos?: RecordAttachment[];
+};
+
+export type MysteryStickerEntry = {
+  dossierLetter: string;
+  storylineSymbol: string;
+  slotKey: string;
+  sourceDilemmaHistoryId: string;
+  attachedAt: string;
+  note: string;
+  photos?: RecordAttachment[];
+};
+
+export type CampaignLedger = {
+  openedEnvelopes: Record<string, CampaignEnvelopeEntry>;
+  storyCards: Record<string, CampaignCardEntry>;
+  eventCards: Record<string, CampaignCardEntry>;
+  mysteryStickers: Record<string, MysteryStickerEntry>;
+};
+
+export type ChronicleOpenAgendaAssignments = Record<
+  ChroniclePolarity,
+  Partial<Record<ChronicleResourceId, string>>
+>;
+
+export type NextGameSetupState = {
+  checklist: Record<string, boolean>;
+  lastAppliedAt: string;
+  lastAppliedBy: string | null;
+  lastLegacyResourceDeltas: Partial<Record<ChronicleResourceId, number>>;
+  lastOpenAgendaAssignments: ChronicleOpenAgendaAssignments;
+};
+
+type Agenda = {
   id: string;
   name: string;
   englishName: string;
@@ -64,13 +145,25 @@ export type HouseProgress = {
   updatedAt: string;
 };
 
-export type DilemmaVoteSide = "" | "aye" | "nay";
-export type DilemmaBallotSide = "" | "aye" | "nay" | "pass" | "pass_moderator";
+type DilemmaVoteSide = "" | "aye" | "nay";
+export type DilemmaBallotSide = "" | "aye" | "nay" | "pass";
+
+export type DilemmaOutcomeEffect =
+  | { id: string; type: "resource"; resourceId: PersonalResourceId; amount: number }
+  | { id: string; type: "chronicle"; resourceId: PersonalResourceId; polarity: ChroniclePolarity; stickerCode: string }
+  | { id: string; type: "envelope"; envelopeCode: string }
+  | { id: string; type: "story"; cardCode: string; status: "active" | "completed" | "archived" }
+  | { id: string; type: "event"; cardCode: string; status: "active" | "completed" | "archived" }
+  | { id: string; type: "mystery"; dossierLetter: string; storylineSymbol: string; slotKey: string }
+  | { id: string; type: "king_death"; reason: "death_symbol" | "fifth_card" | "card_text" }
+  | { id: string; type: "note"; text: string };
 
 export type DilemmaOutcome = {
   preview: string;
   result: string;
+  resourcePolarities: DilemmaResourcePolarities;
   resourceDeltas: DilemmaResourceDeltas;
+  effects: DilemmaOutcomeEffect[];
 };
 
 export type DilemmaVote = {
@@ -78,6 +171,60 @@ export type DilemmaVote = {
   powerTokens: number;
   updatedAt: string;
   updatedByName: string;
+};
+
+export type NeutralPowerPool = {
+  powerTokens: number;
+  updatedAt: string;
+};
+
+export type DilemmaVoteSettlementStatus = "none" | "proposed" | "applied";
+export type DilemmaVoteSettlementDelta = {
+  coins: number;
+  powerTokens: number;
+};
+export type DilemmaVoteSettlementProposal = {
+  participants: HouseId[];
+  outcome: DilemmaVoteSide;
+  tally: {
+    ayePower: number;
+    nayPower: number;
+    passCount: number;
+    moderatorPassCount: number;
+  };
+  neutralPowerBefore: number;
+  neutralPowerDistributed: number;
+  neutralPowerAfter: number;
+  inventoryDeltas: Partial<Record<HouseId, DilemmaVoteSettlementDelta>>;
+  leaderHouseId: HouseId | null;
+  moderatorHouseId: HouseId | null;
+  warnings: string[];
+  createdAt: string;
+};
+export type DilemmaVoteSettlement = {
+  status: DilemmaVoteSettlementStatus;
+  proposal: DilemmaVoteSettlementProposal | null;
+  appliedAt: string;
+  appliedBy: HouseId | null;
+};
+export type SessionEndCause = "king_death" | "abdication_top" | "abdication_bottom";
+export type DilemmaEndTrigger = "" | "none" | SessionEndCause;
+export type DilemmaKingDeathReason = "" | "death_symbol" | "fifth_card" | "card_text";
+export type DilemmaMomentumDirection = "" | "positive" | "negative";
+export type DilemmaResolutionBoardState = {
+  resourceStartPositions: DilemmaResourceDeltas;
+  resourceMovements: DilemmaResourceDeltas;
+  resourceFinalPositions: DilemmaResourceDeltas;
+  resourceMomentum: Partial<Record<PersonalResourceId, DilemmaMomentumDirection>>;
+  resourceMomentumMarkers: Partial<Record<PersonalResourceId, boolean>>;
+  resourceFinalMomentum: Partial<Record<PersonalResourceId, DilemmaMomentumDirection>>;
+  resourceFinalMomentumMarkers: Partial<Record<PersonalResourceId, boolean>>;
+  stabilityStart: number;
+  stabilityMovement: number;
+  stabilityFinal: number;
+  endTrigger: DilemmaEndTrigger;
+  kingDeathReason: DilemmaKingDeathReason;
+  memo: string;
 };
 
 export type DilemmaPhoto = {
@@ -97,6 +244,7 @@ export type DilemmaResolutionChecklist = {
   b?: boolean;
   c?: boolean;
   d?: boolean;
+  e?: boolean;
   f?: boolean;
   /** 연대기 스티커·봉투 등 짧은 메모 */
   memo?: string;
@@ -129,14 +277,16 @@ export type DilemmaRecord = {
   voteNotes: string;
   resolutionNotes: string;
   resolutionChecklist?: DilemmaResolutionChecklist;
+  resolutionBoardState: DilemmaResolutionBoardState;
   votes: Partial<Record<HouseId, DilemmaVote>>;
+  voteSettlement: DilemmaVoteSettlement;
   photos: DilemmaPhoto[];
   /** 후속·결과 단계 첨부 사진(카드 작성 `photos`와 별도) */
   resolutionPhotos: DilemmaPhoto[];
   updatedAt: string;
   updatedBy: HouseId | null;
   updatedByName: string;
-  /** 최초로 빈 딜레마에 내용을 확정한 가문(saveDilemma). 이후 편집해도 바뀌지 않음. 게시·결과 초기화 권한 기준. */
+  /** 딜레마 플로우 소유자 fallback. 새 플로우에서는 역할을 처음 지정한 가문이 작성·게시·초기화 권한 기준. */
   dilemmaAuthorHouseId: HouseId | null;
   editLock: DilemmaEditLock | null;
 };
@@ -154,13 +304,6 @@ export type DilemmaHistoryEntry = Omit<DilemmaRecord, "editLock"> & {
 
 export type RedactedDilemmaRecord = Omit<DilemmaRecord, "editLock"> & {
   editLock: RedactedDilemmaEditLock | null;
-};
-
-export type SeatCredential = {
-  salt: string;
-  hash: string;
-  iterations: number;
-  createdAt: string;
 };
 
 export type RedactedHouse = {
@@ -198,6 +341,11 @@ export type RedactedState = {
   remainingHiddenCount: number;
   discardedHiddenCount: number;
   randomDiscardEnabled: boolean;
+  neutralPowerPool: NeutralPowerPool;
+  sessionEndCause: DilemmaEndTrigger;
+  sessionEndRewardsAppliedAt: string;
+  sessionEndRewardsAppliedBy: HouseId | null;
+  currentSessionResolvedDilemmaCount: number;
   currentPlayer: HouseId | null;
   currentHouseId: HouseId | null;
   isCurrentTurn: boolean;
@@ -207,12 +355,15 @@ export type RedactedState = {
   canVoteDilemma: boolean;
   /** 집계 기록(apply) 가능 — 로그인 중 투표 참여 가문 중 누구나(전원 투표 완료 시); 작성자 판별에는 사용하지 않음 */
   canApplyDilemmaVotes: boolean;
-  /** 결과 입력 흐름(모달 창) — `dilemmaAuthorHouseId` 고정 작성자만 */
+  /** 역할 지정 가능 — 빈 딜레마에서 플로우 소유자가 없거나 세션 가문이 소유자일 때만 true */
+  canEditDilemmaRoles: boolean;
+  /** 결과 입력 흐름(모달 창) — 딜레마 플로우 소유자만 */
   canEnterDilemmaResolution: boolean;
-  /** 딜레마 이력 게시 — `dilemmaAuthorHouseId` 고정 작성자만 true */
+  /** 딜레마 이력 게시 — 딜레마 플로우 소유자만 true */
   canPublishDilemmaResolution: boolean;
-  /** 결과 초기화 — `dilemmaAuthorHouseId` 고정 작성자만 */
+  /** 결과 초기화 — 딜레마 플로우 소유자만 */
   canResetDilemmaResult: boolean;
+  /** 카드 본문 작성/편집 — 역할을 처음 지정한 딜레마 플로우 소유자만 */
   canEditDilemmaCard: boolean;
   dilemmaLeader: HouseId | null;
   dilemmaModerator: HouseId | null;
@@ -222,13 +373,16 @@ export type RedactedState = {
   ownHouseProgress: HouseProgress | null;
   dilemma: RedactedDilemmaRecord;
   dilemmaHistory: DilemmaHistoryEntry[];
+  chronicleLedger: ChronicleLedger;
+  campaignLedger: CampaignLedger;
+  nextGameSetupState: NextGameSetupState;
   availableAgendas?: Agenda[];
 };
 
-export type GameStateResponse = {
-  ok: boolean;
-  authenticated: boolean;
-  realtimeEnabled: boolean;
-  state: RedactedState;
+export type AgendaSession = {
+  token: string;
+  createdAt: string;
+  updatedAt: string;
 };
+
 

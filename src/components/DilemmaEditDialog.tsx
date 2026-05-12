@@ -2,9 +2,29 @@ import React, { useCallback, useEffect, useId, useRef, useState } from "react";
 import { ValueMentionTextarea, MentionRenderedPreview, hasMentionToken, type MentionPart } from "./MentionUI";
 import { resourceCounters, ko } from "../resources/gameResources";
 import { TokenIcon } from "./GameIcons";
-import { DilemmaEditDraft } from "../types/game";
 import { MysteryStickerPicker } from "./MysteryStickerPicker";
 import { DilemmaPhotoUploader, dilemmaEditPhotoUploaderCopy, getClipboardImageFiles } from "./DilemmaPhotoUploader";
+import type { DilemmaOutcomeEffect, DilemmaEditDraft, PersonalResourceId } from "../types/game";
+
+type DilemmaOutcomeEffectType = DilemmaOutcomeEffect["type"];
+type EditableDilemmaOutcomeEffect = DilemmaOutcomeEffect | ({ id: string; type: DilemmaOutcomeEffectType } & Record<string, any>);
+type CampaignCardStatus = Extract<DilemmaOutcomeEffect, { type: "story" }>["status"];
+type ChroniclePolarity = Extract<DilemmaOutcomeEffect, { type: "chronicle" }>["polarity"];
+type KingDeathReason = Extract<DilemmaOutcomeEffect, { type: "king_death" }>["reason"];
+
+const DILEMMA_OUTCOME_NOTE_MAX = 500;
+const DILEMMA_EFFECT_TYPES: DilemmaOutcomeEffectType[] = [
+  "chronicle",
+  "envelope",
+  "story",
+  "event",
+  "mystery",
+  "king_death",
+  "note",
+];
+const CAMPAIGN_CARD_STATUSES: CampaignCardStatus[] = ["active", "completed", "archived"];
+const CHRONICLE_POLARITIES: ChroniclePolarity[] = ["positive", "negative"];
+const KING_DEATH_REASONS: KingDeathReason[] = ["death_symbol", "fifth_card", "card_text"];
 
 interface DilemmaEditDialogProps {
   busy: boolean;
@@ -360,6 +380,17 @@ function DilemmaOutcomeEditor({
   onChange: (f: string, v: any) => void;
 }) {
   const resourceHeadingId = useId();
+  const updateResourcePolarity = (resourceId: PersonalResourceId, polarity: string) => {
+    const nextPolarities = { ...(outcome.resourcePolarities || {}) };
+
+    if (polarity === "positive" || polarity === "negative") {
+      nextPolarities[resourceId] = polarity;
+    } else {
+      delete nextPolarities[resourceId];
+    }
+
+    onChange("resourcePolarities", nextPolarities);
+  };
 
   return (
     <fieldset className={`dilemma-outcome-editor${selected ? " selected" : ""}`}>
@@ -368,16 +399,11 @@ function DilemmaOutcomeEditor({
         label={ko.dilemmaEdit.labelSummary}
         value={outcome.preview}
         onChange={(v) => onChange("preview", v)}
-      />
-      <DilemmaMentionTextarea
-        label={ko.dilemmaEdit.labelOutcomeShort}
-        value={outcome.result}
-        onChange={(v) => onChange("result", v)}
-        placeholder={ko.dilemmaEdit.phOutcome}
+        placeholder={ko.dilemmaEdit.phSummary}
       />
       <div className="dilemma-resource-deltas-edit" aria-labelledby={resourceHeadingId}>
         <p id={resourceHeadingId} className="section-label dilemma-resource-deltas-heading">
-          {ko.dilemmaEdit.resourceDeltaSection}
+          {ko.dilemmaEdit.resourcePolaritySection}
         </p>
         <div className="dilemma-resource-deltas-rows">
           {resourceCounters.map((resource) => (
@@ -386,22 +412,346 @@ function DilemmaOutcomeEditor({
                 <TokenIcon type={resource.icon} />
                 <span className="dilemma-resource-delta-edit-name">{resource.label}</span>
               </div>
-              <input
-                className="dilemma-resource-delta-edit-input"
-                type="number"
-                aria-label={`${label} · ${resource.label} · ${ko.dilemmaEdit.resourceDeltaSection}`}
-                value={outcome.resourceDeltas[resource.id] || 0}
-                onChange={(e) => {
-                  const val = parseInt(e.target.value, 10);
-                  onChange("resourceDeltas", { ...outcome.resourceDeltas, [resource.id]: isNaN(val) ? 0 : val });
-                }}
-              />
+              <select
+                className="dilemma-resource-polarity-select"
+                aria-label={`${label} · ${resource.label} · ${ko.dilemmaEdit.resourcePolaritySection}`}
+                value={outcome.resourcePolarities?.[resource.id] || ""}
+                onChange={(event) => updateResourcePolarity(resource.id as PersonalResourceId, event.target.value)}
+              >
+                <option value="">{ko.dilemmaEdit.resourcePolarityNone}</option>
+                <option value="positive">{ko.dilemmaEdit.resourcePolarityPositive}</option>
+                <option value="negative">{ko.dilemmaEdit.resourcePolarityNegative}</option>
+              </select>
             </div>
           ))}
         </div>
       </div>
     </fieldset>
   );
+}
+
+export function DilemmaOutcomeEffectEditor({
+  outcomeLabel,
+  effects,
+  onChange,
+}: {
+  outcomeLabel: string;
+  effects: EditableDilemmaOutcomeEffect[];
+  onChange: (effects: EditableDilemmaOutcomeEffect[]) => void;
+}) {
+  const headingId = useId();
+  const [nextType, setNextType] = useState<DilemmaOutcomeEffectType>("chronicle");
+
+  const updateEffect = (index: number, patch: Record<string, any>) => {
+    onChange(effects.map((effect, effectIndex) => effectIndex === index ? { ...effect, ...patch } : effect));
+  };
+
+  const replaceEffect = (index: number, nextEffect: EditableDilemmaOutcomeEffect) => {
+    onChange(effects.map((effect, effectIndex) => effectIndex === index ? nextEffect : effect));
+  };
+
+  const moveEffect = (index: number, direction: -1 | 1) => {
+    const targetIndex = index + direction;
+
+    if (targetIndex < 0 || targetIndex >= effects.length) {
+      return;
+    }
+
+    const nextEffects = [...effects];
+    const [effect] = nextEffects.splice(index, 1);
+    nextEffects.splice(targetIndex, 0, effect);
+    onChange(nextEffects);
+  };
+
+  const removeEffect = (index: number) => {
+    onChange(effects.filter((_, effectIndex) => effectIndex !== index));
+  };
+
+  return (
+    <section className="dilemma-outcome-effects-edit" aria-labelledby={headingId}>
+      <div className="dilemma-outcome-effects-head">
+        <p id={headingId} className="section-label dilemma-outcome-effects-heading">
+          {ko.dilemmaEdit.effectSection}
+        </p>
+        <div className="dilemma-outcome-effects-add">
+          <label>
+            <span className="visually-hidden">{ko.dilemmaEdit.effectType}</span>
+            <select value={nextType} onChange={(event) => setNextType(event.target.value as DilemmaOutcomeEffectType)}>
+              {DILEMMA_EFFECT_TYPES.map((type) => (
+                <option key={type} value={type}>
+                  {ko.dilemmaEdit.effectTypeLabels[type]}
+                </option>
+              ))}
+            </select>
+          </label>
+          <button
+            type="button"
+            className="ghost-button compact-button"
+            onClick={() => onChange([...effects, createDefaultDilemmaOutcomeEffect(nextType)])}
+          >
+            {ko.dilemmaEdit.effectAdd}
+          </button>
+        </div>
+      </div>
+      {effects.length ? (
+        <ol className="dilemma-outcome-effects-list">
+          {effects.map((effect, index) => {
+            const effectTypeLabel = ko.dilemmaEdit.effectTypeLabels[effect.type];
+            const effectPositionLabel = `${outcomeLabel} · ${index + 1} · ${effectTypeLabel}`;
+
+            return (
+              <li key={effect.id || index} className="dilemma-outcome-effect-row">
+                <div className="dilemma-outcome-effect-order" aria-label={effectPositionLabel}>
+                  <span>{index + 1}</span>
+                  <button
+                    type="button"
+                    className="ghost-button icon-button"
+                    disabled={index === 0}
+                    onClick={() => moveEffect(index, -1)}
+                    aria-label={`${effectPositionLabel} · ${ko.dilemmaEdit.effectMoveUp}`}
+                  >
+                    ↑
+                  </button>
+                  <button
+                    type="button"
+                    className="ghost-button icon-button"
+                    disabled={index === effects.length - 1}
+                    onClick={() => moveEffect(index, 1)}
+                    aria-label={`${effectPositionLabel} · ${ko.dilemmaEdit.effectMoveDown}`}
+                  >
+                    ↓
+                  </button>
+                </div>
+                <div className="dilemma-outcome-effect-body">
+                  <label className="dilemma-effect-field dilemma-effect-type-field">
+                    <span>{ko.dilemmaEdit.effectType}</span>
+                    <select
+                      value={effect.type}
+                      onChange={(event) =>
+                        replaceEffect(index, createDefaultDilemmaOutcomeEffect(event.target.value as DilemmaOutcomeEffectType, effect.id))
+                      }
+                    >
+                      {DILEMMA_EFFECT_TYPES.map((type) => (
+                        <option key={type} value={type}>
+                          {ko.dilemmaEdit.effectTypeLabels[type]}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <DilemmaOutcomeEffectFields effect={effect} onChange={(patch) => updateEffect(index, patch)} />
+                </div>
+                <button
+                  type="button"
+                  className="ghost-button icon-button danger-button dilemma-outcome-effect-remove"
+                  onClick={() => removeEffect(index)}
+                  aria-label={`${effectPositionLabel} · ${ko.common.delete}`}
+                >
+                  ×
+                </button>
+              </li>
+            );
+          })}
+        </ol>
+      ) : (
+        <p className="dilemma-outcome-effects-empty">{ko.dilemmaEdit.effectEmpty}</p>
+      )}
+    </section>
+  );
+}
+
+function DilemmaOutcomeEffectFields({
+  effect,
+  onChange,
+}: {
+  effect: EditableDilemmaOutcomeEffect;
+  onChange: (patch: Record<string, any>) => void;
+}) {
+  if (effect.type === "resource") {
+    return (
+      <>
+        <DilemmaResourceSelect value={effect.resourceId} onChange={(resourceId) => onChange({ resourceId })} />
+        <label className="dilemma-effect-field">
+          <span>{ko.dilemmaEdit.effectAmount}</span>
+          <input
+            type="number"
+            value={effect.amount ?? 0}
+            onChange={(event) => onChange({ amount: parseEffectInteger(event.target.value) })}
+          />
+        </label>
+      </>
+    );
+  }
+
+  if (effect.type === "chronicle") {
+    return (
+      <>
+        <DilemmaResourceSelect value={effect.resourceId} onChange={(resourceId) => onChange({ resourceId })} />
+        <label className="dilemma-effect-field">
+          <span>{ko.dilemmaEdit.effectPolarity}</span>
+          <select value={effect.polarity || "positive"} onChange={(event) => onChange({ polarity: event.target.value })}>
+            {CHRONICLE_POLARITIES.map((polarity) => (
+              <option key={polarity} value={polarity}>
+                {ko.dilemmaEdit.effectPolarityLabels[polarity]}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="dilemma-effect-field">
+          <span>{ko.dilemmaEdit.effectStickerCode}</span>
+          <input value={effect.stickerCode || ""} onChange={(event) => onChange({ stickerCode: event.target.value })} />
+        </label>
+      </>
+    );
+  }
+
+  if (effect.type === "envelope") {
+    return (
+      <label className="dilemma-effect-field">
+        <span>{ko.dilemmaEdit.effectEnvelopeCode}</span>
+        <input value={effect.envelopeCode || ""} onChange={(event) => onChange({ envelopeCode: event.target.value })} />
+      </label>
+    );
+  }
+
+  if (effect.type === "story" || effect.type === "event") {
+    return (
+      <>
+        <label className="dilemma-effect-field">
+          <span>{ko.dilemmaEdit.effectCardCode}</span>
+          <input value={effect.cardCode || ""} onChange={(event) => onChange({ cardCode: event.target.value })} />
+        </label>
+        <label className="dilemma-effect-field">
+          <span>{ko.dilemmaEdit.effectStatus}</span>
+          <select value={effect.status || "active"} onChange={(event) => onChange({ status: event.target.value })}>
+            {CAMPAIGN_CARD_STATUSES.map((status) => (
+              <option key={status} value={status}>
+                {ko.dilemmaEdit.effectStatusLabels[status]}
+              </option>
+            ))}
+          </select>
+        </label>
+      </>
+    );
+  }
+
+  if (effect.type === "mystery") {
+    return (
+      <>
+        <label className="dilemma-effect-field">
+          <span>{ko.dilemmaEdit.effectDossierLetter}</span>
+          <input value={effect.dossierLetter || ""} onChange={(event) => onChange({ dossierLetter: event.target.value })} />
+        </label>
+        <label className="dilemma-effect-field">
+          <span>{ko.dilemmaEdit.effectStorylineSymbol}</span>
+          <input value={effect.storylineSymbol || ""} onChange={(event) => onChange({ storylineSymbol: event.target.value })} />
+        </label>
+        <label className="dilemma-effect-field">
+          <span>{ko.dilemmaEdit.effectSlotKey}</span>
+          <input value={effect.slotKey || ""} onChange={(event) => onChange({ slotKey: event.target.value })} />
+        </label>
+      </>
+    );
+  }
+
+  if (effect.type === "king_death") {
+    return (
+      <label className="dilemma-effect-field">
+        <span>{ko.dilemmaEdit.effectKingDeathReason}</span>
+        <select value={effect.reason || "death_symbol"} onChange={(event) => onChange({ reason: event.target.value })}>
+          {KING_DEATH_REASONS.map((reason) => (
+            <option key={reason} value={reason}>
+              {ko.dilemmaEdit.effectKingDeathReasonLabels[reason]}
+            </option>
+          ))}
+        </select>
+      </label>
+    );
+  }
+
+  return (
+    <label className="dilemma-effect-field dilemma-effect-note-field">
+      <span>{ko.dilemmaEdit.effectNoteText}</span>
+      <textarea
+        maxLength={DILEMMA_OUTCOME_NOTE_MAX}
+        value={effect.text || ""}
+        placeholder={ko.dilemmaEdit.effectNotePlaceholder}
+        onChange={(event) => onChange({ text: event.target.value.slice(0, DILEMMA_OUTCOME_NOTE_MAX) })}
+      />
+    </label>
+  );
+}
+
+function DilemmaResourceSelect({
+  value,
+  onChange,
+}: {
+  value: PersonalResourceId | undefined;
+  onChange: (resourceId: PersonalResourceId) => void;
+}) {
+  return (
+    <label className="dilemma-effect-field">
+      <span>{ko.dilemmaEdit.effectResource}</span>
+      <select value={value || getDefaultResourceId()} onChange={(event) => onChange(event.target.value as PersonalResourceId)}>
+        {resourceCounters.map((resource) => (
+          <option key={resource.id} value={resource.id}>
+            {resource.label}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+function getEditableDilemmaOutcomeEffects(outcome: any): EditableDilemmaOutcomeEffect[] {
+  if (Array.isArray(outcome?.effects) && outcome.effects.length) {
+    return outcome.effects.filter((effect) => effect?.type !== "resource");
+  }
+
+  return [];
+}
+
+function createDefaultDilemmaOutcomeEffect(
+  type: DilemmaOutcomeEffectType,
+  id = createDilemmaOutcomeEffectId(),
+): EditableDilemmaOutcomeEffect {
+  if (type === "resource") {
+    return { id, type, resourceId: getDefaultResourceId(), amount: 1 };
+  }
+
+  if (type === "chronicle") {
+    return { id, type, resourceId: getDefaultResourceId(), polarity: "positive", stickerCode: "" };
+  }
+
+  if (type === "envelope") {
+    return { id, type, envelopeCode: "" };
+  }
+
+  if (type === "story" || type === "event") {
+    return { id, type, cardCode: "", status: "active" };
+  }
+
+  if (type === "mystery") {
+    return { id, type, dossierLetter: "", storylineSymbol: "", slotKey: "" };
+  }
+
+  if (type === "king_death") {
+    return { id, type, reason: "death_symbol" };
+  }
+
+  return { id, type, text: "" };
+}
+
+function createDilemmaOutcomeEffectId(): string {
+  return `effect-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function getDefaultResourceId(): PersonalResourceId {
+  return resourceCounters[0].id as PersonalResourceId;
+}
+
+function parseEffectInteger(value: string): number {
+  const number = parseInt(value, 10);
+  return Number.isFinite(number) ? number : 0;
 }
 
 export default DilemmaEditDialog;

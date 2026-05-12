@@ -104,7 +104,7 @@ export function SpecialAbilityLegendIcon({ type }: { type: string }) {
   return <RulebookAbilityImage className={`legend-rule-icon ${type}`} type={type} />;
 }
 
-export function RulebookAbilityImage({ className, type }: { className: string; type: string }) {
+function RulebookAbilityImage({ className, type }: { className: string; type: string }) {
   const src = (specialAbilityIconUrls as any)[type];
 
   if (!src) {
@@ -176,7 +176,7 @@ export function TokenIcon({ type }: { type: string }) {
   return <Icon aria-hidden="true" focusable="false" />;
 }
 
-export function CrownIcon({ tone = "crown" }) {
+function CrownIcon({ tone = "crown" }) {
   const className =
     tone === "prestige"
       ? "crown-icon crown-icon-light"

@@ -68,7 +68,7 @@ function hasExplicitMysqlTargeting(): boolean {
   });
 }
 
-export function isAllowedDevDatabaseName(name: string): boolean {
+function isAllowedDevDatabaseName(name: string): boolean {
   const lower = name.trim().toLowerCase();
   if (!lower) {
     return false;

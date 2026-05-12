@@ -300,7 +300,7 @@ export function getAchievementRequiredCount(detail: any): number {
 
 export function normalizeAchievementText(value: any): string {
   return typeof value === "string"
-    ? value.replace(/\r\n?/g, "\n").trim().slice(0, 300)
+    ? value.replace(/\r\n?/g, "\n").slice(0, 300)
     : "";
 }
 

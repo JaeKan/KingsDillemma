@@ -16,7 +16,7 @@ interface MentionLabel {
 let sortedValueMentionLabelsCache: MentionLabel[] | null = null;
 let sortedEffectMentionLabelsCache: MentionLabel[] | null = null;
 
-export function getSortedValueMentionLabels(): MentionLabel[] {
+function getSortedValueMentionLabels(): MentionLabel[] {
   if (!sortedValueMentionLabelsCache) {
     sortedValueMentionLabelsCache = valueMentionItems
       .map((item) => ({ kind: "value" as const, item, label: item.label }))
@@ -26,7 +26,7 @@ export function getSortedValueMentionLabels(): MentionLabel[] {
   return sortedValueMentionLabelsCache;
 }
 
-export function getSortedEffectMentionLabels(): MentionLabel[] {
+function getSortedEffectMentionLabels(): MentionLabel[] {
   if (!sortedEffectMentionLabelsCache) {
     sortedEffectMentionLabelsCache = achievementEffectSelectableOptions
       .map((item) => ({ kind: "effect" as const, item, label: item.label }))
@@ -36,7 +36,7 @@ export function getSortedEffectMentionLabels(): MentionLabel[] {
   return sortedEffectMentionLabelsCache;
 }
 
-export function findNextMentionTrigger(text: string, start: number): number {
+function findNextMentionTrigger(text: string, start: number): number {
   const valueIndex = text.indexOf("@", start);
   const effectIndex = text.indexOf("!", start);
 

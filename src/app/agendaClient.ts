@@ -62,8 +62,19 @@ export async function agendaRequest(options: any = {}) {
 }
 
 function mergeAgendaQueryResult(previous: any, result: any) {
+  const authenticated = Boolean(result.authenticated ?? previous?.authenticated ?? false);
+  const admin = Boolean(result.admin ?? previous?.admin ?? false);
+  const hasSpectatorFlag = Object.prototype.hasOwnProperty.call(result, "spectator");
+  const spectator = hasSpectatorFlag
+    ? Boolean(result.spectator)
+    : authenticated || admin
+      ? false
+      : Boolean(previous?.spectator ?? false);
+
   return {
-    authenticated: Boolean(result.authenticated ?? previous?.authenticated ?? false),
+    authenticated,
+    admin,
+    spectator,
     realtimeEnabled: Boolean(result.realtimeEnabled ?? previous?.realtimeEnabled ?? false),
     state: result.state ?? previous?.state ?? null,
   };

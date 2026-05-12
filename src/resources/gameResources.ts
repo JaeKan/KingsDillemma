@@ -31,6 +31,44 @@ export const sharedBoardSheetUrl =
   "https://docs.google.com/spreadsheets/d/1hJw0gYAeIafIFUJOBTDaC_2QR87CXyXABrOKvu3QG2M/edit?usp=sharing";
 
 export const rulebookPdfUrl = "/king_dilemma_rulebook.pdf";
+export const rulebookReferenceTips = [
+  {
+    id: "chronicle-ledger",
+    title: "연대기 장부",
+    body: "연대기 스티커는 지시된 위치에 붙이고 교체 규칙을 확인한 뒤, 왕국 연대기 점수 기록과 맞춰 장부에 남깁니다.",
+    reference: "한국어 룰북 p.25, p.44",
+  },
+  {
+    id: "campaign-ledger-envelopes",
+    title: "캠페인 장부와 봉투",
+    body: "봉투는 지시가 있을 때만 열고 표준 절차대로 내용물을 적용하며, 캠페인 장부에는 새 카드/스티커/기록 변화를 함께 남깁니다.",
+    reference: "한국어 룰북 p.26, p.42, p.44",
+  },
+  {
+    id: "next-game-setup",
+    title: "다음 게임 준비",
+    body: "다음 게임은 레거시 준비, 이야기/사건 카드, 연대기 노화 시작, 공개 의제 배정, 레거시 권력/자원 이동 순서를 확인합니다.",
+    reference: "한국어 룰북 p.10, p.11, p.12",
+  },
+  {
+    id: "mystery-envelope-70",
+    title: "미스터리 스티커와 70번 봉투",
+    body: "미스터리 스티커 조건을 확인하고 해당 트리거가 발생하면 70번 봉투 개봉 여부를 별도로 점검합니다.",
+    reference: "한국어 룰북 p.42",
+  },
+  {
+    id: "king-death-time-counter",
+    title: "시간 카운터와 왕의 죽음",
+    body: "딜레마 해결 뒤 시간 카운터를 이동하고 왕의 죽음 조건을 확인해 회기 종료 여부를 결정합니다.",
+    reference: "한국어 룰북 p.28-29",
+  },
+  {
+    id: "dilemma-backfill-photos",
+    title: "기존 기록 가져오기와 사진",
+    body: "딜레마 결과는 A-F 해결 절차와 왕국 연대기 기록을 근거로 보강하고, 사진은 실제 카드/보드 기록을 대조하는 보조 자료로 둡니다.",
+    reference: "한국어 룰북 p.23, p.44",
+  },
+];
 export const specialAbilityLegendImageUrl = "/rulebook-special-ability-legend.png";
 export const specialAbilityIconUrls = {
   instant: "/rulebook-special-ability-instant.png",
@@ -231,12 +269,12 @@ export type ScoreGuideFormulaPart =
   | { kind: "op"; text: string }
   | { kind: "result"; text: string };
 
-export type ScoreGuideListSection = {
+type ScoreGuideListSection = {
   heading: string;
   items: readonly string[];
 };
 
-export type ScoreGuideTableSection = {
+type ScoreGuideTableSection = {
   heading: string;
   paragraph?: string;
   table: {
@@ -367,13 +405,13 @@ export const mainScoreGuideContent = {
     {
       heading: "4. 명망/갈망 기록",
       paragraph:
-        "이 앱은 득점 합계와 순위까지만 자동 계산합니다. 명망/갈망은 득점 순위와 종료 조건을 아래 표에 대입해 각 가문 값에 직접 반영합니다.",
+        "이 앱은 득점 합계와 순위를 계산한 뒤, 종료 사유를 선택하면 아래 표의 명망/갈망과 이번 회기 비밀 의제 성향 1칸을 명시적 버튼으로 반영합니다.",
       table: {
         headers: ["조건", "1위", "2위", "3위", "4위", "Last"],
         rows: [
-          { rowHeader: "왕 사망", cells: ["명망 5", "명망 4", "명망 2, 갈망 1", "명망 2, 갈망 1", "갈망 2"] },
+          { rowHeader: "왕 사망", cells: ["명망 2", "명망 2", "명망 1, 갈망 1", "명망 1, 갈망 1", "갈망 2"] },
           { rowHeader: "상단 안정도", cells: ["명망 3", "명망 2", "명망 1", "명망 1", "갈망 2"] },
-          { rowHeader: "하단 안정도", cells: ["갈망 3", "갈망 2", "갈망 1", "갈망 1", "명망 2"] },
+          { rowHeader: "하단 안정도", cells: ["갈망 2", "갈망 1", "갈망 1", "갈망 1", "명망 2"] },
         ],
       },
     },
