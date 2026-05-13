@@ -122,6 +122,85 @@
   min-width: 0;
 }
 
+.dilemma-summary-head .panel-title-row {
+  flex-wrap: wrap;
+}
+
+.dilemma-header-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  margin-left: 4px;
+}
+
+.dilemma-header-meta-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 44px;
+  max-width: 170px;
+  padding: 4px 9px;
+  border-radius: 8px;
+  border: 1px solid rgba(234, 223, 189, 0.14);
+  background: rgba(5, 9, 9, 0.34);
+  white-space: nowrap;
+}
+
+.dilemma-header-meta-chip>span {
+  color: rgba(234, 223, 189, 0.52);
+  font-size: 0.7rem;
+  font-weight: 820;
+  line-height: 1;
+}
+
+.dilemma-header-meta-chip>strong {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--gold-2);
+  font-size: 0.82rem;
+  font-weight: 950;
+  line-height: 1;
+  text-overflow: ellipsis;
+}
+
+.dilemma-header-meta-chip--sticker {
+  padding-right: 9px;
+}
+
+.dilemma-header-sticker-wrap {
+  box-sizing: border-box;
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  padding: 3px;
+  border-radius: 5px;
+  border: 1px solid rgba(216, 178, 90, 0.24);
+  background: rgba(216, 178, 90, 0.06);
+  overflow: hidden;
+}
+
+.dilemma-header-sticker-wrap img,
+.dilemma-header-sticker-wrap .mystery-sticker-thumb-fallback {
+  position: absolute;
+  inset: 3px;
+  display: block;
+  width: calc(100% - 6px);
+  height: calc(100% - 6px);
+  object-fit: contain;
+  object-position: center;
+}
+
+.dilemma-header-sticker-wrap .mystery-sticker-thumb-fallback {
+  display: inline-grid;
+  place-items: center;
+  color: var(--gold-2);
+  font-size: 0.62rem;
+  font-weight: 900;
+}
+
 .panel-title-row {
   display: inline-flex;
   align-items: center;
@@ -256,7 +335,9 @@
 
 .dilemma-summary-meta-grid {
   display: grid;
-  grid-template-columns: auto auto auto 1fr;
+  grid-template-columns: max-content max-content max-content;
+  justify-content: start;
+  align-items: start;
   gap: 8px;
   min-width: 0;
 }
@@ -269,14 +350,6 @@
   align-items: stretch;
   justify-items: start;
   min-width: 0;
-}
-
-.dilemma-summary-meta-field--title {
-  justify-items: start;
-  width: 100%;
-  min-width: 0;
-  justify-self: stretch;
-  justify-items: stretch;
 }
 
 .dilemma-summary-meta-label {
@@ -316,20 +389,9 @@
   max-width: 100%;
 }
 
-.dilemma-summary-meta-field--title .dilemma-summary-meta-value {
-  display: grid;
-  align-items: center;
-  justify-items: start;
-  min-height: 34px;
-}
-
-.dilemma-summary-meta-value--title {
-  min-height: 34px;
-}
-
 @media (max-width: 520px) {
   .dilemma-summary-meta-grid {
-    grid-template-columns: auto auto auto minmax(0, 1fr);
+    grid-template-columns: max-content max-content max-content;
   }
 }
 
@@ -340,17 +402,6 @@
   line-height: 1.3;
 }
 
-.dilemma-summary-title-anchor {
-  flex: 1 1 4rem;
-  min-width: 0;
-  max-width: 100%;
-}
-
-.dilemma-summary-title-anchor .dilemma-summary-card-title {
-  display: block;
-  width: 100%;
-}
-
 .dilemma-summary-card-code {
   flex: 0 0 auto;
   color: var(--gold-2);
@@ -358,18 +409,6 @@
   font-weight: 950;
   line-height: 1.2;
   letter-spacing: 0.02em;
-}
-
-.dilemma-summary-card-title {
-  display: block;
-  min-width: 0;
-  overflow: hidden;
-  color: var(--ink-strong);
-  font-size: 0.8rem;
-  font-weight: 820;
-  line-height: 1.25;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .dilemma-summary-slot-pill {
@@ -411,11 +450,13 @@
 }
 
 .dilemma-summary-sticker-wrap {
+  box-sizing: border-box;
   flex: 0 0 auto;
   display: inline-grid;
   place-items: center;
-  width: 32px;
-  height: 32px;
+  width: 54px;
+  height: 78px;
+  padding: 5px;
   border-radius: 6px;
   border: 1px solid rgba(216, 178, 90, 0.26);
   background: rgba(216, 178, 90, 0.06);
@@ -424,9 +465,11 @@
 
 .dilemma-summary-sticker-wrap img,
 .dilemma-summary-sticker-wrap .mystery-sticker-thumb-fallback {
+  display: block;
   width: 100%;
   height: 100%;
   object-fit: contain;
+  object-position: center;
 }
 
 .dilemma-summary-sticker-wrap .mystery-sticker-thumb-fallback {
@@ -443,9 +486,9 @@
   gap: 10px 16px;
   align-items: start;
   min-width: 0;
-  margin-top: 4px;
-  padding-top: 10px;
-  border-top: 1px solid rgba(234, 223, 189, 0.1);
+  margin-top: 0;
+  padding-top: 0;
+  border-top: 0;
 }
 
 .dilemma-summary-role {
@@ -577,26 +620,42 @@
   font-size: 0.65rem;
 }
 
+.dilemma-summary-roles {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.dilemma-summary-roles-label {
+  margin: 0;
+}
+
 .dilemma-summary-vote-pills {
   display: flex;
   flex-wrap: wrap;
   align-items: stretch;
   gap: 8px;
   margin: 0;
-  padding-top: 10px;
-  border-top: 1px solid rgba(234, 223, 189, 0.1);
+  padding-top: 0;
+  border-top: 0;
   min-width: 0;
+}
+
+.dilemma-summary-vote-divider {
+  width: 100%;
+  height: 1px;
+  margin: 2px 0 0;
+  background: rgba(234, 223, 189, 0.12);
 }
 
 .dilemma-summary-vote-pill {
   flex: 1 1 min(140px, 100%);
   display: grid;
-  grid-template-rows: auto auto;
   row-gap: 3px;
   min-width: 0;
   max-width: 100%;
   padding: 6px 9px;
-  border-radius: 999px;
+  border-radius: 8px;
   border: 1px solid rgba(216, 178, 90, 0.22);
   background: rgba(8, 14, 14, 0.55);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
@@ -619,6 +678,16 @@
   line-height: 1.25;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.dilemma-summary-vote-pill__detail {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: var(--muted);
+  font-size: 0.68rem;
+  font-weight: 760;
+  line-height: 1.28;
+  white-space: pre-wrap;
 }
 
 @media (max-width: 520px) {
@@ -820,6 +889,13 @@
   white-space: pre-wrap;
 }
 
+.dilemma-display-mention-token {
+  max-width: 100%;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: keep-all;
+}
+
 .dilemma-outcome-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -848,6 +924,67 @@
 .dilemma-outcome-preview header strong {
   color: var(--gold-2);
   font-size: 0.84rem;
+}
+
+.dilemma-front-polarity-panel {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.dilemma-outcome-back-panel {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+  padding-top: 8px;
+  border-top: 1px solid rgba(234, 223, 189, 0.15);
+}
+
+.dilemma-outcome-result {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.dilemma-outcome-result-heading {
+  margin: 0;
+}
+
+.dilemma-outcome-result-preview {
+  margin: 0;
+  color: var(--ink-strong);
+  font-size: 0.78rem;
+  font-weight: 800;
+  line-height: 1.34;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.dilemma-outcome-effect-preview {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.dilemma-outcome-effect-preview-heading {
+  margin: 0;
+}
+
+.dilemma-outcome-effect-preview-list {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  margin: 0;
+  padding-left: 1rem;
+  color: var(--ink);
+  font-size: 0.72rem;
+  font-weight: 780;
+  line-height: 1.3;
+}
+
+.dilemma-outcome-effect-preview-list li {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .dilemma-resource-delta-preview {
@@ -923,17 +1060,21 @@
   min-width: 0;
 }
 
-.dilemma-photo-strip a {
+.dilemma-photo-strip-button {
   display: block;
+  width: 100%;
   overflow: hidden;
+  margin: 0;
+  padding: 0;
   border: 1px solid rgba(216, 178, 90, 0.24);
   border-radius: var(--radius);
   background: rgba(5, 9, 9, 0.3);
+  cursor: zoom-in;
   aspect-ratio: 4 / 3;
 }
 
 .dilemma-photo-strip>.app-tooltip-anchor,
-.dilemma-photo-strip>.app-tooltip-anchor>a {
+.dilemma-photo-strip>.app-tooltip-anchor>.dilemma-photo-strip-button {
   display: block;
   min-width: 0;
 }
@@ -943,6 +1084,39 @@
   width: 100%;
   height: 100%;
   object-fit: cover;
+}
+
+.dilemma-photo-lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 1400;
+  display: grid;
+  place-items: center;
+  padding: 28px;
+  background: rgba(2, 5, 5, 0.82);
+}
+
+.dilemma-photo-lightbox img {
+  max-width: min(100%, 1120px);
+  max-height: min(100%, 82vh);
+  object-fit: contain;
+  border-radius: var(--radius);
+  box-shadow: 0 20px 70px rgba(0, 0, 0, 0.55);
+}
+
+.dilemma-photo-lightbox-close {
+  position: fixed;
+  top: 18px;
+  right: 18px;
+  width: 36px;
+  height: 36px;
+  border: 1px solid rgba(234, 223, 189, 0.24);
+  border-radius: 999px;
+  background: rgba(8, 14, 14, 0.9);
+  color: var(--ink-strong);
+  font-size: 1.5rem;
+  line-height: 1;
+  cursor: pointer;
 }
 
 .dilemma-photo-editor {
@@ -1085,9 +1259,11 @@
 }
 
 .dilemma-history-dialog {
-  width: min(100%, 980px);
+  box-sizing: border-box;
+  width: min(calc(100vw - 24px), 1120px);
   max-height: calc(100dvh - 36px);
   overflow-y: auto;
+  overflow-x: hidden;
   border: 1px solid rgba(234, 223, 189, 0.24);
   border-radius: var(--radius);
   background: rgba(17, 25, 24, 0.98);
@@ -1100,9 +1276,10 @@
 
 .dilemma-history-layout {
   display: grid;
-  grid-template-columns: minmax(190px, 0.35fr) minmax(0, 1fr);
+  grid-template-columns: minmax(170px, 220px) minmax(0, 1fr);
   gap: 12px;
   min-width: 0;
+  overflow-x: hidden;
 }
 
 .dilemma-history-list {
@@ -1156,31 +1333,58 @@
 .dilemma-history-detail {
   display: grid;
   align-content: start;
-  gap: 9px;
+  gap: 10px;
   min-width: 0;
+  overflow: hidden;
+}
+
+.dilemma-history-meta-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  justify-content: stretch;
+}
+
+.dilemma-history-meta-grid .dilemma-summary-meta-field {
+  max-width: 100%;
+  grid-template-rows: auto 48px;
+  align-self: stretch;
+}
+
+.dilemma-history-meta-grid .dilemma-summary-meta-value {
+  box-sizing: border-box;
+  min-height: 48px;
+  height: 48px;
+  max-width: 100%;
+  width: 100%;
+  overflow: hidden;
+}
+
+.dilemma-history-meta-grid .dilemma-summary-card-code {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dilemma-history-sticker-wrap {
+  width: 34px;
+  height: 34px;
+  padding: 3px;
+  border-radius: 999px;
+}
+
+.dilemma-history-sticker-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .dilemma-history-detail-head {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   gap: 10px;
   min-width: 0;
-}
-
-.dilemma-history-detail-head>div {
-  min-width: 0;
-}
-
-.dilemma-history-detail-head h3 {
-  min-width: 0;
-  overflow: hidden;
-  margin: 0;
-  color: var(--ink-strong);
-  font-size: 1rem;
-  line-height: 1.15;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .dilemma-history-delete {
@@ -1188,6 +1392,161 @@
   min-height: 34px;
   font-size: 0.8rem;
   padding-inline: 11px;
+}
+
+.dilemma-history-board-gallery {
+  display: grid;
+  grid-column: 1 / -1;
+  gap: 10px;
+  min-width: 0;
+  padding: 11px;
+  border: 1px solid rgba(234, 223, 189, 0.13);
+  border-radius: var(--radius);
+  background:
+    linear-gradient(150deg, rgba(85, 124, 112, 0.08), transparent 60%),
+    rgba(5, 9, 9, 0.2);
+  overflow: hidden;
+}
+
+.dilemma-history-board-gallery-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+}
+
+.dilemma-history-board-gallery-head>div {
+  min-width: 0;
+}
+
+.dilemma-history-board-gallery-head h3 {
+  margin: 0;
+  color: var(--ink-strong);
+  font-size: 0.95rem;
+  line-height: 1.15;
+}
+
+.dilemma-history-board-gallery-head>span {
+  flex: 0 0 auto;
+  color: var(--muted);
+  font-size: 0.74rem;
+  font-weight: 850;
+}
+
+.dilemma-history-board-gallery-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(180px, 100%), 1fr));
+  gap: 8px;
+  min-width: 0;
+}
+
+.dilemma-history-board-photo-card {
+  display: grid;
+  grid-template-rows: minmax(92px, 1fr) auto;
+  gap: 8px;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  padding: 8px;
+  border: 1px solid rgba(234, 223, 189, 0.12);
+  border-radius: 8px;
+  background: rgba(234, 223, 189, 0.045);
+  color: inherit;
+  text-align: left;
+  box-shadow: none;
+  cursor: pointer;
+}
+
+.dilemma-history-board-photo-card.selected {
+  border-color: rgba(216, 178, 90, 0.4);
+  background: rgba(216, 178, 90, 0.08);
+}
+
+.dilemma-history-board-photo-card:hover {
+  border-color: rgba(216, 178, 90, 0.32);
+  background: rgba(216, 178, 90, 0.07);
+}
+
+.dilemma-history-board-photo-card:focus-visible {
+  outline: 2px solid rgba(216, 178, 90, 0.56);
+  outline-offset: 2px;
+}
+
+.dilemma-history-board-photo-frame {
+  display: grid;
+  place-items: center;
+  min-width: 0;
+  min-height: 0;
+  aspect-ratio: 16 / 10;
+  overflow: hidden;
+  border: 1px solid rgba(234, 223, 189, 0.14);
+  border-radius: 7px;
+  background:
+    linear-gradient(135deg, rgba(216, 178, 90, 0.06), transparent 60%),
+    rgba(5, 9, 9, 0.38);
+}
+
+.dilemma-history-board-photo-frame img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.dilemma-history-board-photo-meta {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 2px 8px;
+  min-width: 0;
+}
+
+.dilemma-history-board-photo-meta strong,
+.dilemma-history-board-photo-meta span {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dilemma-history-board-photo-meta strong {
+  grid-column: 1 / -1;
+  color: var(--ink-strong);
+  font-size: 0.8rem;
+  font-weight: 920;
+}
+
+.dilemma-history-board-photo-meta span,
+.dilemma-history-board-photo-meta em,
+.dilemma-history-board-gallery-empty {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
+.dilemma-history-board-photo-meta em {
+  justify-self: end;
+  font-style: normal;
+}
+
+.dilemma-history-board-gallery-empty {
+  margin: 0;
+}
+
+@media (max-width: 980px) {
+  .dilemma-history-meta-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 680px) {
+  .dilemma-history-dialog {
+    width: calc(100vw - 16px);
+  }
+
+  .dilemma-history-meta-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 .inventory-section {

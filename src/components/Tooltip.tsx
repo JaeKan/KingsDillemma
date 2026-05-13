@@ -68,6 +68,7 @@ export function Tooltip({
 }: TooltipProps) {
   const anchorRef = useRef<HTMLSpanElement>(null);
   const tooltipRef = useRef<HTMLDivElement>(null);
+  const openTriggerRef = useRef<"focus" | "pointer" | null>(null);
   const [open, setOpen] = useState(false);
   const [position, setPosition] = useState<Position>({ x: 0, y: 0, placement: "top" });
   const tooltipId = useId();
@@ -79,31 +80,43 @@ export function Tooltip({
 
     setPosition(getTooltipPosition(anchorRef.current, placement, tooltipRef.current));
   }, [hasLabel, placement]);
-  const show = useCallback(() => {
+  const show = useCallback((trigger: "focus" | "pointer") => {
     if (!hasLabel) {
       return;
     }
 
+    openTriggerRef.current = trigger;
     updatePosition();
     setOpen(true);
   }, [hasLabel, updatePosition]);
-  const hide = useCallback(() => setOpen(false), []);
+  const hide = useCallback(() => {
+    openTriggerRef.current = null;
+    setOpen(false);
+  }, []);
   const handleAnchorFocus = useCallback(
     (event: React.FocusEvent<HTMLSpanElement>) => {
       if (!event?.nativeEvent || event.nativeEvent.isTrusted === false) {
         return;
       }
 
-      show();
+      if (event.currentTarget.matches(":focus-visible")) {
+        show("focus");
+      }
     },
     [show],
   );
   const handleAnchorMouseEnter = useCallback(() => {
-    show();
+    show("pointer");
   }, [show]);
   const handleAnchorMouseLeave = useCallback(() => {
     hide();
   }, [hide]);
+
+  useEffect(() => {
+    if (!hasLabel) {
+      hide();
+    }
+  }, [hasLabel, hide]);
 
   useLayoutEffect(() => {
     if (open) {
@@ -117,14 +130,34 @@ export function Tooltip({
     }
 
     const handleUpdate = () => updatePosition();
+    const handlePointerMove = (event: PointerEvent) => {
+      if (openTriggerRef.current !== "pointer") {
+        return;
+      }
+
+      const anchor = anchorRef.current;
+
+      if (!anchor || !(event.target instanceof Node)) {
+        return;
+      }
+
+      if (anchor.contains(event.target)) {
+        return;
+      }
+
+      hide();
+    };
+
     window.addEventListener("resize", handleUpdate);
     window.addEventListener("scroll", handleUpdate, true);
+    document.addEventListener("pointermove", handlePointerMove, true);
 
     return () => {
       window.removeEventListener("resize", handleUpdate);
       window.removeEventListener("scroll", handleUpdate, true);
+      document.removeEventListener("pointermove", handlePointerMove, true);
     };
-  }, [open, updatePosition]);
+  }, [hide, open, updatePosition]);
 
   return (
     <>
@@ -148,6 +181,8 @@ export function Tooltip({
         onFocus={handleAnchorFocus}
         onMouseEnter={handleAnchorMouseEnter}
         onMouseLeave={handleAnchorMouseLeave}
+        onPointerEnter={handleAnchorMouseEnter}
+        onPointerLeave={handleAnchorMouseLeave}
         onPointerDown={hide}
       >
         {children}

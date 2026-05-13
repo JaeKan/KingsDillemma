@@ -2,11 +2,12 @@ export type HouseId = string;
 type Phase = "house-select" | "discard" | "choose" | "complete";
 
 export type PersonalResourceId = "influence" | "wealth" | "morale" | "welfare" | "knowledge";
+export type DilemmaResultMarkerId = PersonalResourceId | "story";
 export type DilemmaResourceDeltas = Partial<Record<PersonalResourceId, number>>;
 export type OpenAgendaTokenPolarity = "positive" | "negative";
 export type ChronicleResourceId = PersonalResourceId;
 export type ChroniclePolarity = "positive" | "negative";
-export type DilemmaResourcePolarities = Partial<Record<PersonalResourceId, ChroniclePolarity>>;
+export type DilemmaResourcePolarities = Partial<Record<DilemmaResultMarkerId, ChroniclePolarity>>;
 
 export type RecordAttachment = {
   id: string;
@@ -148,15 +149,27 @@ export type HouseProgress = {
 type DilemmaVoteSide = "" | "aye" | "nay";
 export type DilemmaBallotSide = "" | "aye" | "nay" | "pass";
 
-export type DilemmaOutcomeEffect =
-  | { id: string; type: "resource"; resourceId: PersonalResourceId; amount: number }
-  | { id: string; type: "chronicle"; resourceId: PersonalResourceId; polarity: ChroniclePolarity; stickerCode: string }
-  | { id: string; type: "envelope"; envelopeCode: string }
-  | { id: string; type: "story"; cardCode: string; status: "active" | "completed" | "archived" }
-  | { id: string; type: "event"; cardCode: string; status: "active" | "completed" | "archived" }
-  | { id: string; type: "mystery"; dossierLetter: string; storylineSymbol: string; slotKey: string }
-  | { id: string; type: "king_death"; reason: "death_symbol" | "fifth_card" | "card_text" }
-  | { id: string; type: "note"; text: string };
+type DilemmaOutcomeEffectBase = {
+  id: string;
+  photos?: RecordAttachment[];
+};
+
+export type DilemmaOutcomeEffect = DilemmaOutcomeEffectBase & (
+  | { type: "resource"; resourceId: PersonalResourceId; amount: number }
+  | { type: "chronicle"; resourceId: PersonalResourceId; polarity: ChroniclePolarity; stickerCode: string }
+  | { type: "envelope"; envelopeCode: string }
+  | {
+      id: string;
+      type: "story";
+      cardCode: string;
+      status: "active" | "completed" | "archived";
+      signedByHouseId?: HouseId;
+      signedByName?: string;
+    }
+  | { type: "event"; cardCode: string; status: "active" | "completed" | "archived" }
+  | { type: "mystery"; dossierLetter: string; storylineSymbol: string; slotKey: string }
+  | { type: "note"; text: string }
+);
 
 export type DilemmaOutcome = {
   preview: string;
@@ -209,23 +222,6 @@ export type DilemmaVoteSettlement = {
 };
 export type SessionEndCause = "king_death" | "abdication_top" | "abdication_bottom";
 export type DilemmaEndTrigger = "" | "none" | SessionEndCause;
-export type DilemmaKingDeathReason = "" | "death_symbol" | "fifth_card" | "card_text";
-export type DilemmaMomentumDirection = "" | "positive" | "negative";
-export type DilemmaResolutionBoardState = {
-  resourceStartPositions: DilemmaResourceDeltas;
-  resourceMovements: DilemmaResourceDeltas;
-  resourceFinalPositions: DilemmaResourceDeltas;
-  resourceMomentum: Partial<Record<PersonalResourceId, DilemmaMomentumDirection>>;
-  resourceMomentumMarkers: Partial<Record<PersonalResourceId, boolean>>;
-  resourceFinalMomentum: Partial<Record<PersonalResourceId, DilemmaMomentumDirection>>;
-  resourceFinalMomentumMarkers: Partial<Record<PersonalResourceId, boolean>>;
-  stabilityStart: number;
-  stabilityMovement: number;
-  stabilityFinal: number;
-  endTrigger: DilemmaEndTrigger;
-  kingDeathReason: DilemmaKingDeathReason;
-  memo: string;
-};
 
 export type DilemmaPhoto = {
   id: string;
@@ -277,7 +273,6 @@ export type DilemmaRecord = {
   voteNotes: string;
   resolutionNotes: string;
   resolutionChecklist?: DilemmaResolutionChecklist;
-  resolutionBoardState: DilemmaResolutionBoardState;
   votes: Partial<Record<HouseId, DilemmaVote>>;
   voteSettlement: DilemmaVoteSettlement;
   photos: DilemmaPhoto[];
@@ -345,7 +340,6 @@ export type RedactedState = {
   sessionEndCause: DilemmaEndTrigger;
   sessionEndRewardsAppliedAt: string;
   sessionEndRewardsAppliedBy: HouseId | null;
-  currentSessionResolvedDilemmaCount: number;
   currentPlayer: HouseId | null;
   currentHouseId: HouseId | null;
   isCurrentTurn: boolean;
@@ -353,7 +347,7 @@ export type RedactedState = {
   canChoose: boolean;
   dilemmaVoteTurn: HouseId | null;
   canVoteDilemma: boolean;
-  /** 집계 기록(apply) 가능 — 로그인 중 투표 참여 가문 중 누구나(전원 투표 완료 시); 작성자 판별에는 사용하지 않음 */
+  /** 집계 기록(apply) 가능 — 딜레마 작성자 또는 관리자이며 전원 투표 완료 시 */
   canApplyDilemmaVotes: boolean;
   /** 역할 지정 가능 — 빈 딜레마에서 플로우 소유자가 없거나 세션 가문이 소유자일 때만 true */
   canEditDilemmaRoles: boolean;

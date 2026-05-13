@@ -3,9 +3,7 @@ import type { RedactedHouse } from "../src/types/game.ts";
 import {
   isDilemmaResolutionEntryPending,
   createDilemmaDraft,
-  shouldTriggerFifthCardKingDeath,
   getOrderedDilemmaResourceEffects,
-  getDilemmaOutcomeKingDeathReason,
   normalizeDilemmaOutcome,
   normalizeResolutionChecklist,
 } from "../src/utils/dilemma-helpers.ts";
@@ -36,8 +34,8 @@ const baseCard = {
   title: "Test",
   context: "c",
   question: "q",
-  aye: { preview: "a", result: "ar", resourceDeltas: {} },
-  nay: { preview: "n", result: "nr", resourceDeltas: {} },
+  aye: { preview: "a", result: "", resourceDeltas: {} },
+  nay: { preview: "n", result: "", resourceDeltas: {} },
 };
 
 assert.equal(
@@ -121,7 +119,6 @@ const normalizedEffects = normalizeDilemmaOutcome({
   effects: [
     { id: "r1", type: "resource", resourceId: "wealth", amount: 3 },
     { id: "bad", type: "resource", resourceId: "unknown", amount: 4 },
-    { id: "death", type: "king_death", reason: "death_symbol" },
     { id: "note", type: "note", text: "x".repeat(600) },
     { id: "spoiler", type: "story", status: "active", text: "hidden story text" },
   ],
@@ -132,21 +129,45 @@ assert.deepEqual(getOrderedDilemmaResourceEffects(normalizedEffects), [
 ]);
 assert.deepEqual(normalizedEffects.resourceDeltas, { wealth: 3 });
 assert.deepEqual(normalizedEffects.resourcePolarities, { wealth: "positive" });
-assert.equal(normalizedEffects.effects.some((effect) => effect.type === "king_death"), true);
-assert.equal(getDilemmaOutcomeKingDeathReason(normalizedEffects), "death_symbol");
 assert.equal(normalizedEffects.effects.some((effect) => effect.type === "story"), false);
 assert.equal(normalizedEffects.effects.find((effect) => effect.type === "note")?.text.length, 500);
-assert.equal(
-  createDilemmaDraft({
-    ...baseCard,
-    selectedOutcome: "aye",
-    aye: {
-      effects: [{ id: "death", type: "king_death", reason: "card_text" }],
+
+const normalizedStorySigner = normalizeDilemmaOutcome({
+  effects: [
+    {
+      id: "story-signer",
+      type: "story",
+      cardCode: "S.99.0.F",
+      status: "active",
+      signedByHouseId: "solad",
+      signedByName: "House Solad",
+      photos: [
+        {
+          id: "effect-photo-1",
+          name: "card.jpg",
+          mimeType: "image/jpeg",
+          dataUrl: "data:image/jpeg;base64,abc",
+          createdAt: "2026-05-13T00:00:00.000Z",
+        },
+      ],
     },
-  }).resolutionBoardState.endTrigger,
-  "king_death",
-);
-assert.equal(shouldTriggerFifthCardKingDeath(4, true), false);
-assert.equal(shouldTriggerFifthCardKingDeath(5, false), false);
-assert.equal(shouldTriggerFifthCardKingDeath(5, true), true);
-assert.equal(shouldTriggerFifthCardKingDeath("5.9", true), true);
+  ],
+});
+
+assert.deepEqual(normalizedStorySigner.effects[0], {
+  id: "story-signer",
+  type: "story",
+  cardCode: "S.99.0.F",
+  status: "active",
+  signedByHouseId: "solad",
+  signedByName: "House Solad",
+  photos: [
+    {
+      id: "effect-photo-1",
+      name: "card.jpg",
+      mimeType: "image/jpeg",
+      dataUrl: "data:image/jpeg;base64,abc",
+      createdAt: "2026-05-13T00:00:00.000Z",
+    },
+  ],
+});

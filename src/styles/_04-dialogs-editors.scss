@@ -133,6 +133,7 @@
   justify-items: center;
   background: rgba(6, 12, 11, 0.72);
   padding: 18px;
+  overflow-x: hidden;
 }
 
 .session-end-dialog {
@@ -372,21 +373,23 @@
 }
 
 .dilemma-resolution-dialog {
-  width: min(100%, 640px);
+  width: min(780px, calc(100vw - 24px));
 }
 
 .dilemma-resolution-form {
   gap: 20px;
+  min-width: 0;
 }
 
 .dilemma-resolution-step {
   margin: 0;
-  padding: 14px 16px;
-  border: 1px solid rgba(234, 223, 189, 0.14);
-  border-radius: 10px;
-  background: rgba(8, 12, 11, 0.55);
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
   display: grid;
-  gap: 10px;
+  gap: 12px;
 }
 
 .dilemma-resolution-step-title {
@@ -411,6 +414,7 @@
 }
 
 .dilemma-resolution-vote-notes {
+  min-width: 0;
   margin: 0;
   padding: 10px 12px;
   border-radius: 8px;
@@ -444,7 +448,7 @@
 
 .dilemma-resolution-checklist-row {
   display: grid;
-  grid-template-columns: auto 1fr;
+  grid-template-columns: 18px minmax(0, 1fr);
   gap: 8px;
   align-items: start;
   font-size: 0.8rem;
@@ -453,8 +457,25 @@
   cursor: pointer;
 }
 
-.dilemma-resolution-checklist-row input {
-  margin-top: 0.2rem;
+.dilemma-resolution-checklist-row input[type="checkbox"] {
+  justify-self: center;
+  width: 16px;
+  min-height: 16px;
+  height: 16px;
+  margin: 1px 0 0;
+  padding: 0;
+  border-radius: 3px;
+  accent-color: var(--gold-2);
+}
+
+.dilemma-resolution-checklist-row input[type="checkbox"]:focus {
+  outline: 2px solid rgba(216, 178, 90, 0.54);
+  outline-offset: 2px;
+}
+
+.dilemma-resolution-checklist-row span {
+  min-width: 0;
+  line-height: 1.35;
 }
 
 .dilemma-edit-resolution-hint {
@@ -944,11 +965,16 @@
 }
 
 .dilemma-dialog-grid.compact.dilemma-card-title-row {
+  align-items: start;
   grid-template-columns: minmax(120px, 170px) minmax(0, 1fr);
 }
 
 .dilemma-field-card-code {
   max-width: 172px;
+}
+
+.dilemma-card-title-row .dilemma-field input {
+  min-height: 48px;
 }
 
 .visually-hidden {
@@ -975,7 +1001,7 @@
 }
 
 .mystery-sticker-picker-head h3 {
-  margin: 0 0 2px;
+  margin: 0;
   font-family: inherit;
   font-size: 0.72rem;
   font-weight: 930;
@@ -1137,6 +1163,51 @@
   font-weight: 930;
   letter-spacing: 0;
   line-height: 1;
+}
+
+.dilemma-field-label-with-help {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  width: fit-content;
+}
+
+.dilemma-field-label-with-help > label,
+.dilemma-field-label-with-help > span {
+  min-width: 0;
+}
+
+.dilemma-field-help-tooltip,
+.dilemma-field-help-button {
+  flex: 0 0 auto;
+}
+
+.dilemma-field-help-button {
+  width: 20px;
+  min-width: 20px;
+  height: 20px;
+  min-height: 20px;
+}
+
+.dilemma-field-help-button svg {
+  width: 14px;
+  height: 14px;
+}
+
+.dilemma-resolution-dialog .dilemma-field>span,
+.dilemma-resolution-dialog .dilemma-field-label-with-help>label,
+.dilemma-resolution-dialog .dilemma-field-label-with-help>span,
+.dilemma-resolution-dialog .dilemma-resource-deltas-heading,
+.dilemma-resolution-dialog .dilemma-outcome-effects-heading,
+.dilemma-resolution-dialog .dilemma-effect-field span {
+  color: var(--muted);
+  font-family: inherit;
+  font-size: 0.72rem;
+  font-weight: 930;
+  letter-spacing: 0;
+  line-height: 1;
+  text-transform: none;
 }
 
 .dilemma-field input,
@@ -1500,14 +1571,14 @@
 .dilemma-outcome-edit-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
+  gap: 14px;
   min-width: 0;
 }
 
 .dilemma-outcome-editor {
   display: grid;
-  gap: 9px;
-  padding: 12px;
+  gap: 12px;
+  padding: 14px;
 }
 
 .dilemma-outcome-editor.selected {
@@ -1533,6 +1604,19 @@
   background:
     linear-gradient(165deg, rgba(216, 178, 90, 0.07), transparent 55%),
     rgba(5, 9, 9, 0.28);
+}
+
+.dilemma-resource-deltas-edit--compact {
+  gap: 10px;
+  padding: 12px;
+  border-radius: 8px;
+  background:
+    linear-gradient(165deg, rgba(216, 178, 90, 0.06), transparent 55%),
+    rgba(5, 9, 9, 0.2);
+}
+
+.dilemma-resource-deltas-edit--compact .dilemma-resource-deltas-heading {
+  font-size: 0.62rem;
 }
 
 .dilemma-resource-deltas-heading {
@@ -1628,24 +1712,109 @@
   outline-offset: 2px;
 }
 
-.dilemma-resolution-result-entry,
+.dilemma-resolution-resource-deltas-label {
+  margin-bottom: -4px;
+}
+
 .dilemma-resolution-resource-deltas {
   display: grid;
   gap: 10px;
   min-width: 0;
 }
 
-.dilemma-resolution-result-entry {
-  margin-top: 12px;
-}
-
 .dilemma-resolution-resource-deltas {
-  padding: 11px 12px 12px;
+  gap: 8px;
+  padding: 10px;
   border: 1px solid rgba(234, 223, 189, 0.12);
-  border-radius: 10px;
+  border-radius: 8px;
   background:
     linear-gradient(165deg, rgba(216, 178, 90, 0.07), transparent 55%),
-    rgba(5, 9, 9, 0.28);
+    rgba(5, 9, 9, 0.2);
+}
+
+.dilemma-resolution-resource-deltas .dilemma-resource-deltas-rows--resolution {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(130px, 100%), 1fr));
+  gap: 8px;
+  width: 100%;
+}
+
+.dilemma-resource-deltas-rows--resolution .dilemma-resource-delta-edit-row--compact {
+  grid-template-columns: 18px minmax(2.5rem, 1fr) minmax(4rem, 5rem);
+  gap: 7px;
+  min-height: 40px;
+  padding: 5px 7px;
+}
+
+.dilemma-resource-deltas-rows--resolution .dilemma-resource-delta-edit-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dilemma-resource-deltas-rows--resolution .dilemma-resource-delta-edit-input {
+  width: 100%;
+  min-height: 32px;
+}
+
+.dilemma-resource-deltas-rows--compact {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.dilemma-resource-deltas-rows--markers {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(160px, 100%), 1fr));
+  gap: 10px 12px;
+}
+
+.dilemma-resource-delta-edit-row--compact {
+  grid-template-columns: 16px max-content 3.15rem;
+  gap: 5px;
+  min-height: 30px;
+  padding: 3px 5px;
+  border-color: rgba(234, 223, 189, 0.1);
+  border-radius: 7px;
+  background: rgba(9, 14, 13, 0.46);
+}
+
+.dilemma-resource-delta-edit-row--marker {
+  grid-template-columns: 18px minmax(2.4rem, 1fr) minmax(5.25rem, 5.75rem);
+  gap: 7px;
+  min-height: 38px;
+  padding: 5px 7px;
+}
+
+.dilemma-resource-delta-edit-row--compact .dilemma-resource-delta-edit-label {
+  display: contents;
+}
+
+.dilemma-resource-delta-edit-row--compact .dilemma-resource-delta-edit-label svg {
+  width: 16px;
+  height: 16px;
+}
+
+.dilemma-resource-delta-edit-row--compact .dilemma-resource-delta-edit-label .leader-token-emoji {
+  font-size: 16px;
+}
+
+.dilemma-resource-delta-edit-row--compact .dilemma-resource-delta-edit-name {
+  font-size: 0.68rem;
+}
+
+.dilemma-resource-delta-edit-row--compact .dilemma-resource-delta-edit-input {
+  width: 3.15rem;
+  min-height: 28px;
+  padding-inline: 4px;
+  font-size: 0.76rem;
+}
+
+.dilemma-resource-delta-edit-row--marker .dilemma-resource-polarity-select {
+  width: 100%;
+  min-height: 32px;
+  padding-inline: 7px;
+  font-size: 0.76rem;
 }
 
 .dilemma-outcome-effects-edit {
@@ -1660,12 +1829,68 @@
     rgba(5, 9, 9, 0.24);
 }
 
+.dilemma-resolution-dialog .dilemma-outcome-effects-edit {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.dilemma-resolution-effects-edit {
+  display: grid;
+  min-width: 0;
+}
+
+.dilemma-resolution-effects-edit .dilemma-outcome-effects-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 12px;
+  min-height: 40px;
+}
+
+.dilemma-resolution-effects-edit .dilemma-outcome-effects-add {
+  display: flex;
+  align-items: center;
+  justify-self: end;
+  gap: 8px;
+  max-width: 100%;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  overflow: visible;
+}
+
+.dilemma-resolution-effects-edit .dilemma-outcome-effects-add label {
+  flex: 0 1 11rem;
+  min-width: 0;
+}
+
+.dilemma-resolution-effects-edit .dilemma-outcome-effects-add select {
+  width: 100%;
+  border-color: rgba(234, 223, 189, 0.2);
+}
+
+.dilemma-resolution-effects-edit .dilemma-outcome-effects-add .compact-button {
+  flex: 0 0 auto;
+  min-width: 0;
+}
+
 .dilemma-outcome-effects-head,
 .dilemma-outcome-effects-add {
   display: flex;
   align-items: center;
   gap: 8px;
   min-width: 0;
+}
+
+.dilemma-outcome-effects-add {
+  gap: 6px;
+  padding: 3px;
+  border: 1px solid rgba(234, 223, 189, 0.12);
+  border-radius: 9px;
+  background: rgba(5, 9, 9, 0.24);
 }
 
 .dilemma-outcome-effects-head {
@@ -1699,11 +1924,24 @@
 
 .dilemma-outcome-effects-add select {
   width: 8rem;
+  min-height: 34px;
+  border-color: transparent;
+  background: rgba(9, 14, 13, 0.72);
 }
 
 .compact-button {
   min-height: 32px;
   padding: 0 10px;
+}
+
+.dilemma-outcome-effects-add .compact-button {
+  min-height: 34px;
+  border-radius: 7px;
+}
+
+.dilemma-outcome-effects-add .compact-button svg {
+  width: 16px;
+  height: 16px;
 }
 
 .dilemma-outcome-effects-list {
@@ -1717,32 +1955,23 @@
 
 .dilemma-outcome-effect-row {
   display: grid;
-  grid-template-columns: 34px minmax(0, 1fr) 32px;
-  gap: 7px;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
+  align-items: start;
   min-width: 0;
-  padding: 7px;
+  padding: 10px;
   border: 1px solid rgba(234, 223, 189, 0.12);
   border-radius: 8px;
-  background: rgba(234, 223, 189, 0.045);
+  background:
+    linear-gradient(155deg, rgba(85, 124, 112, 0.06), transparent 58%),
+    rgba(234, 223, 189, 0.04);
 }
 
-.dilemma-outcome-effect-order {
-  display: grid;
-  gap: 4px;
-  justify-items: center;
-  align-content: start;
-}
-
-.dilemma-outcome-effect-order > span {
-  display: grid;
-  place-items: center;
-  width: 28px;
-  height: 24px;
-  border-radius: 999px;
-  background: rgba(216, 178, 90, 0.13);
-  color: var(--gold-2);
-  font-size: 0.7rem;
-  font-weight: 950;
+.dilemma-outcome-effect-row.is-dragging {
+  border-color: rgba(216, 178, 90, 0.32);
+  background: rgba(216, 178, 90, 0.08);
+  opacity: 0.82;
+  z-index: 2;
 }
 
 .icon-button {
@@ -1760,16 +1989,64 @@
   opacity: 0.38;
 }
 
+.dilemma-outcome-effect-drag-handle {
+  align-self: center;
+  color: var(--gold-2);
+  cursor: grab;
+  touch-action: none;
+}
+
+.dilemma-outcome-effect-drag-handle:active {
+  cursor: grabbing;
+}
+
+.dilemma-outcome-effect-drag-handle span {
+  display: block;
+  font-size: 1rem;
+  font-weight: 950;
+  letter-spacing: -0.12em;
+  line-height: 1;
+  transform: rotate(90deg);
+}
+
 .dilemma-outcome-effect-body {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 6px;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
+  align-items: start;
   min-width: 0;
 }
 
-.dilemma-effect-type-field,
-.dilemma-effect-note-field {
+.dilemma-outcome-effect-toolbar {
+  display: grid;
   grid-column: 1 / -1;
+  grid-template-columns: 30px minmax(0, 1fr) 30px;
+  gap: 7px;
+  align-items: center;
+  min-width: 0;
+}
+
+.dilemma-outcome-effect-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+  min-width: 0;
+}
+
+.dilemma-effect-note-field,
+.dilemma-outcome-effect-photo-editor,
+.dilemma-outcome-effect-fields .dilemma-effect-note-field {
+  grid-column: 1 / -1;
+}
+
+.dilemma-effect-type-field {
+  gap: 0;
+}
+
+.dilemma-effect-type-field select {
+  min-height: 34px;
+  font-size: 0.84rem;
+  font-weight: 900;
 }
 
 .dilemma-effect-field {
@@ -1795,7 +2072,120 @@
 }
 
 .dilemma-outcome-effect-remove {
-  align-self: start;
+  align-self: center;
+}
+
+.dilemma-outcome-effect-drag-handle,
+.dilemma-outcome-effect-remove {
+  width: 30px;
+  min-width: 30px;
+  height: 34px;
+  min-height: 34px;
+  border-radius: 7px;
+  padding: 0;
+}
+
+.dilemma-outcome-effect-drag-handle svg,
+.dilemma-outcome-effect-remove svg {
+  width: 16px;
+  height: 16px;
+}
+
+.dilemma-outcome-effect-photo-editor {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+  padding-top: 0;
+}
+
+.dilemma-outcome-effect-photo-add {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: auto;
+  min-width: auto;
+  height: 32px;
+  min-height: 32px;
+  padding: 0 10px;
+  gap: 5px;
+  border: 1px solid rgba(216, 178, 90, 0.22);
+  border-radius: 7px;
+  background: rgba(9, 14, 13, 0.62);
+  color: var(--ink);
+  font-size: 0.72rem;
+  font-weight: 850;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.dilemma-outcome-effect-photo-add svg {
+  width: 16px;
+  height: 16px;
+}
+
+.dilemma-outcome-effect-photo-add.disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.dilemma-outcome-effect-photo-add input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.dilemma-outcome-effect-photo-strip {
+  display: flex;
+  flex: 1 1 9rem;
+  flex-wrap: wrap;
+  gap: 5px;
+  min-width: 0;
+}
+
+.dilemma-outcome-effect-photo-thumb {
+  position: relative;
+  width: 38px;
+  height: 38px;
+  margin: 0;
+  overflow: hidden;
+  border: 1px solid rgba(234, 223, 189, 0.18);
+  border-radius: 6px;
+  background: rgba(5, 9, 9, 0.32);
+}
+
+.dilemma-outcome-effect-photo-thumb img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.dilemma-outcome-effect-photo-thumb button {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 18px;
+  height: 18px;
+  min-width: 18px;
+  min-height: 18px;
+  padding: 0;
+}
+
+.dilemma-outcome-effect-photo-thumb button svg {
+  width: 0.78rem;
+  height: 0.78rem;
+}
+
+.dilemma-outcome-effect-photo-error {
+  flex: 1 1 100%;
+  margin: 0;
+  color: #f5a3a3;
+  font-size: 0.68rem;
+  font-weight: 800;
 }
 
 .dilemma-outcome-effects-empty {
@@ -1808,6 +2198,21 @@
 @media (max-width: 860px) {
   .dilemma-outcome-edit-grid {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .dilemma-resolution-effects-edit .dilemma-outcome-effects-head {
+    flex-direction: column;
+    align-items: stretch;
+    min-height: 0;
+  }
+
+  .dilemma-resolution-effects-edit .dilemma-outcome-effects-add {
+    justify-self: auto;
+    width: 100%;
+  }
+
+  .dilemma-resolution-effects-edit .dilemma-outcome-effects-add label {
+    flex: 1 1 0;
   }
 
   .dilemma-outcome-effects-head {
@@ -1832,20 +2237,14 @@
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .dilemma-outcome-effect-order {
-    grid-auto-flow: column;
-    grid-auto-columns: min-content;
-    justify-content: start;
-    align-items: center;
-  }
-
   .dilemma-outcome-effect-body {
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .dilemma-outcome-effect-remove {
-    justify-self: end;
+  .dilemma-outcome-effect-fields {
+    grid-template-columns: minmax(0, 1fr);
   }
+
 }
 
 @media (max-width: 680px) {
@@ -1859,6 +2258,14 @@
   .dilemma-dialog-grid.compact.dilemma-card-title-row,
   .dilemma-resource-delta-edit-row {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .dilemma-resource-delta-edit-row--compact {
+    grid-template-columns: 16px max-content 3.15rem;
+  }
+
+  .dilemma-resource-delta-edit-row--marker {
+    grid-template-columns: 18px minmax(2.4rem, 1fr) minmax(5.25rem, 5.75rem);
   }
 }
 
@@ -2203,95 +2610,6 @@
   background: rgba(24, 18, 13, 0.62);
 }
 
-.dilemma-board-resolution-grid,
-.dilemma-stability-resolution-grid,
-.dilemma-end-trigger-grid {
-  display: grid;
-  gap: 0.65rem;
-}
-
-.dilemma-board-resource-row {
-  display: grid;
-  grid-template-columns: minmax(7rem, 1fr) minmax(4.5rem, 0.55fr) minmax(7rem, 0.8fr) minmax(5.5rem, 0.65fr) minmax(5.5rem, 0.65fr) minmax(10rem, 1fr);
-  gap: 0.55rem;
-  align-items: end;
-  padding: 0.65rem;
-  border: 1px solid rgba(234, 223, 189, 0.16);
-  border-radius: 12px;
-  background: rgba(234, 223, 189, 0.06);
-}
-
-.dilemma-board-resource-row > span,
-.dilemma-board-result-card > span {
-  color: var(--gold-2);
-  font-size: 0.8rem;
-  font-weight: 850;
-}
-
-.dilemma-board-resource-row > span {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  padding-bottom: 0.45rem;
-}
-
-.dilemma-board-resource-row label {
-  display: grid;
-  gap: 0.3rem;
-  color: var(--ink-muted);
-  font-size: 0.74rem;
-  font-weight: 800;
-}
-
-.dilemma-board-resource-row input,
-.dilemma-board-resource-row select,
-.dilemma-stability-resolution-grid input,
-.dilemma-end-trigger-grid select {
-  width: 100%;
-}
-
-.dilemma-board-marker-check {
-  align-content: center;
-}
-
-.dilemma-board-marker-check input {
-  width: auto;
-}
-
-.dilemma-board-resource-row output,
-.dilemma-board-result-card strong {
-  min-height: 40px;
-  display: grid;
-  align-items: center;
-  color: var(--ink);
-  font-weight: 900;
-}
-
-.dilemma-stability-resolution-grid,
-.dilemma-end-trigger-grid {
-  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
-}
-
-.dilemma-board-result-card {
-  display: grid;
-  gap: 0.35rem;
-  min-height: 68px;
-  padding: 0.65rem 0.75rem;
-  border: 1px solid rgba(216, 178, 90, 0.22);
-  border-radius: 12px;
-  background: rgba(12, 18, 17, 0.46);
-}
-
-@media (max-width: 680px) {
-  .dilemma-board-resource-row {
-    grid-template-columns: 1fr 1fr;
-  }
-
-  .dilemma-board-resource-row > span,
-  .dilemma-board-resource-row output {
-    grid-column: 1 / -1;
-  }
-}
 
 .next-game-setup-dialog {
   max-width: min(920px, calc(100vw - 24px));

@@ -80,6 +80,20 @@ function mergeAgendaQueryResult(previous: any, result: any) {
   };
 }
 
+export function shouldForceRefreshAfterAdminModeToggle(result: any, expectedAdmin: boolean) {
+  if (!result) {
+    return true;
+  }
+
+  const adminValue = result.admin ?? result.state?.isAdmin;
+
+  if (typeof adminValue !== "boolean") {
+    return true;
+  }
+
+  return adminValue !== expectedAdmin;
+}
+
 function isNonBlockingAgendaAction(payload: any) {
   return Boolean(payload && (nonBlockingAgendaActions as any).has(payload.action));
 }
@@ -178,10 +192,10 @@ export function useAgendaRefresh(setError: (msg: string) => void, mutationInFlig
   const queryClient = useQueryClient();
   const { queryKey } = useAgendaQueryKeys();
 
-  // Ref identity is stable; .current is read intentionally inside the callback.
-  // eslint-disable-next-line react-hooks/preserve-manual-memoization -- mutationInFlight is a ref object; deps [mutationInFlight] are correct
-  return useCallback(async () => {
-    if (mutationInFlight.current || queryClient.isFetching({ queryKey }) > 0) {
+  return useCallback(async (options: { force?: boolean } = {}) => {
+    const force = Boolean(options.force);
+
+    if (!force && (mutationInFlight.current || queryClient.isFetching({ queryKey }) > 0)) {
       return null;
     }
 

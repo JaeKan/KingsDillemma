@@ -14,13 +14,15 @@
 
 5. **코드 경계**: **`netlify/functions/`**는 과거 호스팅 호환용으로 레포에 보관만(배포는 Docker 기준). 앱과 맞닿는 타입·API 처리는 **`shared/`** 및 **`server/`**를 본다.
 
-6. **`check`의 범위**: **`npm run check`** = `tsc --noEmit` + **`npm run lint`** (`eslint .`). 타입·린트만이며 **테스트는 포함하지 않는다**.
+6. **백엔드/API 갱신**: `shared/`, `server/`, API 액션·요청/응답 타입 등 백엔드와 맞닿는 코드를 바꾼 뒤 로컬 UI를 확인할 때는 **반드시 `dev:api` 프로세스를 갱신**한다. 오래 떠 있는 Express 프로세스가 이전 코드를 계속 잡아 UI 검증을 왜곡할 수 있다.
 
-7. **`verify`에 테스트 포함**: **`npm run verify`** = `npm run check && npm test`. 머지·PR 직전 최종 검증은 **`verify`**로 통일한다.
+7. **`check`의 범위**: **`npm run check`** = `tsc --noEmit` + **`npm run lint`** (`eslint .`). 타입·린트만이며 **테스트는 포함하지 않는다**.
 
-8. **스크립트 단일 출처**: 아래 [스크립트 요약](#스크립트 요약)은 빠른 참고용이며, **정확한 정의는 항상** [`package.json`](package.json) 의 `"scripts"`이다.
+8. **`verify`에 테스트 포함**: **`npm run verify`** = `npm run check && npm test`. 머지·PR 직전 최종 검증은 **`verify`**로 통일한다.
 
-9. **Cursor 규칙**: 반복 지침은 **[`.cursor/rules/`](.cursor/rules/)**에 두고, 이 문서와 상호 참조해 **한 곳만 장문으로 풀지 않는다** (요점은 규칙 파일, 상세 표/경계는 여기서 링크).
+9. **스크립트 단일 출처**: 아래 [스크립트 요약](#스크립트 요약)은 빠른 참고용이며, **정확한 정의는 항상** [`package.json`](package.json) 의 `"scripts"`이다.
+
+10. **Cursor 규칙**: 반복 지침은 **[`.cursor/rules/`](.cursor/rules/)**에 두고, 이 문서와 상호 참조해 **한 곳만 장문으로 풀지 않는다** (요점은 규칙 파일, 상세 표/경계는 여기서 링크).
 
 ## 머지 전 필수
 

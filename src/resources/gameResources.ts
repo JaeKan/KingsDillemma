@@ -21,14 +21,11 @@ export const sessionEndChecklistItems = [
   { id: "inventories", label: "모든 가문 자원 변경을 수기로 저장함" },
   { id: "scores", label: "최종 점수와 명망/갈망 반영을 확인함" },
   { id: "progress", label: "공개 의제와 업적/성향 업적 표시를 확인함" },
-  { id: "board", label: "공용 보드와 물리 카드 정리를 완료함" },
+  { id: "board", label: "공용 기록과 카드 정리를 완료함" },
 ];
 
 export const ledgerAutosaveDelayMs = 500;
 export const ledgerAutosaveRetryDelayMs = 1800;
-
-export const sharedBoardSheetUrl =
-  "https://docs.google.com/spreadsheets/d/1hJw0gYAeIafIFUJOBTDaC_2QR87CXyXABrOKvu3QG2M/edit?usp=sharing";
 
 export const rulebookPdfUrl = "/king_dilemma_rulebook.pdf";
 export const rulebookReferenceTips = [
@@ -143,13 +140,16 @@ export const resourceCounters = [
   { id: "knowledge", label: "지식", max: 17, icon: "knowledge", tone: "knowledge" },
 ];
 
+export const dilemmaResultMarkers = [
+  ...resourceCounters,
+  { id: "story", label: "스토리", max: 1, icon: "story", tone: "story" },
+] as const;
+
 export const valueMentionAmountMax = 99;
 export const valueMentionItems = [
   ...tokenCounters.map((counter) => ({ ...counter, category: "가문 값" })),
   ...scoreTrackCounters.map((counter) => ({ ...counter, category: "가문 값" })),
   ...resourceCounters.map((counter) => ({ ...counter, category: "왕국 자원", requiresAmount: false })),
-  { id: "stability", label: "안정도 마커", max: 17, icon: "balance", tone: "stability", category: "왕국 상태", requiresAmount: false },
-  { id: "momentum", label: "모멘텀", max: 9, icon: "turn", tone: "momentum", category: "왕국 상태", requiresAmount: false },
 ];
 
 export const openAgendaTokenTypes = [

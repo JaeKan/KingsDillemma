@@ -28,6 +28,7 @@ import {
   saveDilemmaVoteOrder,
   saveHouseProgress,
   savePlayerInventory,
+  setAdminMode,
   setRandomDiscardEnabled,
   setHouseName,
   setSeatCredential,
@@ -94,11 +95,6 @@ assert.deepEqual(createDefaultHouseProgress(now).alignmentOrder, [
 ]);
 
 const anonymousInitial = redactState(initial, null);
-assert.equal(initial.currentSessionResolvedDilemmaCount, 0);
-assert.equal(normalizeState({ currentSessionResolvedDilemmaCount: -1 }, now).currentSessionResolvedDilemmaCount, 0);
-assert.equal(normalizeState({ currentSessionResolvedDilemmaCount: 3.7 }, now).currentSessionResolvedDilemmaCount, 3);
-assert.equal(normalizeState({ currentSessionResolvedDilemmaCount: 2000 }, now).currentSessionResolvedDilemmaCount, 999);
-assert.equal(anonymousInitial.currentSessionResolvedDilemmaCount, 0);
 assert.equal(anonymousInitial.houses.length, 12);
 assert.equal(anonymousInitial.houses[0].goal, "지식과 정신 사이의 조화 찾기");
 assert.match(anonymousInitial.houses[0].profile, /환대와 개방성/);
@@ -550,6 +546,25 @@ assert.throws(
 );
 assert.throws(() => beginDilemmaEdit(state, "solad", "non-owner-draft-token", now), /최초 수정/);
 
+const adminModeState = setAdminMode(state, "solad", true, now);
+assert.equal(adminModeState.adminHouseId, "solad");
+assert.equal(redactState(adminModeState, "solad").isAdmin, true);
+assert.equal(redactState(adminModeState, "gamam").isAdmin, false);
+assert.equal(redactState(adminModeState, "solad").canResetDilemmaResult, true);
+assert.equal(redactState(adminModeState, "solad").canEditDilemmaRoles, true);
+assert.throws(() => setAdminMode(adminModeState, "natar", true, now), /관리자 모드/);
+assert.equal(setAdminMode(adminModeState, "solad", false, now).adminHouseId, null);
+assert.equal(clearSession(adminModeState, "solad", now).adminHouseId, null);
+const adminRoleOverride = saveDilemmaRoles(
+  adminModeState,
+  "solad",
+  { leaderHouseId: "solad", moderatorHouseId: "gamam" },
+  now,
+);
+assert.equal(adminRoleOverride.dilemmaRolesAuthorHouseId, "gamam");
+assert.equal(adminRoleOverride.dilemmaLeader, "solad");
+assert.equal(beginDilemmaEdit(adminModeState, "solad", "admin-draft-token", now).dilemma.editLock?.houseId, "solad");
+
 let editingDilemma = beginDilemmaEdit(state, "gamam", "edit-token", now);
 assert.equal(editingDilemma.dilemma.editLock?.houseId, "gamam");
 assert.equal(editingDilemma.dilemma.editLock?.token, "edit-token");
@@ -561,18 +576,17 @@ assert.throws(
   () => saveDilemmaRecord(editingDilemma, "solad", "edit-token", { question: "Should the council pay?" }, "history-1", now),
   /수정 중/,
 );
-assert.throws(
-  () =>
-    saveDilemmaRecord(
-      editingDilemma,
-      "gamam",
-      "edit-token",
-      { title: "Harbor levy", selectedOutcome: "aye" },
-      "history-1",
-      now,
-    ),
-  /모든 가문.*투표/,
+const adminLockOverride = beginDilemmaEdit(setAdminMode(editingDilemma, "solad", true, now), "solad", "admin-edit-token", now);
+assert.equal(adminLockOverride.dilemma.editLock?.houseId, "solad");
+const outcomeIgnoredDuringFrontWrite = saveDilemmaRecord(
+  editingDilemma,
+  "gamam",
+  "edit-token",
+  { title: "Harbor levy", selectedOutcome: "aye" },
+  "history-1",
+  now,
 );
+assert.equal(outcomeIgnoredDuringFrontWrite.dilemma.selectedOutcome, "");
 
 state = saveDilemmaRecord(
   editingDilemma,
@@ -594,6 +608,7 @@ state = saveDilemmaRecord(
     nay: {
       preview: "morale -",
       result: "Delay repairs and adjust morale.",
+      resourcePolarities: { morale: "negative", knowledge: "positive" },
       resourceDeltas: { morale: -99, knowledge: "2", welfare: 0 },
     },
     selectedOutcome: "",
@@ -626,8 +641,12 @@ assert.equal(state.dilemma.updatedByName, "House Pinchay");
 assert.equal(state.dilemma.selectedOutcome, "");
 assert.deepEqual(state.dilemma.aye.resourcePolarities, { wealth: "negative", morale: "positive" });
 assert.deepEqual(state.dilemma.nay.resourcePolarities, { morale: "negative", knowledge: "positive" });
-assert.deepEqual(state.dilemma.aye.resourceDeltas, { wealth: -2, morale: 1 });
-assert.deepEqual(state.dilemma.nay.resourceDeltas, { morale: -9, knowledge: 2 });
+assert.equal(state.dilemma.timeCounterSlot, "");
+assert.equal(state.dilemma.voteNotes, "");
+assert.equal(state.dilemma.aye.result, "");
+assert.equal(state.dilemma.nay.result, "");
+assert.deepEqual(state.dilemma.aye.resourceDeltas, {});
+assert.deepEqual(state.dilemma.nay.resourceDeltas, {});
 assert.equal(state.dilemma.photos.length, 1);
 assert.equal(state.dilemma.photos[0].addedBy, "gamam");
 assert.equal(state.dilemmaHistory.length, 0);
@@ -660,16 +679,16 @@ state = {
   },
 };
 assert.throws(() => publishDilemmaRecord(state, "solad", "history-1", now), /최초 수정/);
-assert.throws(() => publishDilemmaRecord(state, "gamam", "history-1", now), /해결 후속/);
+assert.throws(() => publishDilemmaRecord(state, "gamam", "history-1", now), /결과 입력/);
 state = {
   ...state,
   dilemma: {
     ...state.dilemma,
-    resolutionNotes: "Apply resource movement, check stability, then place card on time counter.",
+    resolutionNotes: "Apply result text, then place card on time counter.",
     resolutionPhotos: [
       {
         id: "reso-photo-1",
-        name: "board-after.jpg",
+        name: "result-after.jpg",
         mimeType: "image/jpeg",
         dataUrl: "data:image/jpeg;base64,aGVsbG8=",
         size: 900,
@@ -682,10 +701,9 @@ state = {
 };
 state = publishDilemmaRecord(state, "gamam", "history-1", now);
 assert.equal(state.dilemmaHistory.length, 1);
-assert.equal(state.currentSessionResolvedDilemmaCount, 1);
 assert.equal(state.dilemmaHistory[0].historyId, "history-1");
 assert.deepEqual(state.dilemmaHistory[0].aye.resourcePolarities, { wealth: "negative", morale: "positive" });
-assert.deepEqual(state.dilemmaHistory[0].aye.resourceDeltas, { wealth: -2, morale: 1 });
+assert.deepEqual(state.dilemmaHistory[0].aye.resourceDeltas, {});
 assert.equal(state.dilemmaHistory[0].photos.length, 1);
 assert.equal(state.dilemmaHistory[0].resolutionPhotos.length, 1);
 assert.equal(state.dilemmaHistory[0].resolutionPhotos[0].addedBy, "gamam");
@@ -826,8 +844,9 @@ tieLine = saveDilemmaVote(tieLine, "coden", { side: "nay", powerTokens: 1 }, now
 assert.throws(() => applyDilemmaVotes(tieLine, "gamam", now), /모든 가문/);
 tieLine = saveDilemmaVote(tieLine, "olwyn", { side: "pass", powerTokens: 0 }, now);
 assert.equal(redactState(tieLine, "gamam").canApplyDilemmaVotes, true);
-assert.equal(redactState(tieLine, "solad").canApplyDilemmaVotes, true);
-const tiedTallyState = applyDilemmaVotes(tieLine, "solad", now);
+assert.equal(redactState(tieLine, "solad").canApplyDilemmaVotes, false);
+assert.throws(() => applyDilemmaVotes(tieLine, "solad", now), /작성한 가문/);
+const tiedTallyState = applyDilemmaVotes(tieLine, "gamam", now);
 assert.equal(tiedTallyState.dilemma.selectedOutcome, "");
 assert.match(tiedTallyState.dilemma.voteNotes, /찬성 4 \/ 반대 4 \/ 기권 1/);
 assert.equal(
@@ -884,7 +903,8 @@ const inventoriesBeforeDilemmaApply = votingState.inventories;
 votingState = applyDilemmaVotes(votingState, "gamam", now);
 assert.equal(votingState.dilemma.selectedOutcome, "aye");
 assert.match(votingState.dilemma.voteNotes, /찬성 5 \/ 반대 3 \/ 기권 1/);
-assert.match(votingState.dilemma.voteNotes, /§4 Vote Resolution/);
+assert.match(votingState.dilemma.voteNotes, /권력 다수는 「찬성」/);
+assert.equal(redactState(votingState, "gamam").canEnterDilemmaResolution, true);
 const majorityTallyMissingOutcomeHack = {
   ...votingState,
   dilemma: { ...votingState.dilemma, selectedOutcome: "" as const },
@@ -893,7 +913,43 @@ assert.throws(
   () => resolveModeratorDecision(majorityTallyMissingOutcomeHack as typeof votingState, "solad", "aye", now),
   /찬성과 반대 권력 합계가 같을 때만/,
 );
-assert.throws(() => publishDilemmaRecord(votingState, "gamam", "history-manual", now), /해결 후속/);
+assert.throws(() => publishDilemmaRecord(votingState, "gamam", "history-manual", now), /결과 입력/);
+const resultEnteredVotingState = {
+  ...votingState,
+  dilemma: {
+    ...votingState.dilemma,
+    resolutionNotes: "결과 후속 입력 완료",
+  },
+};
+assert.equal(redactState(resultEnteredVotingState, "gamam").canEnterDilemmaResolution, true);
+assert.equal(redactState(resultEnteredVotingState, "gamam").canPublishDilemmaResolution, true);
+assert.equal(redactState(resultEnteredVotingState, "solad").canEnterDilemmaResolution, false);
+const resultEnteredMissingVoteState = {
+  ...resultEnteredVotingState,
+  dilemma: {
+    ...resultEnteredVotingState.dilemma,
+    votes: {
+      ...resultEnteredVotingState.dilemma.votes,
+      olwyn: undefined,
+    },
+  },
+};
+assert.equal(redactState(resultEnteredMissingVoteState, "gamam").canEnterDilemmaResolution, true);
+const resultEditLockState = beginDilemmaEdit(votingState, "gamam", "result-edit-token", now);
+const resultSavedThroughApiState = saveDilemmaRecord(
+  resultEditLockState,
+  "gamam",
+  "result-edit-token",
+  {
+    ...resultEditLockState.dilemma,
+    resolutionNotes: "결과 저장 경로 후속 입력",
+  },
+  "history-result-edit",
+  now,
+  { fromResolution: true },
+);
+assert.equal(redactState(resultSavedThroughApiState, "gamam").canEnterDilemmaResolution, true);
+assert.equal(beginDilemmaEdit(resultSavedThroughApiState, "gamam", "result-edit-token-2", now).dilemma.editLock?.houseId, "gamam");
 assert.deepEqual(votingState.inventories, inventoriesBeforeDilemmaApply);
 assert.equal(redactState(votingState, "natar").dilemmaVoteTurn, null);
 assert.equal(redactState(votingState, "natar").canVoteDilemma, false);
@@ -1035,7 +1091,6 @@ assert.equal(ended.turn, "solad");
 assert.deepEqual(ended.choices, {});
 assert.equal(ended.discarded, null);
 assert.equal(ended.pool.length, AGENDAS.length);
-assert.equal(ended.currentSessionResolvedDilemmaCount, 0);
 assert.deepEqual(ended.sessions, {});
 assert.deepEqual(ended.dilemma, createDefaultDilemmaRecord(now));
 assert.equal(ended.dilemmaHistory.length, 1);

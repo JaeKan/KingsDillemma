@@ -36,8 +36,9 @@ export type HouseId = string;
 export type PlayerNumber = HouseId;
 export type Phase = "house-select" | "discard" | "choose" | "complete";
 export type PersonalResourceId = (typeof PERSONAL_RESOURCE_TRACKS)[number]["id"];
+export type DilemmaResultMarkerId = PersonalResourceId | "story";
 export type DilemmaResourceDeltas = Partial<Record<PersonalResourceId, number>>;
-export type DilemmaResourcePolarities = Partial<Record<PersonalResourceId, ChroniclePolarity>>;
+export type DilemmaResourcePolarities = Partial<Record<DilemmaResultMarkerId, ChroniclePolarity>>;
 export type OpenAgendaTokenPolarity = "positive" | "negative";
 
 export type Agenda = {
@@ -103,15 +104,27 @@ export type HouseProgress = {
 export type DilemmaVoteSide = "" | "aye" | "nay";
 export type DilemmaBallotSide = "" | "aye" | "nay" | "pass";
 
-export type DilemmaOutcomeEffect =
-  | { id: string; type: "resource"; resourceId: PersonalResourceId; amount: number }
-  | { id: string; type: "chronicle"; resourceId: PersonalResourceId; polarity: ChroniclePolarity; stickerCode: string }
-  | { id: string; type: "envelope"; envelopeCode: string }
-  | { id: string; type: "story"; cardCode: string; status: "active" | "completed" | "archived" }
-  | { id: string; type: "event"; cardCode: string; status: "active" | "completed" | "archived" }
-  | { id: string; type: "mystery"; dossierLetter: string; storylineSymbol: string; slotKey: string }
-  | { id: string; type: "king_death"; reason: "death_symbol" | "fifth_card" | "card_text" }
-  | { id: string; type: "note"; text: string };
+type DilemmaOutcomeEffectBase = {
+  id: string;
+  photos?: RecordAttachment[];
+};
+
+export type DilemmaOutcomeEffect = DilemmaOutcomeEffectBase & (
+  | { type: "resource"; resourceId: PersonalResourceId; amount: number }
+  | { type: "chronicle"; resourceId: PersonalResourceId; polarity: ChroniclePolarity; stickerCode: string }
+  | { type: "envelope"; envelopeCode: string }
+  | {
+      id: string;
+      type: "story";
+      cardCode: string;
+      status: "active" | "completed" | "archived";
+      signedByHouseId?: HouseId;
+      signedByName?: string;
+    }
+  | { type: "event"; cardCode: string; status: "active" | "completed" | "archived" }
+  | { type: "mystery"; dossierLetter: string; storylineSymbol: string; slotKey: string }
+  | { type: "note"; text: string }
+);
 
 export type DilemmaOutcome = {
   preview: string;
@@ -168,23 +181,6 @@ export type SessionEndReward = {
   crave: number;
 };
 export type DilemmaEndTrigger = "" | "none" | SessionEndCause;
-export type DilemmaKingDeathReason = "" | "death_symbol" | "fifth_card" | "card_text";
-export type DilemmaMomentumDirection = "" | "positive" | "negative";
-export type DilemmaResolutionBoardState = {
-  resourceStartPositions: DilemmaResourceDeltas;
-  resourceMovements: DilemmaResourceDeltas;
-  resourceFinalPositions: DilemmaResourceDeltas;
-  resourceMomentum: Partial<Record<PersonalResourceId, DilemmaMomentumDirection>>;
-  resourceMomentumMarkers: Partial<Record<PersonalResourceId, boolean>>;
-  resourceFinalMomentum: Partial<Record<PersonalResourceId, DilemmaMomentumDirection>>;
-  resourceFinalMomentumMarkers: Partial<Record<PersonalResourceId, boolean>>;
-  stabilityStart: number;
-  stabilityMovement: number;
-  stabilityFinal: number;
-  endTrigger: DilemmaEndTrigger;
-  kingDeathReason: DilemmaKingDeathReason;
-  memo: string;
-};
 
 export type DilemmaPhoto = {
   id: string;
@@ -234,7 +230,6 @@ export type DilemmaRecord = {
   voteNotes: string;
   resolutionNotes: string;
   resolutionChecklist?: DilemmaResolutionChecklist;
-  resolutionBoardState: DilemmaResolutionBoardState;
   votes: Partial<Record<HouseId, DilemmaVote>>;
   voteSettlement: DilemmaVoteSettlement;
   photos: DilemmaPhoto[];
@@ -268,6 +263,7 @@ export type GameState = {
   randomDiscardEnabled: boolean;
   choices: Record<string, string>;
   sessions: Record<string, AgendaSession>;
+  adminHouseId: HouseId | null;
   credentials: Record<string, SeatCredential>;
   playerNames: Record<string, string>;
   inventories: Record<string, PlayerInventory>;
@@ -276,7 +272,6 @@ export type GameState = {
   sessionEndCause: DilemmaEndTrigger;
   sessionEndRewardsAppliedAt: string;
   sessionEndRewardsAppliedBy: HouseId | null;
-  currentSessionResolvedDilemmaCount: number;
   dilemma: DilemmaRecord;
   dilemmaLeader: HouseId | null;
   dilemmaModerator: HouseId | null;
@@ -348,15 +343,17 @@ export type RedactedState = {
   sessionEndCause: DilemmaEndTrigger;
   sessionEndRewardsAppliedAt: string;
   sessionEndRewardsAppliedBy: HouseId | null;
-  currentSessionResolvedDilemmaCount: number;
   currentPlayer: HouseId | null;
   currentHouseId: HouseId | null;
+  adminHouseId: HouseId | null;
+  adminHouseName: string;
+  isAdmin: boolean;
   isCurrentTurn: boolean;
   canDiscard: boolean;
   canChoose: boolean;
   dilemmaVoteTurn: HouseId | null;
   canVoteDilemma: boolean;
-  /** true면 집계 기록(applyDilemmaVotes) 요청이 서버에서 허용됨 — 로그인 중 참여 가문 중 하나이며 전원 투표 완료(작성자와 무관). */
+  /** true면 집계 기록(applyDilemmaVotes) 요청이 서버에서 허용됨 — 딜레마 작성자 또는 관리자이며 전원 투표 완료. */
   canApplyDilemmaVotes: boolean;
   /** 역할 지정 가능 — 빈 딜레마에서 플로우 소유자가 없거나 세션 가문이 소유자일 때만 true */
   canEditDilemmaRoles: boolean;
@@ -542,6 +539,11 @@ export const PERSONAL_RESOURCE_TRACKS = [
   { id: "knowledge", label: "지식" },
 ] as const;
 
+const DILEMMA_RESULT_MARKERS: ReadonlyArray<{ id: DilemmaResultMarkerId }> = [
+  ...PERSONAL_RESOURCE_TRACKS,
+  { id: "story" },
+];
+
 const AGENDA_BY_ID = new Map(AGENDAS.map((agenda) => [agenda.id, agenda]));
 const STATE_VERSION = 10;
 const PERSONAL_COUNTER_LIMITS = {
@@ -551,7 +553,6 @@ const PERSONAL_COUNTER_LIMITS = {
   crave: 50,
 } as const;
 const RESOURCE_POSITION_MAX = 17;
-const STABILITY_POSITION_MAX = 13;
 const NEUTRAL_POWER_POOL_LIMIT = 999;
 const NEUTRAL_POWER_POOL_DEFAULT = 3;
 const OPEN_AGENDA_TOKEN_LIMIT = 2;
@@ -584,11 +585,10 @@ const DILEMMA_PHOTO_ORIGINAL_SIZE_LIMIT = 8_000_000;
 const DILEMMA_RESOURCE_DELTA_LIMIT = 9;
 const DILEMMA_VOTE_POWER_LIMIT = PERSONAL_COUNTER_LIMITS.powerTokens;
 const DILEMMA_CHECKLIST_MEMO_LIMIT = 200;
-const DILEMMA_BOARD_MEMO_LIMIT = 500;
 const DILEMMA_OUTCOME_NOTE_LIMIT = 500;
 const CHRONICLE_LEDGER_ID_LIMIT = 64;
 const CHRONICLE_LEDGER_CODE_LIMIT = 32;
-const CHRONICLE_LEDGER_NOTE_LIMIT = DILEMMA_BOARD_MEMO_LIMIT;
+const CHRONICLE_LEDGER_NOTE_LIMIT = 500;
 const RECORD_PHOTO_LIMIT = DILEMMA_PHOTO_LIMIT;
 const NEXT_GAME_SETUP_CHECKLIST_LIMIT = 80;
 const NEXT_GAME_SETUP_CHECKLIST_KEY_LIMIT = 80;
@@ -659,7 +659,6 @@ export function createDefaultDilemmaRecord(now = new Date().toISOString()): Dile
     voteNotes: "",
     resolutionNotes: "",
     resolutionChecklist: {},
-    resolutionBoardState: createDefaultDilemmaResolutionBoardState(),
     votes: {},
     voteSettlement: createDefaultDilemmaVoteSettlement(),
     photos: [],
@@ -688,24 +687,6 @@ function createDefaultDilemmaVoteSettlement(): DilemmaVoteSettlement {
   };
 }
 
-function createDefaultDilemmaResolutionBoardState(): DilemmaResolutionBoardState {
-  return {
-    resourceStartPositions: {},
-    resourceMovements: {},
-    resourceFinalPositions: {},
-    resourceMomentum: {},
-    resourceMomentumMarkers: {},
-    resourceFinalMomentum: {},
-    resourceFinalMomentumMarkers: {},
-    stabilityStart: 0,
-    stabilityMovement: 0,
-    stabilityFinal: 0,
-    endTrigger: "",
-    kingDeathReason: "",
-    memo: "",
-  };
-}
-
 export function createInitialState(now = new Date().toISOString()): GameState {
   return {
     version: STATE_VERSION,
@@ -717,6 +698,7 @@ export function createInitialState(now = new Date().toISOString()): GameState {
     randomDiscardEnabled: true,
     choices: {},
     sessions: {},
+    adminHouseId: null,
     credentials: {},
     playerNames: {},
     inventories: {},
@@ -725,7 +707,6 @@ export function createInitialState(now = new Date().toISOString()): GameState {
     sessionEndCause: "",
     sessionEndRewardsAppliedAt: "",
     sessionEndRewardsAppliedBy: null,
-    currentSessionResolvedDilemmaCount: 0,
     dilemma: createDefaultDilemmaRecord(now),
     dilemmaLeader: null,
     dilemmaModerator: null,
@@ -751,6 +732,10 @@ export function normalizeState(value: unknown, now = new Date().toISOString()): 
   const inventories = sanitizeInventories(candidate.inventories, now);
   const progress = sanitizeProgress(candidate.progress, now);
   const loggedInHouseIds = getLoggedInHouseIdsFromMaps(credentials, sessions);
+  const adminHouseId =
+    isHouseId(candidate.adminHouseId) && loggedInHouseIds.includes(candidate.adminHouseId)
+      ? candidate.adminHouseId
+      : null;
   const activeHouseIds = candidate.phase === "house-select" ? loggedInHouseIds : getActiveHouseIds(credentials);
   const draftReady = activeHouseIds.length >= REQUIRED_HOUSE_COUNT;
   const candidateVersion = Number.isInteger(candidate.version) ? Number(candidate.version) : 0;
@@ -798,6 +783,7 @@ export function normalizeState(value: unknown, now = new Date().toISOString()): 
     randomDiscardEnabled,
     choices,
     sessions,
+    adminHouseId,
     credentials,
     playerNames: sanitizePlayerNames(candidate.playerNames),
     inventories,
@@ -806,7 +792,6 @@ export function normalizeState(value: unknown, now = new Date().toISOString()): 
     sessionEndCause: sanitizeDilemmaEndTrigger(candidate.sessionEndCause),
     sessionEndRewardsAppliedAt: typeof candidate.sessionEndRewardsAppliedAt === "string" ? candidate.sessionEndRewardsAppliedAt : "",
     sessionEndRewardsAppliedBy: isHouseId(candidate.sessionEndRewardsAppliedBy) ? candidate.sessionEndRewardsAppliedBy : null,
-    currentSessionResolvedDilemmaCount: sanitizeCurrentSessionResolvedDilemmaCount(candidate.currentSessionResolvedDilemmaCount),
     dilemma,
     dilemmaRolesAuthorHouseId,
     dilemmaLeader,
@@ -832,6 +817,16 @@ export function getClaimedHouseIds(state: GameState): HouseId[] {
 export function getHouseLabel(state: GameState, houseId: HouseId) {
   const house = getHouseById(houseId);
   return state.playerNames[houseId] || house?.koreanTitle || house?.title || houseId;
+}
+
+export function getAdminHouseId(state: GameState): HouseId | null {
+  return state.adminHouseId && getLoggedInHouseIds(state).includes(state.adminHouseId)
+    ? state.adminHouseId
+    : null;
+}
+
+export function isAdminHouse(state: GameState, houseId: HouseId | null | undefined): boolean {
+  return Boolean(houseId && getAdminHouseId(state) === houseId);
 }
 
 export function createDefaultPlayerInventory(now = new Date().toISOString()): PlayerInventory {
@@ -982,8 +977,9 @@ export function clearSession(
   now = new Date().toISOString(),
 ): GameState {
   const shouldClearDilemmaLock = state.dilemma.editLock?.houseId === houseId;
+  const shouldClearAdmin = state.adminHouseId === houseId;
 
-  if (!state.sessions[houseId] && !shouldClearDilemmaLock) {
+  if (!state.sessions[houseId] && !shouldClearDilemmaLock && !shouldClearAdmin) {
     return state;
   }
 
@@ -993,7 +989,51 @@ export function clearSession(
   return {
     ...state,
     sessions,
+    adminHouseId: shouldClearAdmin ? null : state.adminHouseId,
     dilemma: shouldClearDilemmaLock ? { ...state.dilemma, editLock: null } : state.dilemma,
+    version: state.version + 1,
+    updatedAt: now,
+  };
+}
+
+export function setAdminMode(
+  state: GameState,
+  houseId: HouseId,
+  enabled: unknown,
+  now = new Date().toISOString(),
+): GameState {
+  const activeHouseIds = getActiveSessionHouseIds(state);
+
+  if (!activeHouseIds.includes(houseId)) {
+    throw new AgendaStateError("현재 존재하는 가문 세션만 관리자 모드를 사용할 수 있습니다.", 403);
+  }
+
+  const currentAdminHouseId = getAdminHouseId(state);
+
+  if (enabled === true) {
+    if (currentAdminHouseId && currentAdminHouseId !== houseId) {
+      throw new AgendaStateError("이미 다른 가문이 관리자 모드를 사용 중입니다.", 409);
+    }
+
+    if (state.adminHouseId === houseId) {
+      return state;
+    }
+
+    return {
+      ...state,
+      adminHouseId: houseId,
+      version: state.version + 1,
+      updatedAt: now,
+    };
+  }
+
+  if (!currentAdminHouseId || currentAdminHouseId !== houseId) {
+    return state;
+  }
+
+  return {
+    ...state,
+    adminHouseId: null,
     version: state.version + 1,
     updatedAt: now,
   };
@@ -1065,11 +1105,11 @@ export function endSession(state: GameState, now = new Date().toISOString()): Ga
     discarded: null,
     choices: {},
     sessions: {},
+    adminHouseId: null,
     neutralPowerPool: createDefaultNeutralPowerPool(now),
     sessionEndCause: "",
     sessionEndRewardsAppliedAt: "",
     sessionEndRewardsAppliedBy: null,
-    currentSessionResolvedDilemmaCount: 0,
     dilemma: createDefaultDilemmaRecord(now),
     dilemmaLeader: null,
     dilemmaModerator: null,
@@ -1081,11 +1121,11 @@ export function endSession(state: GameState, now = new Date().toISOString()): Ga
 
 export function saveDilemmaVoteOrder(
   state: GameState,
-  _houseId: HouseId,
+  houseId: HouseId,
   order: unknown,
   now = new Date().toISOString(),
 ): GameState {
-  if (isDilemmaVoteOrderLocked(state, now)) {
+  if (isDilemmaVoteOrderLocked(state, now) && !isAdminHouse(state, houseId)) {
     throw new AgendaStateError("딜레마 투표가 진행 중일 때는 투표 순서를 변경할 수 없습니다.", 409);
   }
 
@@ -1119,12 +1159,13 @@ export function saveDilemmaRoles(
 
   const currentDilemma = sanitizeDilemmaRecord(state.dilemma, now);
   const flowOwner = getDilemmaFlowOwnerHouseId(state, currentDilemma);
+  const admin = isAdminHouse(state, houseId);
 
-  if (currentDilemma.editLock || !isDilemmaRecordBlank(currentDilemma)) {
+  if (!admin && (currentDilemma.editLock || !isDilemmaRecordBlank(currentDilemma))) {
     throw new AgendaStateError("리더와 중재자는 딜레마 작성 전에만 지정할 수 있습니다.", 409);
   }
 
-  if (flowOwner && flowOwner !== houseId) {
+  if (!admin && flowOwner && flowOwner !== houseId) {
     throw new AgendaStateError("최초 수정한 가문만 역할을 다시 지정할 수 있습니다.", 403);
   }
 
@@ -1279,8 +1320,11 @@ export function beginDilemmaEdit(
   token: string,
   now = new Date().toISOString(),
 ): GameState {
+  const admin = isAdminHouse(state, houseId);
   assertCanEditDilemma(state);
-  assertDilemmaRolesAssigned(state);
+  if (!admin) {
+    assertDilemmaRolesAssigned(state);
+  }
 
   if (!token) {
     throw new AgendaStateError("딜레마 편집 토큰을 만들 수 없습니다.");
@@ -1289,16 +1333,18 @@ export function beginDilemmaEdit(
   const currentDilemma = sanitizeDilemmaRecord(state.dilemma, now);
   const activeLock = currentDilemma.editLock;
 
-  if (activeLock && activeLock.houseId !== houseId) {
+  if (!admin && activeLock && activeLock.houseId !== houseId) {
     throw new AgendaStateError(`${activeLock.houseName} 가문이 딜레마를 수정 중입니다.`, 409);
   }
 
-  assertDilemmaFlowOwnerHouseMatches(
-    state,
-    currentDilemma,
-    houseId,
-    "최초 수정한 가문만 딜레마를 작성하거나 편집할 수 있습니다.",
-  );
+  if (!admin) {
+    assertDilemmaFlowOwnerHouseMatches(
+      state,
+      currentDilemma,
+      houseId,
+      "최초 수정한 가문만 딜레마를 작성하거나 편집할 수 있습니다.",
+    );
+  }
 
   return {
     ...state,
@@ -1317,6 +1363,7 @@ export function cancelDilemmaEdit(
   token: unknown,
   now = new Date().toISOString(),
 ): GameState {
+  const admin = isAdminHouse(state, houseId);
   assertCanEditDilemma(state);
 
   const currentDilemma = sanitizeDilemmaRecord(state.dilemma, now);
@@ -1325,7 +1372,9 @@ export function cancelDilemmaEdit(
     return state;
   }
 
-  assertDilemmaLockOwner(currentDilemma, houseId, token);
+  if (!admin) {
+    assertDilemmaLockOwner(currentDilemma, houseId, token);
+  }
 
   return {
     ...state,
@@ -1418,7 +1467,7 @@ function dilemmaAuthorOnlySliceChanged(before: DilemmaRecord, after: DilemmaReco
     return true;
   }
 
-  return JSON.stringify(before.resolutionBoardState ?? {}) !== JSON.stringify(after.resolutionBoardState ?? {});
+  return false;
 }
 
 /** 권한 판정: `dilemmaAuthorHouseId` 우선. null이면 normalize·저장 누락 레거시용으로 `migrateDilemmaAuthorHouseId`와 동일하게 본문이 있는 레코드의 `updatedBy`를 사용합니다. */
@@ -1463,6 +1512,31 @@ function assertDilemmaCardEditableCouncilHouse(state: GameState, dilemma: Dilemm
   assertDilemmaFlowOwnerHouseMatches(state, dilemma, houseId, "최초 수정한 가문만 딜레마를 작성하거나 편집할 수 있습니다.");
 }
 
+function preserveOutcomeBackFields(current: DilemmaOutcome, draft: DilemmaOutcome): DilemmaOutcome {
+  return {
+    ...draft,
+    result: current.result,
+    resourceDeltas: current.resourceDeltas,
+    effects: current.effects,
+  };
+}
+
+function preserveDilemmaResolutionFields(current: DilemmaRecord, draft: DilemmaRecord): DilemmaRecord {
+  return {
+    ...draft,
+    aye: preserveOutcomeBackFields(current.aye, draft.aye),
+    nay: preserveOutcomeBackFields(current.nay, draft.nay),
+    selectedOutcome: current.selectedOutcome,
+    voteNotes: current.voteNotes,
+    timeCounterSlot: current.timeCounterSlot,
+    resolutionNotes: current.resolutionNotes,
+    resolutionChecklist: current.resolutionChecklist,
+    votes: current.votes,
+    voteSettlement: current.voteSettlement,
+    resolutionPhotos: current.resolutionPhotos,
+  };
+}
+
 export function saveDilemmaRecord(
   state: GameState,
   houseId: HouseId,
@@ -1472,14 +1546,22 @@ export function saveDilemmaRecord(
   now = new Date().toISOString(),
   opts?: SaveDilemmaRecordOptions,
 ): GameState {
+  const admin = isAdminHouse(state, houseId);
   assertCanEditDilemma(state);
 
   const currentDilemma = sanitizeDilemmaRecord(state.dilemma, now);
-  assertDilemmaLockOwner(currentDilemma, houseId, token);
+  if (!admin) {
+    assertDilemmaLockOwner(currentDilemma, houseId, token);
+  }
 
-  assertDilemmaCardEditableCouncilHouse(state, currentDilemma, houseId);
+  if (!admin) {
+    assertDilemmaCardEditableCouncilHouse(state, currentDilemma, houseId);
+  }
 
-  const sanitizedDraft = sanitizeDilemmaRecord(draft, now);
+  const incomingDraft = sanitizeDilemmaRecord(draft, now);
+  const sanitizedDraft = opts?.fromResolution === true
+    ? incomingDraft
+    : preserveDilemmaResolutionFields(currentDilemma, incomingDraft);
   const nextHistoryId =
     currentDilemma.historyId || sanitizeSingleLineText(historyId, DILEMMA_HISTORY_ID_LIMIT);
   const votesComplete = areDilemmaVotesComplete(state, sanitizedDraft, now);
@@ -1488,7 +1570,7 @@ export function saveDilemmaRecord(
   const authorOnlyDirty =
     opts?.fromResolution === true || dilemmaAuthorOnlySliceChanged(currentDilemma, sanitizedDraft);
 
-  if (authorOnlyDirty) {
+  if (!admin && authorOnlyDirty) {
     assertDilemmaFlowOwnerHouseMatches(state, currentDilemma, houseId, "최초 수정한 가문만 결과·해결 정보를 저장할 수 있습니다.");
   }
 
@@ -1506,10 +1588,6 @@ export function saveDilemmaRecord(
 
   if (!votesComplete && resolutionChecklistHasContent(sanitizedDraft.resolutionChecklist)) {
     throw new AgendaStateError("로그인 중인 모든 가문이 투표한 뒤 딜레마 해결 절차 체크를 저장할 수 있습니다.", 409);
-  }
-
-  if (!votesComplete && dilemmaBoardResolutionHasContent(sanitizedDraft.resolutionBoardState)) {
-    throw new AgendaStateError("로그인 중인 모든 가문이 투표한 뒤 보드 이동 계산을 저장할 수 있습니다.", 409);
   }
 
   if (!votesComplete && sanitizedDraft.resolutionPhotos.length) {
@@ -1543,11 +1621,12 @@ export function publishDilemmaRecord(
   historyId: unknown,
   now = new Date().toISOString(),
 ): GameState {
+  const admin = isAdminHouse(state, houseId);
   assertCanEditDilemma(state);
 
   const currentDilemma = sanitizeDilemmaRecord(state.dilemma, now);
 
-  if (currentDilemma.editLock) {
+  if (!admin && currentDilemma.editLock) {
     throw new AgendaStateError(`${currentDilemma.editLock.houseName} 가문이 딜레마를 수정 중입니다.`, 409);
   }
 
@@ -1555,7 +1634,9 @@ export function publishDilemmaRecord(
     throw new AgendaStateError("게시할 딜레마가 없습니다.", 409);
   }
 
-  assertDilemmaFlowOwnerHouseMatches(state, currentDilemma, houseId, "최초 수정한 가문만 게시할 수 있습니다.");
+  if (!admin) {
+    assertDilemmaFlowOwnerHouseMatches(state, currentDilemma, houseId, "최초 수정한 가문만 게시할 수 있습니다.");
+  }
 
   assertDilemmaPublishReady(state, currentDilemma, now);
 
@@ -1581,7 +1662,6 @@ export function publishDilemmaRecord(
     dilemmaModerator: null,
     dilemmaRolesAuthorHouseId: null,
     dilemmaHistory: upsertDilemmaHistory(state.dilemmaHistory, nextDilemma, houseId, getHouseLabel(state, houseId), now),
-    currentSessionResolvedDilemmaCount: sanitizeCurrentSessionResolvedDilemmaCount(state.currentSessionResolvedDilemmaCount) + 1,
     version: state.version + 1,
     updatedAt: now,
   };
@@ -1592,13 +1672,14 @@ export function resetDilemmaRecord(
   houseId: HouseId,
   now = new Date().toISOString(),
 ): GameState {
+  const admin = isAdminHouse(state, houseId);
   const currentDilemma = sanitizeDilemmaRecord(state.dilemma, now);
 
-  if (currentDilemma.editLock && currentDilemma.editLock.houseId !== houseId) {
+  if (!admin && currentDilemma.editLock && currentDilemma.editLock.houseId !== houseId) {
     throw new AgendaStateError(`${currentDilemma.editLock.houseName} 가문이 딜레마를 수정 중입니다.`, 409);
   }
 
-  assertCanResetDilemma(state, currentDilemma, houseId);
+  assertCanResetDilemma(state, currentDilemma, houseId, admin);
 
   return {
     ...state,
@@ -1625,7 +1706,7 @@ export function deleteDilemmaHistoryEntry(
     throw new AgendaStateError("삭제할 딜레마 이력을 찾을 수 없습니다.", 404);
   }
 
-  if (targetEntry.savedBy !== houseId) {
+  if (!isAdminHouse(state, houseId) && targetEntry.savedBy !== houseId) {
     throw new AgendaStateError("딜레마 이력을 게시한 가문만 삭제할 수 있습니다.", 403);
   }
 
@@ -2091,9 +2172,14 @@ export function applyDilemmaVotes(
   const currentDilemma = getDilemmaForVoting(state, houseId, now);
   const participants = getDilemmaVotingParticipants(state);
 
-  // 집계 기록(`voteNotes` 확정)은 로그인 중 투표 참여 가문 누구나 진행 가능. `updatedBy`는 마지막 편집 저장 가문 추적용이며 여기서 덮어쓰지 않습니다.
   if (!participants.includes(houseId)) {
     throw new AgendaStateError("로그인 중인 딜레마 참여 가문만 투표 집계를 기록할 수 있습니다.", 403);
+  }
+
+  // 집계 기록(`voteNotes` 확정)은 딜레마 작성자만 진행합니다. `updatedBy`는 마지막 편집 저장 가문 추적용이며 여기서 덮어쓰지 않습니다.
+  const flowOwner = getDilemmaFlowOwnerHouseId(state, currentDilemma);
+  if (!isAdminHouse(state, houseId) && flowOwner !== houseId) {
+    throw new AgendaStateError("딜레마를 작성한 가문만 투표 집계를 기록할 수 있습니다.", 403);
   }
 
   if (currentDilemma.selectedOutcome) {
@@ -2117,7 +2203,7 @@ export function applyDilemmaVotes(
   const nayPower = sumDilemmaVotePower(votes, participants, "nay");
   const passCount = participants.filter((participantId) => isDilemmaPassSide(votes[participantId]?.side)).length;
 
-  // 영문 룰북 v35 §4 Vote Resolution: AYE vs NAY 권력 합 비교로 승패. 동률·전원 기권은 중재자 결정.
+  // 영문 룰북 v35 : AYE vs NAY 권력 합 비교로 승패. 동률·전원 기권은 중재자 결정.
   let selectedOutcome: DilemmaVoteSide | "" = "";
 
   if (ayePower > nayPower) {
@@ -2132,8 +2218,8 @@ export function applyDilemmaVotes(
     votes: Object.fromEntries(participants.map((participantId) => [participantId, votes[participantId]])),
     voteNotes:
       selectedOutcome !== ""
-        ? `${tallyLine} 권력 다수는 「${selectedOutcome === "aye" ? "찬성" : "반대"}」입니다(King's Dilemma rulebook §4 Vote Resolution). 아래 정산 적용 버튼으로 코인·권력 장부를 반영하세요.`
-        : `${tallyLine} 찬성과 반대 권력이 같거나 전원 기권이면 중재자가 승리 쪽을 정합니다(§4). 중재자 결정 후 정산을 적용하세요.`,
+        ? `${tallyLine} 권력 다수는 「${selectedOutcome === "aye" ? "찬성" : "반대"}」입니다.`
+        : `${tallyLine} 찬성과 반대 권력이 같거나 전원 기권이면 중재자가 승리 쪽을 정합니다(§4).`,
     ...(selectedOutcome ? { selectedOutcome } : {}),
     updatedAt: now,
   };
@@ -2175,7 +2261,7 @@ export function resolveModeratorDecision(
   }
 
   const moderator = sanitizeRoleHouseId(state.dilemmaModerator, participants);
-  if (!moderator || moderator !== houseId) {
+  if (!isAdminHouse(state, houseId) && (!moderator || moderator !== houseId)) {
     throw new AgendaStateError("중재자만 동점을 결정할 수 있습니다.", 403);
   }
 
@@ -2679,6 +2765,8 @@ export function applyChoose(
 
 export function redactState(state: GameState, houseId: HouseId | null): RedactedState {
   const now = new Date().toISOString();
+  const adminHouseId = getAdminHouseId(state);
+  const isAdmin = Boolean(houseId && adminHouseId === houseId);
   const ownChoiceId = houseId ? state.choices[houseId] : null;
   const isCurrentTurn = houseId !== null && state.turn === houseId;
   const canDiscard = isCurrentTurn && state.phase === "discard";
@@ -2687,6 +2775,8 @@ export function redactState(state: GameState, houseId: HouseId | null): Redacted
   const dilemmaForVote = sanitizeDilemmaRecord(state.dilemma, now);
   const tallyLocked = Boolean(dilemmaForVote.voteNotes?.trim());
   const participantsForTally = getDilemmaVotingParticipants(state);
+  const flowOwner = getDilemmaFlowOwnerHouseId(state, dilemmaForVote);
+  const isDilemmaFlowOwner = houseId !== null && Boolean(flowOwner) && flowOwner === houseId;
   const canVoteDilemma =
     houseId !== null &&
     state.phase === "complete" &&
@@ -2703,6 +2793,7 @@ export function redactState(state: GameState, houseId: HouseId | null): Redacted
     !dilemmaForVote.selectedOutcome &&
     !tallyLocked &&
     participantsForTally.includes(houseId) &&
+    (isAdmin || isDilemmaFlowOwner) &&
     areDilemmaVotesComplete(state, dilemmaForVote, now);
   const dilemmaNonBlank = !isDilemmaRecordBlank(dilemmaForVote);
   const dilemmaLockedByOther =
@@ -2710,44 +2801,50 @@ export function redactState(state: GameState, houseId: HouseId | null): Redacted
     houseId !== null &&
     dilemmaForVote.editLock!.houseId !== houseId;
   const rolesReadyForDilemma = Boolean(state.dilemmaLeader && state.dilemmaModerator);
-  const dilemmaResolutionPending =
+  const dilemmaResolutionEntryAvailable =
     dilemmaNonBlank &&
     rolesReadyForDilemma &&
-    Boolean(dilemmaForVote.voteNotes?.trim()) &&
-    areDilemmaVotesComplete(state, dilemmaForVote, now) &&
-    (!dilemmaForVote.selectedOutcome || !dilemmaForVote.resolutionNotes.trim());
-  const flowOwner = getDilemmaFlowOwnerHouseId(state, dilemmaForVote);
-  const isDilemmaFlowOwner = houseId !== null && Boolean(flowOwner) && flowOwner === houseId;
+    (Boolean(dilemmaForVote.voteNotes?.trim()) ||
+      Boolean(dilemmaForVote.selectedOutcome) ||
+      hasDilemmaResolutionPublishContent(dilemmaForVote));
   const canEditDilemmaRoles =
-    houseId !== null &&
-    state.phase === "complete" &&
-    !dilemmaLockedByOther &&
-    !dilemmaNonBlank &&
-    (!flowOwner || flowOwner === houseId);
+    (isAdmin && state.phase === "complete") ||
+    (houseId !== null &&
+      state.phase === "complete" &&
+      !dilemmaLockedByOther &&
+      !dilemmaNonBlank &&
+      (!flowOwner || flowOwner === houseId));
   const canEnterDilemmaResolution =
-    houseId !== null &&
-    state.phase === "complete" &&
-    rolesReadyForDilemma &&
-    isDilemmaFlowOwner &&
-    dilemmaResolutionPending &&
-    !dilemmaLockedByOther;
+    (isAdmin && state.phase === "complete" && rolesReadyForDilemma && dilemmaNonBlank) ||
+    (houseId !== null &&
+      state.phase === "complete" &&
+      rolesReadyForDilemma &&
+      isDilemmaFlowOwner &&
+      dilemmaResolutionEntryAvailable &&
+      !dilemmaLockedByOther);
   const canPublishDilemmaResolution =
-    houseId !== null &&
-    state.phase === "complete" &&
-    !dilemmaForVote.editLock &&
-    dilemmaNonBlank &&
-    isDilemmaFlowOwner &&
-    isDilemmaPublishRequirementsMet(state, dilemmaForVote, now);
+    (isAdmin &&
+      state.phase === "complete" &&
+      dilemmaNonBlank &&
+      isDilemmaPublishRequirementsMet(state, dilemmaForVote, now)) ||
+    (houseId !== null &&
+      state.phase === "complete" &&
+      !dilemmaForVote.editLock &&
+      dilemmaNonBlank &&
+      isDilemmaFlowOwner &&
+      isDilemmaPublishRequirementsMet(state, dilemmaForVote, now));
   const canResetDilemmaResult =
-    houseId !== null &&
-    !dilemmaLockedByOther &&
-    isDilemmaFlowOwner;
+    (isAdmin && Boolean(flowOwner)) ||
+    (houseId !== null &&
+      !dilemmaLockedByOther &&
+      isDilemmaFlowOwner);
   const canEditDilemmaCard =
-    houseId !== null &&
-    state.phase === "complete" &&
-    rolesReadyForDilemma &&
-    !dilemmaLockedByOther &&
-    isDilemmaFlowOwner;
+    (isAdmin && state.phase === "complete" && rolesReadyForDilemma) ||
+    (houseId !== null &&
+      state.phase === "complete" &&
+      rolesReadyForDilemma &&
+      !dilemmaLockedByOther &&
+      isDilemmaFlowOwner);
   const houses = HOUSE_CATALOG.map((house) => {
     const id = house.id;
     const hasPassword = Boolean(state.credentials[id]);
@@ -2792,9 +2889,11 @@ export function redactState(state: GameState, houseId: HouseId | null): Redacted
     sessionEndCause: state.sessionEndCause,
     sessionEndRewardsAppliedAt: state.sessionEndRewardsAppliedAt,
     sessionEndRewardsAppliedBy: state.sessionEndRewardsAppliedBy,
-    currentSessionResolvedDilemmaCount: state.currentSessionResolvedDilemmaCount,
     currentPlayer: houseId,
     currentHouseId: houseId,
+    adminHouseId,
+    adminHouseName: adminHouseId ? getHouseLabel(state, adminHouseId) : "",
+    isAdmin,
     isCurrentTurn,
     canDiscard,
     canChoose,
@@ -3032,9 +3131,40 @@ function assertDilemmaPublishReady(state: GameState, dilemma: DilemmaRecord, now
     throw new AgendaStateError("딜레마 투표 결과(찬성/반대)가 확정된 뒤 게시할 수 있습니다. 동률이면 중재자 결정을 먼저 하세요.", 409);
   }
 
-  if (!dilemma.resolutionNotes.trim()) {
-    throw new AgendaStateError("해결 후속을 입력한 뒤 게시할 수 있습니다.", 409);
+  if (!hasDilemmaResolutionPublishContent(dilemma)) {
+    throw new AgendaStateError("결과 입력 내용을 저장한 뒤 게시할 수 있습니다.", 409);
   }
+}
+
+function getSelectedDilemmaOutcomeResultText(dilemma: DilemmaRecord): string {
+  if (dilemma.selectedOutcome === "aye") {
+    return dilemma.aye.result || "";
+  }
+
+  if (dilemma.selectedOutcome === "nay") {
+    return dilemma.nay.result || "";
+  }
+
+  return "";
+}
+
+function hasSelectedDilemmaOutcomeResult(dilemma: DilemmaRecord): boolean {
+  return Boolean(dilemma.selectedOutcome && getSelectedDilemmaOutcomeResultText(dilemma).trim());
+}
+
+function hasDilemmaResolutionPublishContent(dilemma: DilemmaRecord): boolean {
+  const selectedOutcome =
+    dilemma.selectedOutcome === "aye" ? dilemma.aye : dilemma.selectedOutcome === "nay" ? dilemma.nay : null;
+
+  return Boolean(
+    hasSelectedDilemmaOutcomeResult(dilemma) ||
+    (selectedOutcome && hasDilemmaResourceDeltas(selectedOutcome.resourceDeltas)) ||
+    (selectedOutcome && selectedOutcome.effects.length > 0) ||
+    dilemma.timeCounterSlot.trim() ||
+    dilemma.resolutionNotes.trim() ||
+    resolutionChecklistHasContent(dilemma.resolutionChecklist) ||
+    dilemma.resolutionPhotos.length
+  );
 }
 
 function areDilemmaVotesComplete(state: GameState, dilemma: DilemmaRecord, now: string) {
@@ -3058,7 +3188,7 @@ function isDilemmaPublishRequirementsMet(state: GameState, dilemma: DilemmaRecor
     readiness.participants.length > 0 &&
     !readiness.missingHouse &&
     Boolean(dilemma.selectedOutcome) &&
-    Boolean(dilemma.resolutionNotes.trim())
+    hasDilemmaResolutionPublishContent(dilemma)
   );
 }
 
@@ -3387,13 +3517,9 @@ function sanitizeDilemmaRecord(value: unknown, now: string): DilemmaRecord {
   }
 
   const candidate = value as Partial<DilemmaRecord>;
-  const aye = sanitizeDilemmaOutcome(candidate.aye);
-  const nay = sanitizeDilemmaOutcome(candidate.nay);
+  const aye = sanitizeDilemmaOutcome(candidate.aye, now);
+  const nay = sanitizeDilemmaOutcome(candidate.nay, now);
   const selectedOutcome = sanitizeDilemmaVoteSide(candidate.selectedOutcome);
-  const resolutionBoardState = applyDilemmaOutcomeEndEffects(
-    sanitizeDilemmaResolutionBoardState(candidate.resolutionBoardState),
-    selectedOutcome === "aye" ? aye : selectedOutcome === "nay" ? nay : null,
-  );
 
   return {
     historyId: sanitizeSingleLineText(candidate.historyId, DILEMMA_HISTORY_ID_LIMIT),
@@ -3410,7 +3536,6 @@ function sanitizeDilemmaRecord(value: unknown, now: string): DilemmaRecord {
     voteNotes: sanitizeMultilineText(candidate.voteNotes, DILEMMA_LONG_TEXT_LIMIT),
     resolutionNotes: sanitizeMultilineText(candidate.resolutionNotes, DILEMMA_LONG_TEXT_LIMIT),
     resolutionChecklist: sanitizeResolutionChecklist(candidate.resolutionChecklist),
-    resolutionBoardState,
     votes: sanitizeDilemmaVotes(candidate.votes, now),
     voteSettlement: sanitizeDilemmaVoteSettlement(candidate.voteSettlement, now),
     photos: sanitizeDilemmaPhotos(candidate.photos, now),
@@ -3454,126 +3579,10 @@ function sanitizeDilemmaVoteSettlement(value: unknown, now: string): DilemmaVote
   };
 }
 
-function sanitizeDilemmaResolutionBoardState(value: unknown): DilemmaResolutionBoardState {
-  if (!value || typeof value !== "object") {
-    return createDefaultDilemmaResolutionBoardState();
-  }
-
-  const candidate = value as Partial<DilemmaResolutionBoardState>;
-  const stabilityStart = sanitizeCounter(candidate.stabilityStart, STABILITY_POSITION_MAX, 0);
-  const stabilityMovement = clampSignedCounterValue(candidate.stabilityMovement, STABILITY_POSITION_MAX);
-  const stabilityFinal = sanitizeCounter(candidate.stabilityFinal, STABILITY_POSITION_MAX, 0);
-
-  return {
-    resourceStartPositions: sanitizeOptionalResourcePositions(candidate.resourceStartPositions),
-    resourceMovements: sanitizeOptionalResourceMovements(candidate.resourceMovements),
-    resourceFinalPositions: sanitizeOptionalResourcePositions(candidate.resourceFinalPositions),
-    resourceMomentum: sanitizeResourceMomentum(candidate.resourceMomentum),
-    resourceMomentumMarkers: sanitizeResourceMomentumMarkers(candidate.resourceMomentumMarkers),
-    resourceFinalMomentum: sanitizeResourceMomentum(candidate.resourceFinalMomentum),
-    resourceFinalMomentumMarkers: sanitizeResourceMomentumMarkers(candidate.resourceFinalMomentumMarkers),
-    stabilityStart,
-    stabilityMovement,
-    stabilityFinal,
-    endTrigger: sanitizeDilemmaEndTrigger(candidate.endTrigger),
-    kingDeathReason: sanitizeDilemmaKingDeathReason(candidate.kingDeathReason),
-    memo: sanitizeMultilineText(candidate.memo, DILEMMA_BOARD_MEMO_LIMIT),
-  };
-}
-
-function applyDilemmaOutcomeEndEffects(
-  boardState: DilemmaResolutionBoardState,
-  outcome: DilemmaOutcome | null,
-): DilemmaResolutionBoardState {
-  const kingDeath = outcome?.effects.find(
-    (effect): effect is Extract<DilemmaOutcomeEffect, { type: "king_death" }> => effect.type === "king_death",
-  );
-
-  if (!kingDeath) {
-    return boardState;
-  }
-
-  return {
-    ...boardState,
-    endTrigger: "king_death",
-    kingDeathReason: boardState.kingDeathReason || kingDeath.reason,
-  };
-}
-
-function sanitizeOptionalResourcePositions(value: unknown): DilemmaResourceDeltas {
-  if (!value || typeof value !== "object") {
-    return {};
-  }
-
-  const candidate = value as Record<string, unknown>;
-  const entries = PERSONAL_RESOURCE_TRACKS
-    .map(({ id }) => [id, sanitizeCounter(candidate[id], RESOURCE_POSITION_MAX, 0)] as const)
-    .filter(([, position]) => position > 0);
-
-  return Object.fromEntries(entries) as DilemmaResourceDeltas;
-}
-
-function sanitizeOptionalResourceMovements(value: unknown): DilemmaResourceDeltas {
-  if (!value || typeof value !== "object") {
-    return {};
-  }
-
-  const candidate = value as Record<string, unknown>;
-  const entries = PERSONAL_RESOURCE_TRACKS
-    .map(({ id }) => [id, clampSignedCounterValue(candidate[id], RESOURCE_POSITION_MAX)] as const)
-    .filter(([, movement]) => movement !== 0);
-
-  return Object.fromEntries(entries) as DilemmaResourceDeltas;
-}
-
-function sanitizeResourceMomentum(value: unknown): Partial<Record<PersonalResourceId, DilemmaMomentumDirection>> {
-  if (!value || typeof value !== "object") {
-    return {};
-  }
-
-  const candidate = value as Record<string, unknown>;
-  const entries = PERSONAL_RESOURCE_TRACKS
-    .map(({ id }) => [id, sanitizeDilemmaMomentumDirection(candidate[id])] as const)
-    .filter(([, direction]) => direction);
-
-  return Object.fromEntries(entries) as Partial<Record<PersonalResourceId, DilemmaMomentumDirection>>;
-}
-
-function sanitizeResourceMomentumMarkers(value: unknown): Partial<Record<PersonalResourceId, boolean>> {
-  if (!value || typeof value !== "object") {
-    return {};
-  }
-
-  const candidate = value as Record<string, unknown>;
-  const entries = PERSONAL_RESOURCE_TRACKS
-    .map(({ id }) => [id, candidate[id] === true] as const)
-    .filter(([, hasMarker]) => hasMarker);
-
-  return Object.fromEntries(entries) as Partial<Record<PersonalResourceId, boolean>>;
-}
-
-function sanitizeDilemmaMomentumDirection(value: unknown): DilemmaMomentumDirection {
-  return value === "positive" || value === "negative" ? value : "";
-}
-
 function sanitizeDilemmaEndTrigger(value: unknown): DilemmaEndTrigger {
   return value === "none" || value === "king_death" || value === "abdication_top" || value === "abdication_bottom"
     ? value
     : "";
-}
-
-function sanitizeDilemmaKingDeathReason(value: unknown): DilemmaKingDeathReason {
-  return value === "death_symbol" || value === "fifth_card" || value === "card_text" ? value : "";
-}
-
-function sanitizeCurrentSessionResolvedDilemmaCount(value: unknown): number {
-  const number = Number(value);
-
-  if (!Number.isFinite(number)) {
-    return 0;
-  }
-
-  return Math.max(0, Math.min(999, Math.trunc(number)));
 }
 
 function sanitizeDilemmaVoteSettlementProposal(value: unknown, now: string): DilemmaVoteSettlementProposal | null {
@@ -3671,14 +3680,14 @@ function sanitizeDilemmaHistory(value: unknown, now: string): DilemmaHistoryEntr
   return entries;
 }
 
-function sanitizeDilemmaOutcome(value: unknown): DilemmaOutcome {
+function sanitizeDilemmaOutcome(value: unknown, now: string): DilemmaOutcome {
   if (!value || typeof value !== "object") {
     return createDefaultDilemmaOutcome();
   }
 
   const candidate = value as Partial<DilemmaOutcome>;
   const resourceDeltas = sanitizeDilemmaResourceDeltas(candidate.resourceDeltas);
-  const effects = sanitizeDilemmaOutcomeEffects(candidate.effects);
+  const effects = sanitizeDilemmaOutcomeEffects(candidate.effects, now);
   const normalizedEffects = effects.length ? effects : deriveDilemmaResourceEffects(resourceDeltas);
   const normalizedResourceDeltas = hasDilemmaResourceDeltas(resourceDeltas)
     ? resourceDeltas
@@ -4279,27 +4288,9 @@ function buildDilemmaVoteSettlement(
   const ayePower = sumDilemmaVotePower(votes, participants, "aye");
   const nayPower = sumDilemmaVotePower(votes, participants, "nay");
   const passIds = participants.filter((participantId) => isDilemmaPassSide(votes[participantId]?.side));
-  const winningVoters = participants.filter((participantId) => votes[participantId]?.side === outcome);
   const neutralPowerBefore = clampCounterValue(state.neutralPowerPool?.powerTokens ?? NEUTRAL_POWER_POOL_DEFAULT, NEUTRAL_POWER_POOL_LIMIT);
-  const neutralPowerShare = passIds.length > 0 ? Math.floor(neutralPowerBefore / passIds.length) : 0;
-  const neutralPowerRemainder = passIds.length > 0 ? neutralPowerBefore % passIds.length : neutralPowerBefore;
-  const winningPowerMoved = winningVoters.reduce((total, participantId) => total + (votes[participantId]?.powerTokens || 0), 0);
   const inventoryDeltas: Partial<Record<HouseId, DilemmaVoteSettlementDelta>> = {};
   const warnings: string[] = [];
-
-  for (const participantId of passIds) {
-    addInventoryDelta(state, inventoryDeltas, participantId, { coins: 1, powerTokens: neutralPowerShare }, warnings);
-  }
-
-  for (const participantId of winningVoters) {
-    addInventoryDelta(
-      state,
-      inventoryDeltas,
-      participantId,
-      { coins: 0, powerTokens: -(votes[participantId]?.powerTokens || 0) },
-      warnings,
-    );
-  }
 
   const moderatorHouseId = sanitizeRoleHouseId(state.dilemmaModerator, participants);
   const leaderHouseId = determineDilemmaSettlementLeader(state, votes, participants, outcome, moderatorHouseId, warnings);
@@ -4316,8 +4307,8 @@ function buildDilemmaVoteSettlement(
         moderatorPassCount: 0,
       },
       neutralPowerBefore,
-      neutralPowerDistributed: neutralPowerShare * passIds.length,
-      neutralPowerAfter: clampCounterValue(neutralPowerRemainder + winningPowerMoved, NEUTRAL_POWER_POOL_LIMIT),
+      neutralPowerDistributed: 0,
+      neutralPowerAfter: neutralPowerBefore,
       inventoryDeltas,
       leaderHouseId,
       moderatorHouseId,
@@ -4430,7 +4421,6 @@ function isDilemmaRecordBlank(dilemma: DilemmaRecord) {
   return (
     textFieldsBlank &&
     !resolutionChecklistHasContent(dilemma.resolutionChecklist) &&
-    !dilemmaBoardResolutionHasContent(dilemma.resolutionBoardState) &&
     !hasDilemmaResourcePolarities(dilemma.aye.resourcePolarities) &&
     !hasDilemmaResourcePolarities(dilemma.nay.resourcePolarities) &&
     !hasDilemmaResourceDeltas(dilemma.aye.resourceDeltas) &&
@@ -4440,35 +4430,14 @@ function isDilemmaRecordBlank(dilemma: DilemmaRecord) {
   );
 }
 
-function dilemmaBoardResolutionHasContent(boardState: DilemmaResolutionBoardState): boolean {
-  return (
-    hasDilemmaResourceDeltas(boardState.resourceStartPositions) ||
-    hasDilemmaResourceDeltas(boardState.resourceMovements) ||
-    hasDilemmaResourceDeltas(boardState.resourceFinalPositions) ||
-    PERSONAL_RESOURCE_TRACKS.some(
-      ({ id }) =>
-        Boolean(boardState.resourceMomentum[id]) ||
-        Boolean(boardState.resourceMomentumMarkers[id]) ||
-        Boolean(boardState.resourceFinalMomentum[id]) ||
-        Boolean(boardState.resourceFinalMomentumMarkers[id]),
-    ) ||
-    boardState.stabilityStart > 0 ||
-    boardState.stabilityMovement !== 0 ||
-    boardState.stabilityFinal > 0 ||
-    Boolean(boardState.endTrigger) ||
-    Boolean(boardState.kingDeathReason) ||
-    Boolean(boardState.memo.trim())
-  );
-}
-
-function assertCanResetDilemma(state: GameState, dilemma: DilemmaRecord, houseId: HouseId) {
+function assertCanResetDilemma(state: GameState, dilemma: DilemmaRecord, houseId: HouseId, admin = false) {
   const owner = getDilemmaFlowOwnerHouseId(state, dilemma);
 
   if (!owner) {
     throw new AgendaStateError("현재 초기화할 내용이 없습니다.", 409);
   }
 
-  if (owner !== houseId) {
+  if (!admin && owner !== houseId) {
     throw new AgendaStateError("최초 수정한 가문만 초기화할 수 있습니다.", 403);
   }
 }
@@ -4478,7 +4447,7 @@ function hasDilemmaResourceDeltas(value: DilemmaResourceDeltas) {
 }
 
 function hasDilemmaResourcePolarities(value: DilemmaResourcePolarities) {
-  return PERSONAL_RESOURCE_TRACKS.some(({ id }) => value[id] === "positive" || value[id] === "negative");
+  return DILEMMA_RESULT_MARKERS.some(({ id }) => value[id] === "positive" || value[id] === "negative");
 }
 
 function sanitizeDilemmaResourceDeltas(value: unknown): DilemmaResourceDeltas {
@@ -4514,14 +4483,14 @@ function sanitizeDilemmaResourcePolarities(
   const deltas = sanitizeDilemmaResourceDeltas(fallbackDeltas);
   const polarities: DilemmaResourcePolarities = {};
 
-  for (const { id } of PERSONAL_RESOURCE_TRACKS) {
+  for (const { id } of DILEMMA_RESULT_MARKERS) {
     const raw = candidate[id];
     if (raw === "positive" || raw === "negative") {
       polarities[id] = raw;
       continue;
     }
 
-    const delta = deltas[id] || 0;
+    const delta = id === "story" ? 0 : deltas[id] || 0;
     if (delta > 0) {
       polarities[id] = "positive";
     } else if (delta < 0) {
@@ -4570,25 +4539,28 @@ function summarizeDilemmaResourceEffects(effects: DilemmaOutcomeEffect[]): Dilem
   return sanitizeDilemmaResourceDeltas(totals);
 }
 
-function sanitizeDilemmaOutcomeEffects(value: unknown): DilemmaOutcomeEffect[] {
+function sanitizeDilemmaOutcomeEffects(value: unknown, now: string): DilemmaOutcomeEffect[] {
   if (!Array.isArray(value)) {
     return [];
   }
 
   return value
-    .map((item, index) => sanitizeDilemmaOutcomeEffect(item, index))
+    .map((item, index) => sanitizeDilemmaOutcomeEffect(item, index, now))
     .filter((effect): effect is DilemmaOutcomeEffect => Boolean(effect));
 }
 
-function sanitizeDilemmaOutcomeEffect(value: unknown, index: number): DilemmaOutcomeEffect | null {
+function sanitizeDilemmaOutcomeEffect(value: unknown, index: number, now: string): DilemmaOutcomeEffect | null {
   const candidate = value && typeof value === "object" ? (value as Record<string, unknown>) : {};
   const id = sanitizeSingleLineText(candidate.id, DILEMMA_HISTORY_ID_LIMIT) || `effect-${index + 1}`;
+  const photos = sanitizeRecordAttachments(candidate.photos, now);
 
   if (candidate.type === "resource") {
     const resourceId = isPersonalResourceId(candidate.resourceId) ? candidate.resourceId : "";
     const amount = clampSignedCounterValue(candidate.amount, DILEMMA_RESOURCE_DELTA_LIMIT);
 
-    return resourceId && amount !== 0 ? { id, type: "resource", resourceId, amount } : null;
+    return resourceId && amount !== 0
+      ? withDilemmaOutcomeEffectPhotos({ id, type: "resource", resourceId, amount }, photos)
+      : null;
   }
 
   if (candidate.type === "chronicle") {
@@ -4596,19 +4568,39 @@ function sanitizeDilemmaOutcomeEffect(value: unknown, index: number): DilemmaOut
     const polarity = sanitizeChroniclePolarity(candidate.polarity);
     const stickerCode = sanitizeSingleLineText(candidate.stickerCode, DILEMMA_CODE_LIMIT);
 
-    return resourceId && polarity && stickerCode ? { id, type: "chronicle", resourceId, polarity, stickerCode } : null;
+    return resourceId && polarity && stickerCode
+      ? withDilemmaOutcomeEffectPhotos({ id, type: "chronicle", resourceId, polarity, stickerCode }, photos)
+      : null;
   }
 
   if (candidate.type === "envelope") {
     const envelopeCode = sanitizeSingleLineText(candidate.envelopeCode, DILEMMA_CODE_LIMIT);
-    return envelopeCode ? { id, type: "envelope", envelopeCode } : null;
+    return envelopeCode ? withDilemmaOutcomeEffectPhotos({ id, type: "envelope", envelopeCode }, photos) : null;
   }
 
   if (candidate.type === "story" || candidate.type === "event") {
     const cardCode = sanitizeSingleLineText(candidate.cardCode, DILEMMA_CODE_LIMIT);
     const status = sanitizeDilemmaOutcomeCardStatus(candidate.status);
 
-    return cardCode && status ? { id, type: candidate.type, cardCode, status } : null;
+    if (!cardCode || !status) {
+      return null;
+    }
+
+    if (candidate.type === "story") {
+      const signedByHouseId = isHouseId(candidate.signedByHouseId) ? candidate.signedByHouseId : "";
+      const signedByName = sanitizeSingleLineText(candidate.signedByName, DILEMMA_HOUSE_NAME_LIMIT);
+
+      return withDilemmaOutcomeEffectPhotos({
+        id,
+        type: "story",
+        cardCode,
+        status,
+        ...(signedByHouseId ? { signedByHouseId } : {}),
+        ...(signedByName ? { signedByName } : {}),
+      }, photos);
+    }
+
+    return withDilemmaOutcomeEffectPhotos({ id, type: "event", cardCode, status }, photos);
   }
 
   if (candidate.type === "mystery") {
@@ -4617,21 +4609,20 @@ function sanitizeDilemmaOutcomeEffect(value: unknown, index: number): DilemmaOut
     const slotKey = sanitizeSingleLineText(candidate.slotKey, DILEMMA_SLOT_LIMIT);
 
     return dossierLetter && storylineSymbol && slotKey
-      ? { id, type: "mystery", dossierLetter, storylineSymbol, slotKey }
+      ? withDilemmaOutcomeEffectPhotos({ id, type: "mystery", dossierLetter, storylineSymbol, slotKey }, photos)
       : null;
-  }
-
-  if (candidate.type === "king_death") {
-    const reason = sanitizeDilemmaKingDeathReason(candidate.reason);
-    return reason ? { id, type: "king_death", reason } : null;
   }
 
   if (candidate.type === "note") {
     const text = sanitizeMultilineText(candidate.text, DILEMMA_OUTCOME_NOTE_LIMIT);
-    return text ? { id, type: "note", text } : null;
+    return text ? withDilemmaOutcomeEffectPhotos({ id, type: "note", text }, photos) : null;
   }
 
   return null;
+}
+
+function withDilemmaOutcomeEffectPhotos<T extends DilemmaOutcomeEffect>(effect: T, photos: RecordAttachment[]): T {
+  return photos.length ? { ...effect, photos } : effect;
 }
 
 function sanitizeDilemmaOutcomeCardStatus(value: unknown): CampaignCardStatus | "" {

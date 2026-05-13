@@ -42,12 +42,14 @@ import {
   saveMysterySticker,
   saveNextGameSetupChecklist,
   savePlayerInventory,
+  setAdminMode,
   setRandomDiscardEnabled,
   setHouseCredential,
   setHouseName,
   startDraftPhase,
   startDraftIfReady,
   touchSession,
+  isAdminHouse,
   updateChronicleSticker,
   type GameState,
   type HouseId,
@@ -55,7 +57,6 @@ import {
 } from "../netlify/functions/_shared/agenda-state.mts";
 
 export const COOKIE_NAME = "kd_agenda_session";
-export const ADMIN_COOKIE_NAME = "kd_agenda_admin";
 export const STORE_NAME = "kings-dilemma-agenda";
 export const STORE_KEY = "active-game";
 
@@ -135,12 +136,13 @@ export async function handleAgendaRequest(
     if (req.method === "GET") {
       let state = await loadState(store);
       const houseId = getAuthenticatedHouse(req, context, state);
-      const admin = await getAuthenticatedAdmin(req, context);
 
       if (houseId) {
         state = touchSession(state, houseId);
         await saveState(store, state);
       }
+
+      const admin = isAdminHouse(state, houseId);
 
       return json(
         {
@@ -180,12 +182,6 @@ export async function handleAgendaRequest(
       return await handleLogout(req, context, store, state);
     }
 
-    const admin = await getAuthenticatedAdmin(req, context);
-
-    if (action === "kickSession") {
-      return await handleKickSession(req, store, state, body, admin);
-    }
-
     const houseId = getAuthenticatedHouse(req, context, state);
 
     if (!houseId) {
@@ -193,6 +189,26 @@ export async function handleAgendaRequest(
     }
 
     state = touchSession(state, houseId);
+    const admin = isAdminHouse(state, houseId);
+
+    if (action === "setAdminMode") {
+      const nextState = setAdminMode(state, houseId, body.enabled);
+      await saveState(store, nextState);
+      return json(
+        {
+          ok: true,
+          authenticated: true,
+          admin: isAdminHouse(nextState, houseId),
+          state: redactState(nextState, houseId),
+        },
+        200,
+        NO_STORE_HEADERS,
+      );
+    }
+
+    if (action === "kickSession") {
+      return await handleKickSession(req, store, state, body, admin, houseId);
+    }
 
     if (action === "discard") {
       const agendaId = typeof body.agendaId === "string" ? body.agendaId : null;
@@ -435,7 +451,7 @@ export async function handleAgendaRequest(
       const nextState = endSession(state);
       await saveState(store, nextState);
       return json(
-        { ok: true, authenticated: false, state: redactState(nextState, null) },
+        { ok: true, authenticated: false, admin: false, spectator: false, state: redactState(nextState, null) },
         200,
         { ...NO_STORE_HEADERS, "Set-Cookie": clearSessionCookie(req) },
       );
@@ -457,6 +473,7 @@ function isKnownStateAction(action: string) {
     action === "login" ||
     action === "logout" ||
     action === "kickSession" ||
+    action === "setAdminMode" ||
     action === "discard" ||
     action === "choose" ||
     action === "saveInventory" ||
@@ -508,22 +525,12 @@ function isAgendaStateErrorLike(error: unknown): error is AgendaStateError {
 
 async function handleLogin(
   req: Request,
-  context: AgendaRequestContext,
+  _context: AgendaRequestContext,
   store: AgendaStateStore,
   state: GameState,
   body: Record<string, unknown>,
 ) {
   const password = parsePassword(body.password);
-  const loginCode = getLoginCode(context);
-
-  if (loginCode && password === loginCode) {
-    return json(
-      { ok: true, authenticated: false, admin: true, state: redactState(state, null) },
-      200,
-      { ...NO_STORE_HEADERS, "Set-Cookie": await createAdminSessionCookie(req, loginCode) },
-    );
-  }
-
   const houseId = parseHouseId(body.houseId ?? body.player);
   const credential = state.credentials[houseId];
   const needsDisplayName = !state.playerNames[houseId];
@@ -698,18 +705,19 @@ async function handleLogout(
   }
 
   return json(
-    { ok: true, authenticated: false, spectator: false, state: redactState(nextState, null) },
+    { ok: true, authenticated: false, admin: false, spectator: false, state: redactState(nextState, null) },
     200,
     { ...NO_STORE_HEADERS, "Set-Cookie": clearSessionCookie(req) },
   );
 }
 
 async function handleKickSession(
-  _req: Request,
+  req: Request,
   store: AgendaStateStore,
   state: GameState,
   body: Record<string, unknown>,
   admin: boolean,
+  currentHouseId: HouseId,
 ) {
   if (!admin) {
     return json({ ok: false, error: "Admin required." }, 401, NO_STORE_HEADERS);
@@ -717,12 +725,22 @@ async function handleKickSession(
 
   const houseId = parseHouseId(body.houseId);
   const nextState = clearSession(state, houseId);
+  const kickedSelf = houseId === currentHouseId;
 
   if (nextState !== state) {
     await saveState(store, nextState);
   }
 
-  return json({ ok: true, authenticated: false, admin: true, state: redactState(nextState, null) }, 200, NO_STORE_HEADERS);
+  return json(
+    {
+      ok: true,
+      authenticated: !kickedSelf,
+      admin: kickedSelf ? false : isAdminHouse(nextState, currentHouseId),
+      state: redactState(nextState, kickedSelf ? null : currentHouseId),
+    },
+    200,
+    kickedSelf ? { ...NO_STORE_HEADERS, "Set-Cookie": clearSessionCookie(req) } : NO_STORE_HEADERS,
+  );
 }
 
 async function handleReset(
@@ -741,7 +759,7 @@ async function handleReset(
   await saveState(store, nextState);
 
   return json(
-    { ok: true, authenticated: false, state: redactState(nextState, null) },
+    { ok: true, authenticated: false, admin: false, spectator: false, state: redactState(nextState, null) },
     200,
     { ...NO_STORE_HEADERS, "Set-Cookie": clearSessionCookie(req) },
   );
@@ -798,36 +816,6 @@ export function getAuthenticatedHouse(
   }
 }
 
-async function getAuthenticatedAdmin(req: Request, context: AgendaRequestContext): Promise<boolean> {
-  const loginCode = getLoginCode(context);
-
-  if (!loginCode) {
-    return false;
-  }
-
-  const rawCookie =
-    context.cookies?.get(ADMIN_COOKIE_NAME) || parseCookie(req.headers.get("cookie"))[ADMIN_COOKIE_NAME];
-
-  if (!rawCookie) {
-    return false;
-  }
-
-  let marker: string;
-  let token: string | undefined;
-
-  try {
-    [marker, token] = decodeURIComponent(rawCookie).split(":");
-  } catch {
-    return false;
-  }
-
-  if (marker !== "admin" || !token) {
-    return false;
-  }
-
-  return timingSafeEqual(token, await createAdminSessionToken(loginCode));
-}
-
 async function readBody(req: Request): Promise<Record<string, unknown>> {
   try {
     const body = await req.json();
@@ -852,17 +840,6 @@ function createSessionCookie(req: Request, houseId: HouseId, token: string) {
   const value = encodeURIComponent(`${houseId}:${token}`);
   const cookieName = resolveAgendaSessionCookieName(req.url);
   return `${cookieName}=${value}; HttpOnly; Path=/; SameSite=Lax; Max-Age=28800${secure}`;
-}
-
-async function createAdminSessionCookie(req: Request, loginCode: string) {
-  const secure = new URL(req.url).protocol === "https:" ? "; Secure" : "";
-  const value = encodeURIComponent(`admin:${await createAdminSessionToken(loginCode)}`);
-  return `${ADMIN_COOKIE_NAME}=${value}; HttpOnly; Path=/; SameSite=Lax; Max-Age=28800${secure}`;
-}
-
-async function createAdminSessionToken(loginCode: string) {
-  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(`admin:${loginCode}`));
-  return bytesToHex(new Uint8Array(digest));
 }
 
 function clearSessionCookie(req: Request) {

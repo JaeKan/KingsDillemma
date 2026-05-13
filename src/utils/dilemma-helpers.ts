@@ -3,6 +3,7 @@
  * App.tsx에서 추출 — UI 의존성 없음.
  */
 import {
+  dilemmaResultMarkers,
   dilemmaPhotoLimit,
   dilemmaResourceDeltaLimit,
   inventoryCounterMax,
@@ -21,13 +22,12 @@ import {
   DilemmaEditLock,
   DilemmaHistoryEntry,
   DilemmaResolutionChecklist,
-  DilemmaResolutionBoardState,
   DilemmaVoteSettlement,
   DilemmaOutcomeEffect,
   RedactedHouse,
   HouseId,
   PersonalResourceId,
-  DilemmaKingDeathReason,
+  RecordAttachment,
 } from "../types/game";
 
 const RESOLUTION_CHECKLIST_MEMO_MAX = 200;
@@ -110,10 +110,6 @@ export function createDilemmaDraft(value: any = {}): Omit<
   const aye = normalizeDilemmaOutcome(candidate.aye);
   const nay = normalizeDilemmaOutcome(candidate.nay);
   const selectedOutcome = (candidate.selectedOutcome === "aye" || candidate.selectedOutcome === "nay") ? candidate.selectedOutcome : "";
-  const resolutionBoardState = applyDilemmaOutcomeEndEffects(
-    normalizeDilemmaResolutionBoardState(candidate.resolutionBoardState),
-    selectedOutcome === "aye" ? aye : selectedOutcome === "nay" ? nay : null,
-  );
 
   return {
     historyId: normalizeTextField(candidate.historyId),
@@ -130,7 +126,6 @@ export function createDilemmaDraft(value: any = {}): Omit<
     voteNotes: normalizeTextField(candidate.voteNotes),
     resolutionNotes: normalizeTextField(candidate.resolutionNotes),
     resolutionChecklist: normalizeResolutionChecklist(candidate.resolutionChecklist),
-    resolutionBoardState,
     votes: normalizeDilemmaVotes(candidate.votes),
     voteSettlement: normalizeDilemmaVoteSettlement(candidate.voteSettlement),
     photos: normalizeDilemmaPhotos(candidate.photos),
@@ -203,99 +198,6 @@ export function normalizeDilemmaVoteSettlement(value: any): DilemmaVoteSettlemen
     appliedAt: typeof candidate.appliedAt === "string" ? candidate.appliedAt : "",
     appliedBy: typeof candidate.appliedBy === "string" ? candidate.appliedBy : null,
   };
-}
-
-export function normalizeDilemmaResolutionBoardState(value: any): DilemmaResolutionBoardState {
-  const candidate = value && typeof value === "object" ? value : {};
-
-  return {
-    resourceStartPositions: normalizeResourcePositions(candidate.resourceStartPositions),
-    resourceMovements: normalizeResourceMovements(candidate.resourceMovements),
-    resourceFinalPositions: normalizeResourcePositions(candidate.resourceFinalPositions),
-    resourceMomentum: normalizeResourceMomentum(candidate.resourceMomentum),
-    resourceMomentumMarkers: normalizeResourceMomentumMarkers(candidate.resourceMomentumMarkers),
-    resourceFinalMomentum: normalizeResourceMomentum(candidate.resourceFinalMomentum),
-    resourceFinalMomentumMarkers: normalizeResourceMomentumMarkers(candidate.resourceFinalMomentumMarkers),
-    stabilityStart: normalizeCounter(candidate.stabilityStart, 13, 0),
-    stabilityMovement: normalizeSignedCounter(candidate.stabilityMovement, 13),
-    stabilityFinal: normalizeCounter(candidate.stabilityFinal, 13, 0),
-    endTrigger: normalizeDilemmaEndTrigger(candidate.endTrigger),
-    kingDeathReason: normalizeKingDeathReason(candidate.kingDeathReason),
-    memo: normalizeTextField(candidate.memo).slice(0, 500),
-  };
-}
-
-function applyDilemmaOutcomeEndEffects(
-  boardState: DilemmaResolutionBoardState,
-  outcome: DilemmaOutcome | null,
-): DilemmaResolutionBoardState {
-  const kingDeath = outcome?.effects.find(
-    (effect): effect is Extract<DilemmaOutcomeEffect, { type: "king_death" }> => effect.type === "king_death",
-  );
-
-  if (!kingDeath) {
-    return boardState;
-  }
-
-  return {
-    ...boardState,
-    endTrigger: "king_death",
-    kingDeathReason: boardState.kingDeathReason || kingDeath.reason,
-  };
-}
-
-function normalizeResourcePositions(value: any): Record<string, number> {
-  const candidate = value && typeof value === "object" ? value : {};
-
-  return Object.fromEntries(
-    resourceCounters
-      .map((resource) => [resource.id, normalizeCounter(candidate[resource.id], 17, 0)] as const)
-      .filter(([, position]) => position > 0),
-  );
-}
-
-function normalizeResourceMovements(value: any): Record<string, number> {
-  const candidate = value && typeof value === "object" ? value : {};
-
-  return Object.fromEntries(
-    resourceCounters
-      .map((resource) => [resource.id, normalizeSignedCounter(candidate[resource.id], 17)] as const)
-      .filter(([, movement]) => movement !== 0),
-  );
-}
-
-function normalizeResourceMomentum(value: any): DilemmaResolutionBoardState["resourceMomentum"] {
-  const candidate = value && typeof value === "object" ? value : {};
-
-  return Object.fromEntries(
-    resourceCounters
-      .map((resource) => [resource.id, normalizeMomentumDirection(candidate[resource.id])] as const)
-      .filter(([, direction]) => direction),
-  ) as DilemmaResolutionBoardState["resourceMomentum"];
-}
-
-function normalizeResourceMomentumMarkers(value: any): DilemmaResolutionBoardState["resourceMomentumMarkers"] {
-  const candidate = value && typeof value === "object" ? value : {};
-
-  return Object.fromEntries(
-    resourceCounters
-      .map((resource) => [resource.id, candidate[resource.id] === true] as const)
-      .filter(([, hasMarker]) => hasMarker),
-  ) as DilemmaResolutionBoardState["resourceMomentumMarkers"];
-}
-
-function normalizeMomentumDirection(value: any): "" | "positive" | "negative" {
-  return value === "positive" || value === "negative" ? value : "";
-}
-
-function normalizeDilemmaEndTrigger(value: any): DilemmaResolutionBoardState["endTrigger"] {
-  return value === "none" || value === "king_death" || value === "abdication_top" || value === "abdication_bottom"
-    ? value
-    : "";
-}
-
-function normalizeKingDeathReason(value: any): DilemmaResolutionBoardState["kingDeathReason"] {
-  return value === "death_symbol" || value === "fifth_card" || value === "card_text" ? value : "";
 }
 
 function normalizeSignedCounter(value: any, maxAbs: number): number {
@@ -374,23 +276,6 @@ export function getOrderedDilemmaResourceEffects(outcome: DilemmaOutcome | null 
     .map((effect) => ({ resourceId: effect.resourceId, amount: effect.amount }));
 }
 
-export function getDilemmaOutcomeKingDeathReason(
-  outcome: DilemmaOutcome | null | undefined,
-): DilemmaKingDeathReason {
-  const effect = normalizeDilemmaOutcomeEffects((outcome as any)?.effects).find(
-    (candidate): candidate is Extract<DilemmaOutcomeEffect, { type: "king_death" }> =>
-      candidate.type === "king_death",
-  );
-
-  return effect?.reason || "";
-}
-
-export function shouldTriggerFifthCardKingDeath(currentSessionCardNumber: unknown, placedOnKingDeathSpace: boolean): boolean {
-  const number = Number(currentSessionCardNumber);
-
-  return placedOnKingDeathSpace && Number.isFinite(number) && Math.trunc(number) >= 5;
-}
-
 export function summarizeDilemmaResourceEffects(effects: DilemmaOutcomeEffect[]): Record<string, number> {
   const deltas: Record<string, number> = {};
 
@@ -418,12 +303,15 @@ export function normalizeDilemmaOutcomeEffects(value: any): DilemmaOutcomeEffect
 function normalizeDilemmaOutcomeEffect(value: any, index: number): DilemmaOutcomeEffect | null {
   const candidate = value && typeof value === "object" ? value : {};
   const id = normalizeTextField(candidate.id) || `effect-${index + 1}`;
+  const photos = normalizeRecordAttachments(candidate.photos);
 
   if (candidate.type === "resource") {
     const resourceId = normalizePersonalResourceId(candidate.resourceId);
     const amount = clampDilemmaResourceDelta(candidate.amount);
 
-    return resourceId && amount !== 0 ? { id, type: "resource", resourceId, amount } : null;
+    return resourceId && amount !== 0
+      ? withDilemmaOutcomeEffectPhotos({ id, type: "resource", resourceId, amount }, photos)
+      : null;
   }
 
   if (candidate.type === "chronicle") {
@@ -431,18 +319,39 @@ function normalizeDilemmaOutcomeEffect(value: any, index: number): DilemmaOutcom
     const polarity = normalizeChroniclePolarity(candidate.polarity);
     const stickerCode = normalizeTextField(candidate.stickerCode);
 
-    return resourceId && polarity && stickerCode ? { id, type: "chronicle", resourceId, polarity, stickerCode } : null;
+    return resourceId && polarity && stickerCode
+      ? withDilemmaOutcomeEffectPhotos({ id, type: "chronicle", resourceId, polarity, stickerCode }, photos)
+      : null;
   }
 
   if (candidate.type === "envelope") {
     const envelopeCode = normalizeTextField(candidate.envelopeCode);
-    return envelopeCode ? { id, type: "envelope", envelopeCode } : null;
+    return envelopeCode ? withDilemmaOutcomeEffectPhotos({ id, type: "envelope", envelopeCode }, photos) : null;
   }
 
   if (candidate.type === "story" || candidate.type === "event") {
     const cardCode = normalizeTextField(candidate.cardCode);
     const status = normalizeCampaignCardStatus(candidate.status);
-    return cardCode && status ? { id, type: candidate.type, cardCode, status } : null;
+
+    if (!cardCode || !status) {
+      return null;
+    }
+
+    if (candidate.type === "story") {
+      const signedByHouseId = normalizeTextField(candidate.signedByHouseId);
+      const signedByName = normalizeTextField(candidate.signedByName);
+
+      return withDilemmaOutcomeEffectPhotos({
+        id,
+        type: "story",
+        cardCode,
+        status,
+        ...(signedByHouseId ? { signedByHouseId } : {}),
+        ...(signedByName ? { signedByName } : {}),
+      }, photos);
+    }
+
+    return withDilemmaOutcomeEffectPhotos({ id, type: "event", cardCode, status }, photos);
   }
 
   if (candidate.type === "mystery") {
@@ -451,21 +360,20 @@ function normalizeDilemmaOutcomeEffect(value: any, index: number): DilemmaOutcom
     const slotKey = normalizeTextField(candidate.slotKey);
 
     return dossierLetter && storylineSymbol && slotKey
-      ? { id, type: "mystery", dossierLetter, storylineSymbol, slotKey }
+      ? withDilemmaOutcomeEffectPhotos({ id, type: "mystery", dossierLetter, storylineSymbol, slotKey }, photos)
       : null;
-  }
-
-  if (candidate.type === "king_death") {
-    const reason = normalizeKingDeathReason(candidate.reason);
-    return reason ? { id, type: "king_death", reason } : null;
   }
 
   if (candidate.type === "note") {
     const text = normalizeTextField(candidate.text).slice(0, DILEMMA_OUTCOME_NOTE_MAX);
-    return text ? { id, type: "note", text } : null;
+    return text ? withDilemmaOutcomeEffectPhotos({ id, type: "note", text }, photos) : null;
   }
 
   return null;
+}
+
+function withDilemmaOutcomeEffectPhotos<T extends DilemmaOutcomeEffect>(effect: T, photos: RecordAttachment[]): T {
+  return photos.length ? { ...effect, photos } : effect;
 }
 
 function normalizePersonalResourceId(value: any): PersonalResourceId | "" {
@@ -503,18 +411,18 @@ export function normalizeDilemmaResourcePolarities(
   const deltas = normalizeDilemmaResourceDeltas(fallbackDeltas);
   const polarities: Record<string, "positive" | "negative"> = {};
 
-  resourceCounters.forEach((resource) => {
-    const raw = candidate[resource.id];
+  dilemmaResultMarkers.forEach((marker) => {
+    const raw = candidate[marker.id];
     if (raw === "positive" || raw === "negative") {
-      polarities[resource.id] = raw;
+      polarities[marker.id] = raw;
       return;
     }
 
-    const delta = deltas[resource.id] || 0;
+    const delta = marker.id === "story" ? 0 : deltas[marker.id] || 0;
     if (delta > 0) {
-      polarities[resource.id] = "positive";
+      polarities[marker.id] = "positive";
     } else if (delta < 0) {
-      polarities[resource.id] = "negative";
+      polarities[marker.id] = "negative";
     }
   });
 
@@ -550,32 +458,7 @@ export function dilemmaResourceDeltasHaveValues(value: any): boolean {
 export function dilemmaResourcePolaritiesHaveValues(value: any): boolean {
   const polarities = normalizeDilemmaResourcePolarities(value);
 
-  return resourceCounters.some((resource) => polarities[resource.id] === "positive" || polarities[resource.id] === "negative");
-}
-
-export function dilemmaBoardResolutionHasProgress(value: any): boolean {
-  const board = normalizeDilemmaResolutionBoardState(value);
-
-  return (
-    dilemmaResourceDeltasHaveValues(board.resourceStartPositions) ||
-    dilemmaResourceDeltasHaveValues(board.resourceMovements) ||
-    dilemmaResourceDeltasHaveValues(board.resourceFinalPositions) ||
-    resourceCounters.some((resource) => {
-      const resourceId = resource.id as PersonalResourceId;
-      return (
-        Boolean(board.resourceMomentum[resourceId]) ||
-        Boolean(board.resourceMomentumMarkers[resourceId]) ||
-        Boolean(board.resourceFinalMomentum[resourceId]) ||
-        Boolean(board.resourceFinalMomentumMarkers[resourceId])
-      );
-    }) ||
-    board.stabilityStart > 0 ||
-    board.stabilityMovement !== 0 ||
-    board.stabilityFinal > 0 ||
-    Boolean(board.endTrigger) ||
-    Boolean(board.kingDeathReason) ||
-    Boolean(board.memo.trim())
-  );
+  return dilemmaResultMarkers.some((marker) => polarities[marker.id] === "positive" || polarities[marker.id] === "negative");
 }
 
 // ── 딜레마 투표 ───────────────────────────────────────────────
@@ -753,6 +636,26 @@ export function normalizeDilemmaPhotos(value: any): DilemmaPhoto[] {
     .slice(0, dilemmaPhotoLimit);
 }
 
+function normalizeRecordAttachments(value: any): RecordAttachment[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .map((photo) => {
+      const candidate = photo && typeof photo === "object" ? photo : {};
+      return {
+        id: normalizeTextField(candidate.id) || createClientId(),
+        name: normalizeTextField(candidate.name) || ko.dilemmaHelpers.defaultPhotoName,
+        mimeType: normalizeTextField(candidate.mimeType) || "image/jpeg",
+        dataUrl: normalizeTextField(candidate.dataUrl),
+        createdAt: typeof candidate.createdAt === "string" ? candidate.createdAt : "",
+      };
+    })
+    .filter((photo) => photo.dataUrl)
+    .slice(0, dilemmaPhotoLimit);
+}
+
 // ── 딜레마 잠금 ───────────────────────────────────────────────
 
 export function normalizeDilemmaEditLock(value: any): DilemmaEditLock | null {
@@ -794,13 +697,45 @@ export function isDilemmaBlank(dilemma: any): boolean {
   return (
     textFieldsBlank &&
     !resolutionChecklistHasProgress(draft.resolutionChecklist) &&
-    !dilemmaBoardResolutionHasProgress(draft.resolutionBoardState) &&
     !dilemmaResourcePolaritiesHaveValues(draft.aye.resourcePolarities) &&
     !dilemmaResourcePolaritiesHaveValues(draft.nay.resourcePolarities) &&
     !dilemmaResourceDeltasHaveValues(draft.aye.resourceDeltas) &&
     !dilemmaResourceDeltasHaveValues(draft.nay.resourceDeltas) &&
     draft.photos.length === 0 &&
     draft.resolutionPhotos.length === 0
+  );
+}
+
+function getSelectedDilemmaOutcomeResultText(dilemma: DilemmaRecord): string {
+  if (dilemma.selectedOutcome === "aye") {
+    return dilemma.aye.result || "";
+  }
+
+  if (dilemma.selectedOutcome === "nay") {
+    return dilemma.nay.result || "";
+  }
+
+  return "";
+}
+
+export function hasSelectedDilemmaOutcomeResult(dilemma: any): boolean {
+  const record = normalizeDilemmaRecord(dilemma);
+  return Boolean(record.selectedOutcome && getSelectedDilemmaOutcomeResultText(record).trim());
+}
+
+export function hasDilemmaResolutionPublishContent(dilemma: any): boolean {
+  const record = normalizeDilemmaRecord(dilemma);
+  const selectedOutcome =
+    record.selectedOutcome === "aye" ? record.aye : record.selectedOutcome === "nay" ? record.nay : null;
+
+  return Boolean(
+    getSelectedDilemmaOutcomeResultText(record).trim() ||
+    (selectedOutcome && dilemmaResourceDeltasHaveValues(selectedOutcome.resourceDeltas)) ||
+    (selectedOutcome && selectedOutcome.effects.length > 0) ||
+    record.timeCounterSlot.trim() ||
+    record.resolutionNotes.trim() ||
+    resolutionChecklistHasProgress(record.resolutionChecklist) ||
+    record.resolutionPhotos.length
   );
 }
 
@@ -858,7 +793,7 @@ export function getDilemmaPublishBlockReason(dilemma: any, houses: RedactedHouse
     return ko.dilemmaHelpers.publishNeedOutcome;
   }
 
-  if (!normalizedDilemma.resolutionNotes.trim()) {
+  if (!hasDilemmaResolutionPublishContent(normalizedDilemma)) {
     return ko.dilemmaHelpers.publishNeedResolution;
   }
 
@@ -885,7 +820,7 @@ export function isDilemmaResolutionEntryPending(dilemma: unknown, houses: Redact
     return true;
   }
 
-  if (!record.resolutionNotes.trim()) {
+  if (!hasDilemmaResolutionPublishContent(record)) {
     return true;
   }
 
@@ -940,7 +875,7 @@ export function getDilemmaStatusLabel({
     return { text: ko.dilemmaHelpers.needOutcomePick, tone: "needs-action" };
   }
 
-  if (!dilemma.resolutionNotes.trim()) {
+  if (!hasDilemmaResolutionPublishContent(dilemma)) {
     return { text: ko.dilemmaHelpers.needFollowUp, tone: "needs-action" };
   }
 

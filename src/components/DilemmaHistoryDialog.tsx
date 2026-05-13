@@ -1,16 +1,25 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { normalizeDilemmaHistoryEntry, formatDilemmaCardLabel, formatLocalDateTime } from "../utils/dilemma-helpers";
+import {
+  formatDilemmaCardLabel,
+  formatDilemmaVoteAdvantage,
+  formatLocalDateTime,
+  normalizeDilemmaHistoryEntry,
+  normalizeDilemmaVotes,
+  normalizeResolutionChecklist,
+  sumDilemmaVotes,
+} from "../utils/dilemma-helpers";
 import { getMysteryStickerEntry } from "../../shared/mystery-stickers.mts";
 import { getMysteryStickerLabel } from "../utils/mystery-sticker-labels";
 import { MysteryStickerImage } from "./MysteryStickerImage";
 import { dilemmaOutcomeLabels, ko } from "../resources/gameResources";
 import { TokenIcon } from "./GameIcons";
-import { DilemmaFact, DilemmaTextPreview, DilemmaOutcomePreview, DilemmaPhotoStrip } from "./DilemmaUI";
-import { DilemmaHistoryEntry } from "../types/game";
+import { DilemmaTextPreview, DilemmaOutcomePreview, DilemmaPhotoStrip, DilemmaVoteBreakdown } from "./DilemmaUI";
+import { DilemmaHistoryEntry, RedactedHouse } from "../types/game";
 
 interface DilemmaHistoryDialogProps {
   busy: boolean;
   currentHouseId: string | null;
+  houses?: RedactedHouse[];
   history: DilemmaHistoryEntry[];
   open: boolean;
   onClose: () => void;
@@ -21,6 +30,7 @@ interface DilemmaHistoryDialogProps {
 function DilemmaHistoryDialog({
   busy,
   currentHouseId,
+  houses = [],
   history,
   open,
   onClose,
@@ -159,7 +169,13 @@ function DilemmaHistoryDialog({
               canDelete={canDeleteSelected}
               deleteBusy={busy}
               entry={selectedEntry}
+              houses={houses}
               onDelete={handleDeleteSelected}
+            />
+            <DilemmaHistoryBoardPhotoArchive
+              entries={normalizedHistory}
+              selectedId={selectedEntry?.historyId || ""}
+              onSelect={setSelectedId}
             />
           </div>
         ) : (
@@ -180,22 +196,31 @@ interface DilemmaHistoryDetailProps {
   canDelete: boolean;
   deleteBusy: boolean;
   entry: DilemmaHistoryEntry;
+  houses: RedactedHouse[];
   onDelete: () => void;
 }
 
-function DilemmaHistoryDetail({ canDelete, deleteBusy, entry, onDelete }: DilemmaHistoryDetailProps) {
+function DilemmaHistoryDetail({ canDelete, deleteBusy, entry, houses, onDelete }: DilemmaHistoryDetailProps) {
   if (!entry) {
     return null;
   }
 
+  const votes = normalizeDilemmaVotes(entry.votes);
+  const ayePower = sumDilemmaVotes(votes, houses, "aye");
+  const nayPower = sumDilemmaVotes(votes, houses, "nay");
+  const outcomeDisplay = (dilemmaOutcomeLabels as any)[entry.selectedOutcome || ""] || ko.common.undecided;
+  const advantageDisplay = formatDilemmaVoteAdvantage(ayePower, nayPower);
+  const resolutionMemo = normalizeResolutionChecklist(entry.resolutionChecklist).memo || "";
+  const cardLabel = formatDilemmaCardLabel(entry as any) || ko.common.noTitle;
+  const savedLine = ko.dilemmaHistory.savedLine(
+    entry.savedByName || entry.updatedByName || ko.common.councilFallback,
+    formatLocalDateTime(entry.savedAt || entry.updatedAt),
+  );
+
   return (
     <article className="dilemma-history-detail">
-      <header className="dilemma-history-detail-head">
-        <div>
-          <p className="section-label">{ko.dilemmaHistory.detailSection}</p>
-          <h3>{formatDilemmaCardLabel(entry as any) || ko.common.noTitle}</h3>
-        </div>
-        {canDelete ? (
+      {canDelete ? (
+        <header className="dilemma-history-detail-head">
           <button
             className="ghost-button danger-button dilemma-history-delete"
             type="button"
@@ -205,50 +230,124 @@ function DilemmaHistoryDetail({ canDelete, deleteBusy, entry, onDelete }: Dilemm
             <TokenIcon type="trash" />
             {ko.common.delete}
           </button>
+        </header>
+      ) : null}
+      <div className="dilemma-summary-meta-grid dilemma-history-meta-grid">
+        <span className="dilemma-summary-meta-field dilemma-summary-meta-field--code">
+          <span className="dilemma-summary-meta-label">{ko.dilemmaUi.summaryLabelCardCode}</span>
+          <strong className="dilemma-summary-meta-value dilemma-summary-card-code">{cardLabel}</strong>
+        </span>
+        {entry.timeCounterSlot?.trim() ? (
+          <span className="dilemma-summary-meta-field dilemma-summary-meta-field--time">
+            <span className="dilemma-summary-meta-label">{ko.dilemmaUi.summaryLabelTimeSlot}</span>
+            <strong className="dilemma-summary-meta-value">{entry.timeCounterSlot}</strong>
+          </span>
         ) : null}
-      </header>
-      <div className="dilemma-facts">
-        <DilemmaFact label={ko.dilemmaHistory.factCard} value={formatDilemmaCardLabel(entry as any)} />
-        <DilemmaFact label={ko.dilemmaHistory.factSlot} value={entry.timeCounterSlot} />
         {entry.mysteryStickerId ? (
-          <div className="dilemma-fact dilemma-fact-sticker">
-            <span>{ko.mysteryStickers.previewLabel}</span>
-            <strong>
-              <MysteryStickerImage
-                stickerId={entry.mysteryStickerId}
-                publicPath={getMysteryStickerEntry(entry.mysteryStickerId)?.publicPath}
-                presentation="meaningful"
-                meaningfulAlt={ko.mysteryStickers.previewAlt}
-              />
-              <span>{getMysteryStickerLabel(entry.mysteryStickerId)}</span>
+          <span className="dilemma-summary-meta-field dilemma-summary-meta-field--sticker">
+            <span className="dilemma-summary-meta-label">{ko.dilemmaUi.summaryLabelStorySticker}</span>
+            <strong className="dilemma-summary-meta-value dilemma-summary-sticker-group">
+              <span className="dilemma-summary-sticker-wrap dilemma-history-sticker-wrap">
+                <MysteryStickerImage
+                  stickerId={entry.mysteryStickerId}
+                  publicPath={getMysteryStickerEntry(entry.mysteryStickerId)?.publicPath}
+                  presentation="meaningful"
+                  meaningfulAlt={ko.mysteryStickers.previewAlt}
+                />
+              </span>
+              <span className="dilemma-history-sticker-name">{getMysteryStickerLabel(entry.mysteryStickerId)}</span>
             </strong>
-          </div>
+          </span>
         ) : null}
-        <DilemmaFact label={ko.dilemmaHistory.factResult} value={(dilemmaOutcomeLabels as any)[entry.selectedOutcome || ""] || ko.common.undecided} />
       </div>
       <DilemmaTextPreview label={ko.dilemmaHistory.labelContext} value={entry.context} />
-      <DilemmaTextPreview label={ko.dilemmaHistory.labelQuestion} value={entry.question} />
-      <DilemmaTextPreview label={ko.dilemmaHistory.labelMemo} value={entry.councilNotes} />
+      <div className="dilemma-summary-vote-divider" aria-hidden="true" />
+      <DilemmaVoteBreakdown dilemma={entry as any} houses={houses} />
+      <div className="dilemma-summary-vote-pills" role="group">
+        <div className="dilemma-summary-vote-pill">
+          <span className="dilemma-summary-vote-pill__label">{ko.dilemmaHistory.factResult}</span>
+          <span className="dilemma-summary-vote-pill__value">{outcomeDisplay}</span>
+          {entry.voteNotes?.trim() ? (
+            <span className="dilemma-summary-vote-pill__detail">{entry.voteNotes}</span>
+          ) : null}
+        </div>
+        <div className="dilemma-summary-vote-pill">
+          <span className="dilemma-summary-vote-pill__label">{ko.dilemmaUi.factAdvantage}</span>
+          <span className="dilemma-summary-vote-pill__value">{advantageDisplay}</span>
+        </div>
+      </div>
       <div className="dilemma-outcome-grid">
         <DilemmaOutcomePreview label={ko.dilemmaHistory.labelAye} selected={entry.selectedOutcome === "aye"} outcome={entry.aye} />
         <DilemmaOutcomePreview label={ko.dilemmaHistory.labelNay} selected={entry.selectedOutcome === "nay"} outcome={entry.nay} />
       </div>
-      <DilemmaTextPreview label={ko.dilemmaHistory.labelVote} value={entry.voteNotes} />
       <DilemmaPhotoStrip
         photos={entry.photos}
         sectionLabel={ko.dilemmaHistory.labelPhotosCard}
         stripAriaLabel={ko.dilemmaUi.photoStripAria}
       />
-      <DilemmaTextPreview label={ko.dilemmaHistory.labelFollowUp} value={entry.resolutionNotes} />
+      {resolutionMemo ? <DilemmaTextPreview label={ko.dilemmaHistory.labelMemo} value={resolutionMemo} /> : null}
       <DilemmaPhotoStrip
         photos={entry.resolutionPhotos}
         sectionLabel={ko.dilemmaHistory.labelPhotosResolution}
         stripAriaLabel={ko.dilemmaUi.photoStripResolutionAria}
       />
-      <p className="dilemma-updated">
-        {ko.dilemmaHistory.savedLine(entry.savedByName || entry.updatedByName || ko.common.councilFallback, formatLocalDateTime(entry.savedAt || entry.updatedAt))}
-      </p>
+      <p className="dilemma-updated">{savedLine}</p>
     </article>
+  );
+}
+
+function DilemmaHistoryBoardPhotoArchive({
+  entries,
+  selectedId,
+  onSelect,
+}: {
+  entries: DilemmaHistoryEntry[];
+  selectedId: string;
+  onSelect: (historyId: string) => void;
+}) {
+  const photoItems = entries.flatMap((entry) =>
+    (entry.resolutionPhotos || []).map((photo, photoIndex) => ({
+      entry,
+      photo,
+      photoIndex,
+      label: formatDilemmaCardLabel(entry as any) || ko.common.noTitle,
+      savedAt: formatLocalDateTime(entry.savedAt || entry.updatedAt),
+    })),
+  );
+
+  return (
+    <section className="dilemma-history-board-gallery" aria-label={ko.dilemmaHistory.boardPhotoArchiveTitle}>
+      <header className="dilemma-history-board-gallery-head">
+        <div>
+          <p className="section-label">{ko.dilemmaHistory.labelPhotosResolution}</p>
+          <h3>{ko.dilemmaHistory.boardPhotoArchiveTitle}</h3>
+        </div>
+        <span>{photoItems.length} / {entries.length}</span>
+      </header>
+      {photoItems.length ? (
+        <div className="dilemma-history-board-gallery-grid">
+          {photoItems.map(({ entry, photo, photoIndex, label, savedAt }) => (
+            <button
+              className={`dilemma-history-board-photo-card${entry.historyId === selectedId ? " selected" : ""}`}
+              key={`${entry.historyId}-${photo.id || photoIndex}`}
+              type="button"
+              onClick={() => onSelect(entry.historyId)}
+            >
+              <span className="dilemma-history-board-photo-frame">
+                <img src={photo.dataUrl} alt={photo.name || ko.dilemmaResolution.photoAlt} />
+              </span>
+              <span className="dilemma-history-board-photo-meta">
+                <strong>{label}</strong>
+                <span>{savedAt}</span>
+                <em>{photoIndex + 1} / {entry.resolutionPhotos.length}</em>
+              </span>
+            </button>
+          ))}
+        </div>
+      ) : (
+        <p className="dilemma-history-board-gallery-empty">{ko.dilemmaHistory.boardPhotoArchiveEmpty}</p>
+      )}
+    </section>
   );
 }
 

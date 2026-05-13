@@ -2,6 +2,7 @@ import React, { Suspense, useCallback, useEffect, useMemo, useRef, useState } fr
 import {
   agendaEventsPathWithSession,
   agendaRequest,
+  shouldForceRefreshAfterAdminModeToggle,
   useAgendaMutations,
   useAgendaRefresh,
   useAgendaStateQuery,
@@ -78,7 +79,6 @@ import {
   scoreTrackCounters,
   sessionEndChecklistItems,
   sessionEndUnavailableMessage,
-  sharedBoardSheetUrl,
   tokenCounters,
   ko,
 } from "./resources/gameResources";
@@ -242,6 +242,7 @@ function App() {
   const voteOrderToggleRef = useRef(null);
   const openAgendaGuideToggleRef = useRef(null);
   const secretAgendaGuideToggleRef = useRef(null);
+  const latestAgendaVersionRef = useRef(0);
   const finalBoardComplete = useMemo(() => isFinalBoardDraftComplete(finalBoardDraft), [finalBoardDraft]);
   const sessionEndChecklistComplete = useMemo(
     () => sessionEndChecklistItems.every((item) => sessionEndChecklist[item.id]),
@@ -253,12 +254,16 @@ function App() {
   const apiRequest = useCallback((options = {}) => agendaRequest(options), []);
   const state = agendaQuery.data?.state ?? null;
   const authenticated = Boolean(agendaQuery.data?.authenticated);
-  const admin = Boolean(agendaQuery.data?.admin);
+  const admin = Boolean(agendaQuery.data?.admin || state?.isAdmin);
   const spectator = Boolean(agendaQuery.data?.spectator);
   const realtimeEnabled = Boolean(agendaQuery.data?.realtimeEnabled);
   const sessionStatus = agendaQuery.isPending ? "checking" : "ready";
   const parallelAgendaSessionParam =
     typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("session") ?? "" : "";
+
+  useEffect(() => {
+    latestAgendaVersionRef.current = Number(state?.version) || 0;
+  }, [state?.version]);
 
   useEffect(() => {
     if (
@@ -270,26 +275,91 @@ function App() {
       return undefined;
     }
 
-    const refreshIfVisible = () => {
-      if (document.visibilityState !== "visible" || mutationInFlight.current) {
+    const realtimeRefreshDelayMs = 260;
+    let refreshTimer: number | null = null;
+    let mutationRetryTimer: number | null = null;
+    let pendingVersion = 0;
+
+    const clearRefreshTimer = () => {
+      if (refreshTimer !== null) {
+        window.clearTimeout(refreshTimer);
+        refreshTimer = null;
+      }
+    };
+
+    const clearMutationRetryTimer = () => {
+      if (mutationRetryTimer !== null) {
+        window.clearTimeout(mutationRetryTimer);
+        mutationRetryTimer = null;
+      }
+    };
+
+    const runRefresh = () => {
+      clearRefreshTimer();
+
+      if (document.visibilityState !== "visible") {
         return;
       }
 
-      void refresh();
+      if (mutationInFlight.current) {
+        clearMutationRetryTimer();
+        mutationRetryTimer = window.setTimeout(runRefresh, realtimeRefreshDelayMs);
+        return;
+      }
+
+      const refreshTargetVersion = pendingVersion;
+      pendingVersion = 0;
+      void refresh().then(() => {
+        if (pendingVersion > Math.max(latestAgendaVersionRef.current, refreshTargetVersion)) {
+          runRefresh();
+        }
+      });
+    };
+
+    const scheduleRefresh = (version = 0) => {
+      if (version > 0 && version <= latestAgendaVersionRef.current) {
+        return;
+      }
+
+      pendingVersion = Math.max(pendingVersion, version);
+
+      if (document.visibilityState !== "visible") {
+        return;
+      }
+
+      clearRefreshTimer();
+      refreshTimer = window.setTimeout(runRefresh, realtimeRefreshDelayMs);
+    };
+
+    const refreshFromStateEvent = (event: MessageEvent) => {
+      const payload = (() => {
+        try {
+          return JSON.parse(event.data) as { version?: unknown };
+        } catch {
+          return {};
+        }
+      })();
+      scheduleRefresh(Number(payload.version) || 0);
+    };
+
+    const refreshFromConnectionEvent = () => {
+      scheduleRefresh();
     };
 
     const events = new EventSource(agendaEventsPathWithSession());
-    events.addEventListener("connected", refreshIfVisible);
-    events.addEventListener("state", refreshIfVisible);
-    window.addEventListener("focus", refreshIfVisible);
-    document.addEventListener("visibilitychange", refreshIfVisible);
+    events.addEventListener("connected", refreshFromConnectionEvent);
+    events.addEventListener("state", refreshFromStateEvent);
+    window.addEventListener("focus", refreshFromConnectionEvent);
+    document.addEventListener("visibilitychange", refreshFromConnectionEvent);
 
     return () => {
       events.close();
-      events.removeEventListener("connected", refreshIfVisible);
-      events.removeEventListener("state", refreshIfVisible);
-      window.removeEventListener("focus", refreshIfVisible);
-      document.removeEventListener("visibilitychange", refreshIfVisible);
+      events.removeEventListener("connected", refreshFromConnectionEvent);
+      events.removeEventListener("state", refreshFromStateEvent);
+      window.removeEventListener("focus", refreshFromConnectionEvent);
+      document.removeEventListener("visibilitychange", refreshFromConnectionEvent);
+      clearRefreshTimer();
+      clearMutationRetryTimer();
     };
   }, [
     authenticated,
@@ -477,7 +547,7 @@ function App() {
       state?.sessionEndCause === "abdication_bottom"
         ? state.sessionEndCause
         : "";
-    setSessionEndCause(getSessionEndCauseFromDilemma(state?.dilemma) || savedEndCause);
+    setSessionEndCause(savedEndCause);
     setSessionEndDialogOpen(true);
   };
 
@@ -757,10 +827,28 @@ function App() {
     });
   }, [mutate, state]);
 
+  const handleToggleAdminMode = useCallback(async () => {
+    if (!authenticated || !state?.currentHouseId) {
+      return;
+    }
+
+    const expectedAdmin = !admin;
+    const result = await mutate({
+      action: "setAdminMode",
+      enabled: expectedAdmin,
+    });
+
+    if (shouldForceRefreshAfterAdminModeToggle(result, expectedAdmin)) {
+      void refresh({ force: true });
+    }
+  }, [admin, authenticated, mutate, refresh, state?.currentHouseId]);
+
   const sessionChecking = sessionStatus === "checking";
   const isCouncilRoute = Boolean(state && (authenticated || admin || spectator));
   const voteOrderLocked = Boolean(state && isVoteOrderSettingLocked(state));
-  const canEditVoteOrder = Boolean(authenticated && state && getVoteOrderHouses(state).length > 0 && !voteOrderLocked);
+  const canEditVoteOrder = Boolean(
+    (authenticated || admin) && state && getVoteOrderHouses(state).length > 0 && (admin || !voteOrderLocked),
+  );
   const routeClass = sessionChecking ? "is-session-checking" : isCouncilRoute ? "is-council" : "is-entry";
 
   return (
@@ -778,12 +866,13 @@ function App() {
           bgmMuted={bgmMuted}
           bgmVolume={bgmVolume}
           busy={busy}
-          canEndSession={Boolean(authenticated && state?.phase === "complete")}
+          canEndSession={Boolean((authenticated || admin) && state?.phase === "complete")}
           canEditVoteOrder={canEditVoteOrder}
           canToggleRandomDiscard={Boolean(
-            authenticated &&
+            (authenticated || admin) &&
               state &&
-              (state.phase === "house-select" ||
+              (admin ||
+                state.phase === "house-select" ||
                 (state.phase === "discard" && !state.discardedHiddenCount && !state.selectedCount)),
           )}
           open={settingsOpen}
@@ -805,6 +894,7 @@ function App() {
           onBgmVolumeChange={handleBgmVolumeChange}
           onToggleRandomDiscard={handleToggleRandomDiscard}
           onToggleBgmMuted={handleToggleBgmMuted}
+          onToggleAdminMode={handleToggleAdminMode}
           onClose={closeFloatingMenus}
           onToggle={handleToggleSettings}
           onToggleTips={handleToggleTips}
@@ -843,6 +933,7 @@ function App() {
           state={state}
           busy={busy}
           mutate={mutate}
+          refresh={refresh}
           onOpenVoteOrderDialog={handleOpenVoteOrderDialog}
           onOpenOpenAgendaGuide={handleOpenOpenAgendaGuide}
           onOpenSecretAgendaGuide={handleOpenSecretAgendaGuide}
@@ -888,6 +979,7 @@ function App() {
         <DilemmaHistoryDialog
           busy={busy}
           currentHouseId={state?.currentHouseId || null}
+          houses={state ? getHouses(state) : []}
           history={state?.dilemmaHistory || []}
           open={dilemmaHistoryOpen}
           onClose={handleCloseDilemmaHistory}
@@ -952,11 +1044,6 @@ function SessionCheckPanel() {
   );
 }
 
-function getSessionEndCauseFromDilemma(dilemma: any) {
-  const trigger = dilemma?.resolutionBoardState?.endTrigger;
-  return trigger === "king_death" || trigger === "abdication_top" || trigger === "abdication_bottom" ? trigger : "";
-}
-
 function FloatingSettings({
   admin,
   authenticated,
@@ -985,6 +1072,7 @@ function FloatingSettings({
   onReset,
   onBgmVolumeChange,
   onToggle,
+  onToggleAdminMode,
   onToggleBgmMuted,
   onToggleRandomDiscard,
   onToggleTips,
@@ -996,6 +1084,13 @@ function FloatingSettings({
 }: any) {
   const bgmVolumePercent = Math.round(bgmVolume * 100);
   const floatRef = React.useRef<HTMLDivElement>(null);
+  const currentHouseId = state?.currentHouseId || "";
+  const activeAdminHouseId = state?.adminHouseId || "";
+  const activeAdminHouse = (state?.houses || []).find((house: any) => house.id === activeAdminHouseId);
+  const adminModeBlocked = Boolean(authenticated && activeAdminHouseId && activeAdminHouseId !== currentHouseId);
+  const adminModeTooltip = adminModeBlocked
+    ? ko.app.settings.adminModeTaken(getHouseKoreanName(activeAdminHouse))
+    : ko.app.settings.adminModeHint;
 
   React.useEffect(() => {
     if (!open && !tipsOpen) {
@@ -1086,6 +1181,26 @@ function FloatingSettings({
       {open ? (
         <div className="settings-menu" id="settings-menu">
           {authenticated ? (
+            <Tooltip className="settings-tooltip-anchor" label={adminModeTooltip}>
+              <button
+                className={`settings-switch-control${adminModeBlocked ? " disabled" : ""}`}
+                type="button"
+                aria-pressed={admin}
+                aria-label={ko.app.settings.adminModeAria(admin)}
+                onClick={onToggleAdminMode}
+                disabled={busy || adminModeBlocked}
+              >
+                <span>
+                  <strong>{ko.app.settings.adminMode}</strong>
+                </span>
+                <span className="settings-state-segment" aria-hidden="true">
+                  <span className={admin ? "active" : ""}>ON</span>
+                  <span className={!admin ? "active" : ""}>OFF</span>
+                </span>
+              </button>
+            </Tooltip>
+          ) : null}
+          {authenticated ? (
             <>
               <p className="section-label">{ko.app.settings.gameFlowSection}</p>
               <Tooltip
@@ -1170,11 +1285,6 @@ function FloatingSettings({
               </button>
             </>
           ) : null}
-          <a className="settings-link" href={sharedBoardSheetUrl} target="_blank" rel="noreferrer">
-            <TokenIcon type="sheet" />
-            {ko.app.settings.sharedSheet}
-            <TokenIcon type="external" />
-          </a>
           {admin ? (
             <>
               <p className="section-label">{ko.app.settings.adminSection}</p>
@@ -1299,11 +1409,10 @@ function LoginPanel({
     (state?.claimedHouseCount || 0) >= (state?.requiredHouseCount || REQUIRED_HOUSE_COUNT);
   const needsDisplayName = selectedHouse != null && (!selectedHouse.hasPassword || !selectedHouse.hasCustomName);
   const passwordReady =
-    (!selectedHouse && seatPassword.length >= 4) ||
-    (selectedHouse != null &&
+    selectedHouse != null &&
       seatPassword.length >= 4 &&
       (!needsDisplayName || isCustomNameReady(displayName)) &&
-      (selectedHouse.hasPassword || seatPassword === seatPasswordConfirm));
+      (selectedHouse.hasPassword || seatPassword === seatPasswordConfirm);
   const selectHouse = (houseId: any) => {
     setHouseInput(houseId);
     setDisplayName("");
@@ -1400,7 +1509,7 @@ function LoginPanel({
         />
         <button className="primary-button wide" type="submit" disabled={busy || !passwordReady}>
           <TokenIcon type="key" />
-          {busy ? ko.common.saving : selectedHouse ? ko.common.save : ko.app.login.adminLogin}
+          {busy ? ko.common.saving : ko.common.save}
         </button>
       </form>
     </section>
@@ -1424,19 +1533,6 @@ function PasswordPanel({
           <TokenIcon type="seal" />
           {ko.app.login.passwordHint}
         </p>
-        <label className="credential-field">
-          <span className="field-label">{ko.app.login.fieldAdminCode}</span>
-          <input
-            value={seatPassword}
-            onChange={(event) => setSeatPassword(event.target.value)}
-            type="password"
-            minLength={4}
-            maxLength={64}
-            autoComplete="current-password"
-            aria-label={ko.app.login.fieldAdminCode}
-            placeholder={ko.app.login.fieldAdminCode}
-          />
-        </label>
       </div>
     );
   }
@@ -1523,6 +1619,7 @@ function GamePanel({
   state,
   busy,
   mutate,
+  refresh,
   onOpenVoteOrderDialog,
   onOpenOpenAgendaGuide,
   onOpenSecretAgendaGuide,
@@ -1662,7 +1759,6 @@ function GamePanel({
           ownChoice={state.ownChoice}
           dilemma={state.phase === "complete" ? state.dilemma : null}
           dilemmaHistory={state.dilemmaHistory || []}
-          currentSessionResolvedDilemmaCount={state.currentSessionResolvedDilemmaCount || 0}
           dilemmaLeader={state.dilemmaLeader}
           dilemmaModerator={state.dilemmaModerator}
           houses={state.houses || []}
@@ -1674,6 +1770,7 @@ function GamePanel({
           canResetDilemmaResult={Boolean(state.canResetDilemmaResult)}
           busy={busy}
           mutate={mutate}
+          refresh={refresh}
           onSaveAlignmentReward={handleSaveAlignmentReward}
           onOpenVoteOrderDialog={onOpenVoteOrderDialog}
           onOpenOpenAgendaGuide={onOpenOpenAgendaGuide}
@@ -1950,7 +2047,6 @@ function PersonalInventoryPanel({
   ownChoice,
   dilemma,
   dilemmaHistory,
-  currentSessionResolvedDilemmaCount = 0,
   dilemmaLeader,
   dilemmaModerator,
   houses,
@@ -1962,6 +2058,7 @@ function PersonalInventoryPanel({
   canResetDilemmaResult = false,
   busy,
   mutate,
+  refresh,
   onSaveAlignmentReward,
   onOpenVoteOrderDialog,
   onOpenOpenAgendaGuide,
@@ -2328,11 +2425,17 @@ function PersonalInventoryPanel({
       return;
     }
 
+    if (canEditDilemmaCard === false) {
+      void refresh({ force: true });
+      return;
+    }
+
     setDilemmaResolutionOpen(false);
 
     const result = await mutate({ action: "beginDilemmaEdit" });
 
     if (!result?.dilemmaEditToken) {
+      void refresh({ force: true });
       return;
     }
 
@@ -2340,10 +2443,10 @@ function PersonalInventoryPanel({
     setDilemmaDraft(createDilemmaDraft(result.state?.dilemma || serverDilemma));
     setDilemmaPhotoError("");
     setDilemmaDialogOpen(true);
-  }, [dilemma, houseId, mutate, serverDilemma]);
+  }, [canEditDilemmaCard, dilemma, houseId, mutate, refresh, serverDilemma]);
 
   const beginDilemmaResolutionEdit = useCallback(async () => {
-    if (!dilemma || !houseId || !canEnterDilemmaResolution) {
+    if (!dilemma || !houseId || (!canEnterDilemmaResolution && !canResetDilemmaResult)) {
       return;
     }
 
@@ -2352,6 +2455,7 @@ function PersonalInventoryPanel({
     const result = await mutate({ action: "beginDilemmaEdit" });
 
     if (!result?.dilemmaEditToken) {
+      void refresh({ force: true });
       return;
     }
 
@@ -2359,7 +2463,7 @@ function PersonalInventoryPanel({
     setDilemmaResolutionDraft(createDilemmaDraft(result.state?.dilemma || serverDilemma));
     setDilemmaPhotoError("");
     setDilemmaResolutionOpen(true);
-  }, [canEnterDilemmaResolution, dilemma, houseId, mutate, serverDilemma]);
+  }, [canEnterDilemmaResolution, canResetDilemmaResult, dilemma, houseId, mutate, refresh, serverDilemma]);
 
   const updateDilemmaField = useCallback((field: any, value: any) => {
     setDilemmaDraft((current) => ({
@@ -2519,13 +2623,16 @@ function PersonalInventoryPanel({
 
     if (fromResolution) {
       const liveDraft = createDilemmaDraft(normalizeDilemmaRecord(serverDilemma));
+      const resolutionDraft = createDilemmaDraft(dilemmaResolutionDraft);
       const dilemmaPayload = createDilemmaPayload({
         ...liveDraft,
-        resolutionNotes: dilemmaResolutionDraft.resolutionNotes,
-        timeCounterSlot: dilemmaResolutionDraft.timeCounterSlot,
-        resolutionPhotos: dilemmaResolutionDraft.resolutionPhotos,
-        resolutionChecklist: dilemmaResolutionDraft.resolutionChecklist ?? liveDraft.resolutionChecklist,
-        resolutionBoardState: (dilemmaResolutionDraft as any).resolutionBoardState ?? (liveDraft as any).resolutionBoardState,
+        aye: resolutionDraft.aye,
+        nay: resolutionDraft.nay,
+        selectedOutcome: resolutionDraft.selectedOutcome || liveDraft.selectedOutcome,
+        resolutionNotes: resolutionDraft.resolutionNotes,
+        timeCounterSlot: resolutionDraft.timeCounterSlot,
+        resolutionPhotos: resolutionDraft.resolutionPhotos,
+        resolutionChecklist: resolutionDraft.resolutionChecklist ?? liveDraft.resolutionChecklist,
       });
 
       const result = await mutate({
@@ -2544,6 +2651,18 @@ function PersonalInventoryPanel({
     }
 
     const dilemmaPayload = createDilemmaPayload(dilemmaDraft);
+    dilemmaPayload.aye = {
+      ...dilemmaPayload.aye,
+      result: "",
+      resourceDeltas: {},
+      effects: [],
+    };
+    dilemmaPayload.nay = {
+      ...dilemmaPayload.nay,
+      result: "",
+      resourceDeltas: {},
+      effects: [],
+    };
     const live = normalizeDilemmaRecord(serverDilemma);
     dilemmaPayload.votes = live.votes;
     dilemmaPayload.voteNotes = live.voteNotes;
@@ -2552,7 +2671,6 @@ function PersonalInventoryPanel({
     dilemmaPayload.timeCounterSlot = live.timeCounterSlot || "";
     dilemmaPayload.resolutionPhotos = live.resolutionPhotos;
     dilemmaPayload.resolutionChecklist = normalizeResolutionChecklist(live.resolutionChecklist);
-    (dilemmaPayload as any).resolutionBoardState = live.resolutionBoardState;
 
     const result = await mutate({
       action: "saveDilemma",
@@ -2568,12 +2686,12 @@ function PersonalInventoryPanel({
   }, [dilemmaDraft, dilemmaEditToken, dilemmaPhotoBusy, dilemmaResolutionDraft, dilemmaResolutionOpen, mutate, serverDilemma]);
 
   const publishDilemma = useCallback(async () => {
-    if (!houseId || !serverDilemma || isDilemmaBlank(serverDilemma) || !canPublishDilemmaResolution) {
+    if (!houseId || !serverDilemma || isDilemmaBlank(serverDilemma)) {
       return;
     }
 
     await mutate({ action: "publishDilemma" });
-  }, [canPublishDilemmaResolution, houseId, mutate, serverDilemma]);
+  }, [houseId, mutate, serverDilemma]);
 
   const ledgerSaving = ledgerSaveStatus === "saving" || ledgerSaveStatus === "pending" || isDirty;
   const ledgerStatusText =
@@ -2856,7 +2974,6 @@ function PersonalInventoryPanel({
         <DilemmaResolutionDialog
           busy={busy}
           currentHouseId={houseId}
-          currentSessionResolvedDilemmaCount={currentSessionResolvedDilemmaCount}
           dilemmaModeratorId={dilemmaModerator}
           draft={dilemmaResolutionDraft as any}
           history={dilemmaHistory || []}

@@ -26,7 +26,10 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
+  max-height: calc(100vh - 8px);
+  max-height: calc(100dvh - 8px);
   min-height: 0;
+  overflow: hidden;
 }
 
 .council-sidebar-column > .carrot-wait-action {
@@ -150,16 +153,20 @@
 .error-pill,
 .saved-pill,
 .agenda-section-heading>span {
+  display: inline-flex;
+  align-items: center;
   border: 1px solid rgba(31, 38, 33, 0.18);
   border-radius: 999px;
   font-size: 0.78rem;
   font-weight: 900;
+  line-height: 1;
   padding: 6px 10px;
   white-space: nowrap;
 }
 
 .ledger-status {
   background: rgba(31, 38, 33, 0.08);
+  min-height: 30px;
 }
 
 .seat-fieldset {
@@ -234,6 +241,9 @@
 
 .house-number {
   grid-column: 2;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   justify-self: end;
   border: 1px solid rgba(31, 38, 33, 0.16);
   border-radius: 999px;
@@ -242,6 +252,7 @@
   font-size: 0.62rem;
   font-weight: 950;
   line-height: 1;
+  min-height: 22px;
   padding: 3px 6px;
 }
 
@@ -292,10 +303,15 @@
 .seat-status {
   grid-column: 2;
   grid-row: 3;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   width: fit-content;
   border-radius: 999px;
   font-size: 0.6rem;
   font-weight: 900;
+  line-height: 1;
+  min-height: 20px;
   padding: 3px 6px;
 }
 
@@ -361,16 +377,18 @@ label {
 }
 
 .password-hint {
+  grid-column: 1 / -1;
   display: flex;
   align-items: center;
   gap: 10px;
-  min-height: 49px;
+  width: 100%;
+  min-height: 40px;
   border: 1px dashed rgba(31, 38, 33, 0.28);
   border-radius: var(--radius);
   color: rgba(28, 33, 31, 0.7);
   font-weight: 850;
   margin: 0;
-  padding: 10px 12px;
+  padding: 8px 12px;
 }
 
 .seat-ledger>.primary-button.wide {
@@ -384,7 +402,7 @@ label {
 
 .council-layout {
   display: grid;
-  grid-template-columns: 236px minmax(0, 1fr);
+  grid-template-columns: 260px minmax(0, 1fr);
   gap: 8px;
   align-items: stretch;
   height: calc(100vh - 8px);
@@ -394,12 +412,13 @@ label {
 }
 
 .council-sidebar {
-  flex: 0 0 auto;
+  flex: 0 1 auto;
   display: grid;
   gap: 10px;
   align-content: start;
   width: fit-content;
   max-width: 100%;
+  max-height: 100%;
   min-height: 0;
   overflow-x: hidden;
   overflow-y: auto;

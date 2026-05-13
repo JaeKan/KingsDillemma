@@ -9,6 +9,7 @@ import CastleOutlinedIcon from "@mui/icons-material/CastleOutlined";
 import CurrencyExchangeOutlinedIcon from "@mui/icons-material/CurrencyExchangeOutlined";
 import DangerousOutlinedIcon from "@mui/icons-material/DangerousOutlined";
 import DiamondOutlinedIcon from "@mui/icons-material/DiamondOutlined";
+import DragIndicatorOutlinedIcon from "@mui/icons-material/DragIndicatorOutlined";
 import EditOutlinedIcon from "@mui/icons-material/EditOutlined";
 import FactCheckOutlinedIcon from "@mui/icons-material/FactCheckOutlined";
 import FlagOutlinedIcon from "@mui/icons-material/FlagOutlined";
@@ -135,6 +136,7 @@ export function TokenIcon({ type }: { type: string }) {
     balance: BalanceOutlinedIcon,
     castle: CastleOutlinedIcon,
     coin: PaidOutlinedIcon,
+    drag: DragIndicatorOutlinedIcon,
     edit: EditOutlinedIcon,
     exit: LogoutOutlinedIcon,
     external: OpenInNewOutlinedIcon,
@@ -164,6 +166,7 @@ export function TokenIcon({ type }: { type: string }) {
     soundOff: VolumeOffOutlinedIcon,
     soundOn: VolumeUpOutlinedIcon,
     status: FactCheckOutlinedIcon,
+    story: MenuBookOutlinedIcon,
     tip: MenuBookOutlinedIcon,
     turn: AutorenewOutlinedIcon,
     trash: DeleteOutlineOutlinedIcon,

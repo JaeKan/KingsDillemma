@@ -5,6 +5,7 @@ import {
   type AgendaStateStore,
 } from "../shared/agenda-api.mts";
 import type { GameState } from "../netlify/functions/_shared/agenda-state.mts";
+import { shouldForceRefreshAfterAdminModeToggle } from "../src/app/agendaClient.ts";
 
 let persisted: GameState | null = null;
 const store: AgendaStateStore = {
@@ -15,6 +16,12 @@ const store: AgendaStateStore = {
 };
 
 const storeFactory = (_rowKey: string) => store;
+
+assert.equal(shouldForceRefreshAfterAdminModeToggle(null, true), true);
+assert.equal(shouldForceRefreshAfterAdminModeToggle({ ok: true }, true), true);
+assert.equal(shouldForceRefreshAfterAdminModeToggle({ admin: true }, true), false);
+assert.equal(shouldForceRefreshAfterAdminModeToggle({ state: { isAdmin: true } }, true), false);
+assert.equal(shouldForceRefreshAfterAdminModeToggle({ admin: false, state: { isAdmin: false } }, true), true);
 
 function jsonRequest(body: Record<string, unknown>, cookie?: string) {
   return new Request("http://localhost/api/agenda", {
@@ -62,6 +69,16 @@ const reset = await handleAgendaRequest(
 );
 assert.equal(reset.status, 200);
 assert.equal((persisted as any)?.phase, "house-select");
+
+const adminCodeOnlyLogin = await handleAgendaRequest(
+  jsonRequest({ action: "login", password: "12345" }),
+  { deployContext: "development" },
+  storeFactory,
+);
+const adminCodeOnlyLoginPayload = (await adminCodeOnlyLogin.json()) as any;
+assert.equal(adminCodeOnlyLogin.status, 400);
+assert.equal(adminCodeOnlyLoginPayload.ok, false);
+assert.equal(adminCodeOnlyLoginPayload.admin, undefined);
 
 const login = await handleAgendaRequest(
   jsonRequest({
@@ -242,6 +259,7 @@ const prematureDilemmaOutcome = await handleAgendaRequest(
   jsonRequest(
     {
       action: "saveDilemma",
+      fromResolution: true,
       dilemmaEditToken: beginDilemmaEditPayload.dilemmaEditToken,
       dilemma: {
         title: "Harbor levy",
@@ -266,10 +284,10 @@ const saveDilemma = await handleAgendaRequest(
         title: "Harbor levy",
         question: "Should the council fund the harbor?",
         aye: {
-          resourceDeltas: { wealth: 1 },
+          resourcePolarities: { wealth: "negative" },
         },
         nay: {
-          resourceDeltas: { morale: -1, knowledge: 2 },
+          resourcePolarities: { morale: "positive" },
         },
         photos: [
           {
@@ -292,7 +310,10 @@ assert.equal(saveDilemma.status, 200);
 assert.equal(saveDilemmaPayload.state.dilemma.title, "Harbor levy");
 assert.equal(saveDilemmaPayload.state.dilemma.dilemmaAuthorHouseId, "gamam");
 assert.equal(saveDilemmaPayload.state.dilemma.selectedOutcome, "");
-assert.deepEqual(saveDilemmaPayload.state.dilemma.nay.resourceDeltas, { morale: -1, knowledge: 2 });
+assert.deepEqual(saveDilemmaPayload.state.dilemma.aye.resourcePolarities, { wealth: "negative" });
+assert.deepEqual(saveDilemmaPayload.state.dilemma.nay.resourcePolarities, { morale: "positive" });
+assert.deepEqual(saveDilemmaPayload.state.dilemma.aye.resourceDeltas, {});
+assert.deepEqual(saveDilemmaPayload.state.dilemma.nay.resourceDeltas, {});
 assert.equal(saveDilemmaPayload.state.dilemma.photos.length, 1);
 assert.equal(saveDilemmaPayload.state.dilemmaHistory.length, 0);
 assert.equal(persisted?.dilemmaHistory.length, 0);
@@ -310,6 +331,36 @@ const loginSoladForDilemma = await handleAgendaRequest(
 const setCookieSolad = loginSoladForDilemma.headers.get("Set-Cookie") || "";
 assert.equal(loginSoladForDilemma.status, 200);
 assert.match(setCookieSolad, new RegExp(`^${COOKIE_NAME}=`));
+
+const enableAdminMode = await handleAgendaRequest(
+  jsonRequest({ action: "setAdminMode", enabled: true }, setCookie),
+  {},
+  storeFactory,
+);
+const enableAdminModePayload = (await enableAdminMode.json()) as any;
+assert.equal(enableAdminMode.status, 200);
+assert.equal(enableAdminModePayload.admin, true);
+assert.equal(enableAdminModePayload.state.isAdmin, true);
+assert.equal(enableAdminModePayload.state.adminHouseId, "gamam");
+
+const blockedSecondAdminMode = await handleAgendaRequest(
+  jsonRequest({ action: "setAdminMode", enabled: true }, setCookieSolad),
+  {},
+  storeFactory,
+);
+const blockedSecondAdminModePayload = (await blockedSecondAdminMode.json()) as any;
+assert.equal(blockedSecondAdminMode.status, 409);
+assert.match(blockedSecondAdminModePayload.error, /관리자 모드/);
+
+const disableAdminMode = await handleAgendaRequest(
+  jsonRequest({ action: "setAdminMode", enabled: false }, setCookie),
+  {},
+  storeFactory,
+);
+const disableAdminModePayload = (await disableAdminMode.json()) as any;
+assert.equal(disableAdminMode.status, 200);
+assert.equal(disableAdminModePayload.admin, false);
+assert.equal(disableAdminModePayload.state.isAdmin, false);
 
 const resetByNonAuthor = await handleAgendaRequest(jsonRequest({ action: "resetDilemma" }, setCookieSolad), {}, storeFactory);
 assert.equal(resetByNonAuthor.status, 403);
@@ -378,14 +429,12 @@ const publishDilemma = await handleAgendaRequest(jsonRequest({ action: "publishD
 const publishDilemmaPayload = (await publishDilemma.json()) as any;
 assert.equal(publishDilemma.status, 200);
 assert.equal(publishDilemmaPayload.state.dilemmaHistory.length, 1);
-assert.equal(publishDilemmaPayload.state.currentSessionResolvedDilemmaCount, 1);
 assert.equal(publishDilemmaPayload.state.dilemmaHistory[0].title, "Harbor levy");
 assert.equal(publishDilemmaPayload.state.dilemmaHistory[0].resolutionPhotos.length, 1);
 assert.equal(publishDilemmaPayload.state.dilemma.title, "");
 assert.equal(publishDilemmaPayload.state.dilemma.historyId, "");
 assert.equal(persisted?.dilemma.title, "");
 assert.equal(persisted?.dilemmaHistory.length, 1);
-assert.equal(persisted?.currentSessionResolvedDilemmaCount, 1);
 
 const republishDilemma = await handleAgendaRequest(jsonRequest({ action: "publishDilemma" }, setCookie), {}, storeFactory);
 const republishDilemmaPayload = (await republishDilemma.json()) as any;
@@ -488,7 +537,7 @@ const saveSoladVotePair = await handleAgendaRequest(
 );
 const saveSoladVotePairPayload = (await saveSoladVotePair.json()) as any;
 assert.equal(saveSoladVotePair.status, 200);
-assert.equal(saveSoladVotePairPayload.state.canApplyDilemmaVotes, true);
+assert.equal(saveSoladVotePairPayload.state.canApplyDilemmaVotes, false);
 
 const tallyAuthorUpdatedByBeforeApply = (persisted as GameState).dilemma.updatedBy;
 
@@ -500,12 +549,22 @@ const peekGamamDualVote = await handleAgendaRequest(
 const peekGamamDualVotePayload = (await peekGamamDualVote.json()) as any;
 assert.equal(peekGamamDualVote.status, 200);
 assert.equal(peekGamamDualVotePayload.state.canResetDilemmaResult, true);
+assert.equal(peekGamamDualVotePayload.state.canApplyDilemmaVotes, true);
 assert.equal(saveSoladVotePairPayload.state.canResetDilemmaResult, false);
 
 const inventoryBeforeApply = structuredClone(persisted?.inventories);
 
-const earlyApplyDilemmaVotes = await handleAgendaRequest(
+const nonAuthorApplyDilemmaVotes = await handleAgendaRequest(
   jsonRequest({ action: "applyDilemmaVotes" }, cookieSoladPair),
+  {},
+  storeFactory,
+);
+const nonAuthorApplyDilemmaVotesPayload = (await nonAuthorApplyDilemmaVotes.json()) as any;
+assert.equal(nonAuthorApplyDilemmaVotes.status, 403);
+assert.match(nonAuthorApplyDilemmaVotesPayload.error, /작성한 가문/);
+
+const earlyApplyDilemmaVotes = await handleAgendaRequest(
+  jsonRequest({ action: "applyDilemmaVotes" }, setCookie),
   {},
   storeFactory,
 );
@@ -513,7 +572,7 @@ const earlyApplyDilemmaVotesPayload = (await earlyApplyDilemmaVotes.json()) as a
 assert.equal(earlyApplyDilemmaVotes.status, 200);
 assert.equal((persisted as GameState).dilemma.updatedBy, tallyAuthorUpdatedByBeforeApply);
 assert.equal(earlyApplyDilemmaVotesPayload.state.dilemma.selectedOutcome, "aye");
-assert.match(earlyApplyDilemmaVotesPayload.state.dilemma.voteNotes, /§4 Vote Resolution/);
+assert.match(earlyApplyDilemmaVotesPayload.state.dilemma.voteNotes, /권력 다수는 「찬성」/);
 assert.equal(earlyApplyDilemmaVotesPayload.state.canVoteDilemma, false);
 assert.equal(earlyApplyDilemmaVotesPayload.state.canApplyDilemmaVotes, false);
 assert.deepEqual(persisted?.inventories, inventoryBeforeApply);
