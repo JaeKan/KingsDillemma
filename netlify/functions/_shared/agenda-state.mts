@@ -111,7 +111,14 @@ type DilemmaOutcomeEffectBase = {
 
 export type DilemmaOutcomeEffect = DilemmaOutcomeEffectBase & (
   | { type: "resource"; resourceId: PersonalResourceId; amount: number }
-  | { type: "chronicle"; resourceId: PersonalResourceId; polarity: ChroniclePolarity; stickerCode: string }
+  | {
+      type: "chronicle";
+      resourceId: PersonalResourceId;
+      polarity: ChroniclePolarity;
+      stickerCode: string;
+      signedByHouseId?: HouseId;
+      signedByName?: string;
+    }
   | { type: "envelope"; envelopeCode: string }
   | {
       id: string;
@@ -120,6 +127,7 @@ export type DilemmaOutcomeEffect = DilemmaOutcomeEffectBase & (
       status: "active" | "completed" | "archived";
       signedByHouseId?: HouseId;
       signedByName?: string;
+      signerBonusText?: string;
     }
   | { type: "event"; cardCode: string; status: "active" | "completed" | "archived" }
   | { type: "mystery"; dossierLetter: string; storylineSymbol: string; slotKey: string }
@@ -966,8 +974,6 @@ export function touchSession(
       ...state.sessions,
       [houseId]: { ...session, updatedAt: now },
     },
-    version: state.version + 1,
-    updatedAt: now,
   };
 }
 
@@ -2219,7 +2225,7 @@ export function applyDilemmaVotes(
     voteNotes:
       selectedOutcome !== ""
         ? `${tallyLine} 권력 다수는 「${selectedOutcome === "aye" ? "찬성" : "반대"}」입니다.`
-        : `${tallyLine} 찬성과 반대 권력이 같거나 전원 기권이면 중재자가 승리 쪽을 정합니다(§4).`,
+        : `${tallyLine} 찬성과 반대 권력이 같거나 전원 기권이면 중재자가 승리 쪽을 정합니다.`,
     ...(selectedOutcome ? { selectedOutcome } : {}),
     updatedAt: now,
   };
@@ -4567,9 +4573,19 @@ function sanitizeDilemmaOutcomeEffect(value: unknown, index: number, now: string
     const resourceId = isPersonalResourceId(candidate.resourceId) ? candidate.resourceId : "";
     const polarity = sanitizeChroniclePolarity(candidate.polarity);
     const stickerCode = sanitizeSingleLineText(candidate.stickerCode, DILEMMA_CODE_LIMIT);
+    const signedByHouseId = isHouseId(candidate.signedByHouseId) ? candidate.signedByHouseId : "";
+    const signedByName = sanitizeSingleLineText(candidate.signedByName, DILEMMA_HOUSE_NAME_LIMIT);
 
     return resourceId && polarity && stickerCode
-      ? withDilemmaOutcomeEffectPhotos({ id, type: "chronicle", resourceId, polarity, stickerCode }, photos)
+      ? withDilemmaOutcomeEffectPhotos({
+          id,
+          type: "chronicle",
+          resourceId,
+          polarity,
+          stickerCode,
+          ...(signedByHouseId ? { signedByHouseId } : {}),
+          ...(signedByName ? { signedByName } : {}),
+        }, photos)
       : null;
   }
 
@@ -4589,6 +4605,7 @@ function sanitizeDilemmaOutcomeEffect(value: unknown, index: number, now: string
     if (candidate.type === "story") {
       const signedByHouseId = isHouseId(candidate.signedByHouseId) ? candidate.signedByHouseId : "";
       const signedByName = sanitizeSingleLineText(candidate.signedByName, DILEMMA_HOUSE_NAME_LIMIT);
+      const signerBonusText = sanitizeMultilineText(candidate.signerBonusText, DILEMMA_OUTCOME_NOTE_LIMIT);
 
       return withDilemmaOutcomeEffectPhotos({
         id,
@@ -4597,6 +4614,7 @@ function sanitizeDilemmaOutcomeEffect(value: unknown, index: number, now: string
         status,
         ...(signedByHouseId ? { signedByHouseId } : {}),
         ...(signedByName ? { signedByName } : {}),
+        ...(signerBonusText ? { signerBonusText } : {}),
       }, photos);
     }
 

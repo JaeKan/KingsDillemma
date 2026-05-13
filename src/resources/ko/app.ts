@@ -29,6 +29,7 @@ export const koApp = {
     physicalBoardSection: "기록",
     appSection: "앱 설정",
     secretScoreLink: "비밀 의제 점수",
+    dilemmaEffectGuide: "보드 처리 항목 설명",
     rulebookPdf: "룰북 PDF 보기",
     bgmUnmute: "BGM 음소거 해제",
     bgmMute: "BGM 음소거",

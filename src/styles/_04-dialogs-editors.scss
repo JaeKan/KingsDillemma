@@ -134,12 +134,15 @@
   background: rgba(6, 12, 11, 0.72);
   padding: 18px;
   overflow-x: hidden;
+  overflow-y: hidden;
+  overscroll-behavior: contain;
 }
 
 .session-end-dialog {
   width: min(100%, 760px);
   max-height: calc(100dvh - 36px);
   overflow-y: auto;
+  overscroll-behavior: contain;
   border: 1px solid rgba(234, 223, 189, 0.24);
   border-radius: var(--radius);
   background: rgba(17, 25, 24, 0.98);
@@ -354,6 +357,59 @@
   display: grid;
   gap: 16px;
   padding: 20px;
+}
+
+.dilemma-effect-guide-dialog {
+  width: min(100%, 720px);
+}
+
+.dilemma-effect-guide-list {
+  display: grid;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid rgba(234, 223, 189, 0.16);
+  border-radius: calc(var(--radius) - 2px);
+  background: rgba(5, 9, 9, 0.28);
+}
+
+.dilemma-effect-guide-item {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+  padding: 13px 14px;
+}
+
+.dilemma-effect-guide-item h3,
+.dilemma-effect-guide-item p {
+  margin: 0;
+}
+
+.dilemma-effect-guide-item h3 {
+  color: var(--ink);
+  font-size: 0.92rem;
+  font-weight: 900;
+  line-height: 1.2;
+}
+
+.dilemma-effect-guide-item p {
+  color: var(--muted);
+  font-size: 0.82rem;
+  line-height: 1.5;
+}
+
+.dilemma-effect-guide-item small {
+  color: var(--gold-2);
+  font-size: 0.74rem;
+  font-weight: 850;
+  line-height: 1.35;
+}
+
+.dilemma-effect-guide-divider {
+  width: 100%;
+  height: 0;
+  margin: 0;
+  border: 0;
+  border-top: 1px solid rgba(234, 223, 189, 0.16);
 }
 
 .dilemma-dialog {
@@ -1842,15 +1898,16 @@
 }
 
 .dilemma-resolution-effects-edit .dilemma-outcome-effects-head {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  justify-content: space-between;
   gap: 10px 12px;
   min-height: 40px;
 }
 
 .dilemma-resolution-effects-edit .dilemma-outcome-effects-add {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(8rem, 11rem) auto;
   align-items: center;
   justify-self: end;
   gap: 8px;
@@ -1863,7 +1920,6 @@
 }
 
 .dilemma-resolution-effects-edit .dilemma-outcome-effects-add label {
-  flex: 0 1 11rem;
   min-width: 0;
 }
 
@@ -1873,7 +1929,6 @@
 }
 
 .dilemma-resolution-effects-edit .dilemma-outcome-effects-add .compact-button {
-  flex: 0 0 auto;
   min-width: 0;
 }
 
@@ -1897,6 +1952,13 @@
   justify-content: space-between;
 }
 
+.dilemma-outcome-effects-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
 .dilemma-outcome-effects-heading {
   margin: 0;
   color: rgba(216, 178, 90, 0.92);
@@ -1910,6 +1972,7 @@
 .dilemma-effect-field input,
 .dilemma-effect-field select,
 .dilemma-effect-field textarea {
+  width: 100%;
   min-width: 0;
   min-height: 32px;
   border: 1px solid rgba(234, 223, 189, 0.18);
@@ -2034,6 +2097,8 @@
 }
 
 .dilemma-effect-note-field,
+.dilemma-effect-mention-field,
+.dilemma-effect-storyline-picker,
 .dilemma-outcome-effect-photo-editor,
 .dilemma-outcome-effect-fields .dilemma-effect-note-field {
   grid-column: 1 / -1;
@@ -2071,6 +2136,11 @@
   resize: vertical;
 }
 
+.dilemma-effect-mention-preview {
+  min-width: 0;
+  padding-top: 2px;
+}
+
 .dilemma-outcome-effect-remove {
   align-self: center;
 }
@@ -2101,6 +2171,7 @@
 }
 
 .dilemma-outcome-effect-photo-add {
+  position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -2117,6 +2188,7 @@
   font-size: 0.72rem;
   font-weight: 850;
   line-height: 1;
+  overflow: hidden;
   white-space: nowrap;
 }
 
@@ -2132,10 +2204,11 @@
 
 .dilemma-outcome-effect-photo-add input {
   position: absolute;
-  width: 1px;
-  height: 1px;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  cursor: inherit;
   opacity: 0;
-  pointer-events: none;
 }
 
 .dilemma-outcome-effect-photo-strip {
@@ -2201,18 +2274,19 @@
   }
 
   .dilemma-resolution-effects-edit .dilemma-outcome-effects-head {
-    flex-direction: column;
     align-items: stretch;
+    grid-template-columns: minmax(0, 1fr);
     min-height: 0;
   }
 
   .dilemma-resolution-effects-edit .dilemma-outcome-effects-add {
+    grid-template-columns: minmax(0, 1fr) auto;
     justify-self: auto;
     width: 100%;
   }
 
   .dilemma-resolution-effects-edit .dilemma-outcome-effects-add label {
-    flex: 1 1 0;
+    min-width: 0;
   }
 
   .dilemma-outcome-effects-head {

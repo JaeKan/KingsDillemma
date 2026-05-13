@@ -9,11 +9,16 @@ import {
   sumDilemmaVotes,
 } from "../utils/dilemma-helpers";
 import { getMysteryStickerEntry } from "../../shared/mystery-stickers.mts";
-import { getMysteryStickerLabel } from "../utils/mystery-sticker-labels";
 import { MysteryStickerImage } from "./MysteryStickerImage";
 import { dilemmaOutcomeLabels, ko } from "../resources/gameResources";
 import { TokenIcon } from "./GameIcons";
-import { DilemmaTextPreview, DilemmaOutcomePreview, DilemmaPhotoStrip, DilemmaVoteBreakdown } from "./DilemmaUI";
+import {
+  DilemmaTextPreview,
+  DilemmaOutcomeEffectsSummary,
+  DilemmaOutcomePreview,
+  DilemmaPhotoStrip,
+  DilemmaVoteBreakdown,
+} from "./DilemmaUI";
 import { DilemmaHistoryEntry, RedactedHouse } from "../types/game";
 
 interface DilemmaHistoryDialogProps {
@@ -212,6 +217,8 @@ function DilemmaHistoryDetail({ canDelete, deleteBusy, entry, houses, onDelete }
   const advantageDisplay = formatDilemmaVoteAdvantage(ayePower, nayPower);
   const resolutionMemo = normalizeResolutionChecklist(entry.resolutionChecklist).memo || "";
   const cardLabel = formatDilemmaCardLabel(entry as any) || ko.common.noTitle;
+  const selectedOutcomeRecord =
+    entry.selectedOutcome === "aye" ? entry.aye : entry.selectedOutcome === "nay" ? entry.nay : null;
   const savedLine = ko.dilemmaHistory.savedLine(
     entry.savedByName || entry.updatedByName || ko.common.councilFallback,
     formatLocalDateTime(entry.savedAt || entry.updatedAt),
@@ -255,7 +262,6 @@ function DilemmaHistoryDetail({ canDelete, deleteBusy, entry, houses, onDelete }
                   meaningfulAlt={ko.mysteryStickers.previewAlt}
                 />
               </span>
-              <span className="dilemma-history-sticker-name">{getMysteryStickerLabel(entry.mysteryStickerId)}</span>
             </strong>
           </span>
         ) : null}
@@ -285,6 +291,7 @@ function DilemmaHistoryDetail({ canDelete, deleteBusy, entry, houses, onDelete }
         sectionLabel={ko.dilemmaHistory.labelPhotosCard}
         stripAriaLabel={ko.dilemmaUi.photoStripAria}
       />
+      <DilemmaOutcomeEffectsSummary outcome={selectedOutcomeRecord} houses={houses} />
       {resolutionMemo ? <DilemmaTextPreview label={ko.dilemmaHistory.labelMemo} value={resolutionMemo} /> : null}
       <DilemmaPhotoStrip
         photos={entry.resolutionPhotos}

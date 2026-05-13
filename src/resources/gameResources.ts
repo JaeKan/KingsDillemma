@@ -65,6 +65,12 @@ export const rulebookReferenceTips = [
     body: "딜레마 결과는 A-F 해결 절차와 왕국 연대기 기록을 근거로 보강하고, 사진은 실제 카드/보드 기록을 대조하는 보조 자료로 둡니다.",
     reference: "한국어 룰북 p.23, p.44",
   },
+  {
+    id: "dilemma-board-effects",
+    title: "보드 처리 항목",
+    body: "결과가 연대기 스티커, 봉투, 이야기 카드, 사건 카드, 미스터리 스티커 처리를 요구할 때만 항목으로 남기고 각 항목 설명 모달에서 세부 기준을 확인합니다.",
+    reference: "한국어 룰북 p.25-28, p.42",
+  },
 ];
 export const specialAbilityLegendImageUrl = "/rulebook-special-ability-legend.png";
 export const specialAbilityIconUrls = {

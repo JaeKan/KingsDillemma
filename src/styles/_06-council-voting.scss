@@ -713,6 +713,71 @@
   grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
 }
 
+.moderator-decision-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 34px;
+  min-width: 0;
+  border-radius: var(--radius);
+  padding: 0 12px;
+  color: var(--ink-strong);
+  font-size: 0.78rem;
+  font-weight: 900;
+  line-height: 1.1;
+  text-align: center;
+  cursor: pointer;
+  transition:
+    border-color 160ms ease,
+    background 160ms ease,
+    box-shadow 160ms ease,
+    transform 160ms ease;
+}
+
+.moderator-decision-button--aye {
+  border: 1px solid rgba(216, 178, 90, 0.46);
+  background:
+    linear-gradient(180deg, rgba(216, 178, 90, 0.24), rgba(216, 178, 90, 0.1)),
+    rgba(8, 14, 14, 0.62);
+  color: #fff3cf;
+}
+
+.moderator-decision-button--nay {
+  border: 1px solid rgba(174, 157, 129, 0.36);
+  background:
+    linear-gradient(180deg, rgba(234, 223, 189, 0.12), rgba(234, 223, 189, 0.055)),
+    rgba(8, 14, 14, 0.72);
+  color: rgba(255, 248, 229, 0.94);
+}
+
+.moderator-decision-button:hover:not(:disabled),
+.moderator-decision-button:focus-visible:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.24);
+}
+
+.moderator-decision-button--aye:hover:not(:disabled),
+.moderator-decision-button--aye:focus-visible:not(:disabled) {
+  border-color: rgba(241, 214, 134, 0.68);
+  background:
+    linear-gradient(180deg, rgba(216, 178, 90, 0.32), rgba(216, 178, 90, 0.16)),
+    rgba(8, 14, 14, 0.62);
+}
+
+.moderator-decision-button--nay:hover:not(:disabled),
+.moderator-decision-button--nay:focus-visible:not(:disabled) {
+  border-color: rgba(234, 223, 189, 0.44);
+  background:
+    linear-gradient(180deg, rgba(234, 223, 189, 0.17), rgba(234, 223, 189, 0.08)),
+    rgba(8, 14, 14, 0.72);
+}
+
+.moderator-decision-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+  transform: none;
+}
+
 .dilemma-vote-status {
   margin: 0;
   color: #d8caac;

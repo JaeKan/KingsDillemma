@@ -33,6 +33,7 @@ import {
   setHouseName,
   setSeatCredential,
   startDraftIfReady,
+  touchSession,
 } from "../netlify/functions/_shared/agenda-state.mts";
 
 const now = "2026-05-07T00:00:00.000Z";
@@ -198,6 +199,9 @@ const overwrittenSession = registerSession(playerSession, "solad", "token-b", no
 assert.equal(overwrittenSession.sessions.solad.token, "token-b");
 assert.equal(redactState(overwrittenSession, null).houses.find((house) => house.id === "solad")?.hasSession, true);
 assert.equal(redactState(overwrittenSession, "solad").houses.find((house) => house.id === "solad")?.hasSession, true);
+const touchedSession = touchSession(overwrittenSession, "solad", "2026-05-07T00:05:00.000Z");
+assert.equal(touchedSession.sessions.solad.updatedAt, "2026-05-07T00:05:00.000Z");
+assert.equal(touchedSession.version, overwrittenSession.version);
 
 const clearedSession = clearSession(overwrittenSession, "solad", now);
 assert.equal(clearedSession.sessions.solad, undefined);
@@ -943,12 +947,53 @@ const resultSavedThroughApiState = saveDilemmaRecord(
   {
     ...resultEditLockState.dilemma,
     resolutionNotes: "결과 저장 경로 후속 입력",
+    aye: {
+      ...resultEditLockState.dilemma.aye,
+      effects: [
+        {
+          id: "chronicle-signer",
+          type: "chronicle",
+          resourceId: "wealth",
+          polarity: "positive",
+          stickerCode: "43",
+          signedByHouseId: "gamam",
+          signedByName: "House Pinchay",
+        },
+        {
+          id: "story-signer-bonus",
+          type: "story",
+          cardCode: "S.39.0.F",
+          status: "active",
+          signedByHouseId: "solad",
+          signedByName: "House Solad",
+          signerBonusText: "@명망 +3 최다 서명인 보너스",
+        },
+      ],
+    },
   },
   "history-result-edit",
   now,
   { fromResolution: true },
 );
 assert.equal(redactState(resultSavedThroughApiState, "gamam").canEnterDilemmaResolution, true);
+assert.deepEqual(resultSavedThroughApiState.dilemma.aye.effects[0], {
+  id: "chronicle-signer",
+  type: "chronicle",
+  resourceId: "wealth",
+  polarity: "positive",
+  stickerCode: "43",
+  signedByHouseId: "gamam",
+  signedByName: "House Pinchay",
+});
+assert.deepEqual(resultSavedThroughApiState.dilemma.aye.effects[1], {
+  id: "story-signer-bonus",
+  type: "story",
+  cardCode: "S.39.0.F",
+  status: "active",
+  signedByHouseId: "solad",
+  signedByName: "House Solad",
+  signerBonusText: "@명망 +3 최다 서명인 보너스",
+});
 assert.equal(beginDilemmaEdit(resultSavedThroughApiState, "gamam", "result-edit-token-2", now).dilemma.editLock?.houseId, "gamam");
 assert.deepEqual(votingState.inventories, inventoriesBeforeDilemmaApply);
 assert.equal(redactState(votingState, "natar").dilemmaVoteTurn, null);

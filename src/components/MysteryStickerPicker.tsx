@@ -1,3 +1,4 @@
+import { useId } from "react";
 import { MYSTERY_STICKER_ENTRIES } from "../../shared/mystery-stickers.mts";
 import { ko } from "../resources/gameResources";
 import { getMysteryStickerLabel } from "../utils/mystery-sticker-labels";
@@ -6,20 +7,36 @@ import { MysteryStickerImage } from "./MysteryStickerImage";
 interface MysteryStickerPickerProps {
   value: string;
   disabled?: boolean;
+  label?: string;
+  ariaLabel?: string;
+  className?: string;
   onChange: (id: string) => void;
 }
 
 /** 딜레마 편집 — 룰북 이야기 카드 칸 배치(미스터리 스티커 1–6, 아이콘 타일 선택). */
-export function MysteryStickerPicker({ value, disabled = false, onChange }: MysteryStickerPickerProps) {
+export function MysteryStickerPicker({
+  value,
+  disabled = false,
+  label = ko.mysteryStickers.sectionTitle,
+  ariaLabel = ko.mysteryStickers.ariaGroup,
+  className = "",
+  onChange,
+}: MysteryStickerPickerProps) {
+  const titleId = useId();
   const resolvedId =
     value && MYSTERY_STICKER_ENTRIES.some((e) => e.id === value) ? value : "";
+  const rootClassName = [
+    "mystery-sticker-picker",
+    className,
+    disabled ? "disabled" : "",
+  ].filter(Boolean).join(" ");
 
   return (
-    <section className={`mystery-sticker-picker${disabled ? " disabled" : ""}`} aria-labelledby="mystery-sticker-title">
+    <section className={rootClassName} aria-labelledby={titleId}>
       <div className="mystery-sticker-picker-head">
-        <h3 id="mystery-sticker-title">{ko.mysteryStickers.sectionTitle}</h3>
+        <h3 id={titleId}>{label}</h3>
       </div>
-      <div className="mystery-sticker-picker-tiles" role="radiogroup" aria-label={ko.mysteryStickers.ariaGroup}>
+      <div className="mystery-sticker-picker-tiles" role="radiogroup" aria-label={ariaLabel}>
         <button
           type="button"
           role="radio"

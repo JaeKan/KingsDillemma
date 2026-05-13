@@ -171,3 +171,27 @@ assert.deepEqual(normalizedStorySigner.effects[0], {
     },
   ],
 });
+
+const normalizedChronicleSigner = normalizeDilemmaOutcome({
+  effects: [
+    {
+      id: "chronicle-signer",
+      type: "chronicle",
+      resourceId: "wealth",
+      polarity: "positive",
+      stickerCode: "43",
+      signedByHouseId: "gamam",
+      signedByName: "House Gamam",
+    },
+  ],
+});
+
+assert.deepEqual(normalizedChronicleSigner.effects[0], {
+  id: "chronicle-signer",
+  type: "chronicle",
+  resourceId: "wealth",
+  polarity: "positive",
+  stickerCode: "43",
+  signedByHouseId: "gamam",
+  signedByName: "House Gamam",
+});

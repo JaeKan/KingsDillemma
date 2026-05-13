@@ -35,10 +35,15 @@ const DILEMMA_EFFECT_TYPES: DilemmaOutcomeEffectType[] = [
   "story",
   "event",
   "mystery",
-  "note",
 ];
 const CAMPAIGN_CARD_STATUSES: CampaignCardStatus[] = ["active", "completed", "archived"];
 const CHRONICLE_POLARITIES: ChroniclePolarity[] = ["positive", "negative"];
+
+function getDilemmaEffectTypeOptions(currentType?: DilemmaOutcomeEffectType): DilemmaOutcomeEffectType[] {
+  return currentType && !DILEMMA_EFFECT_TYPES.includes(currentType)
+    ? [...DILEMMA_EFFECT_TYPES, currentType]
+    : DILEMMA_EFFECT_TYPES;
+}
 
 interface DilemmaEditDialogProps {
   busy: boolean;
@@ -425,11 +430,13 @@ export function DilemmaOutcomeEffectEditor({
   effects,
   houses = [],
   onChange,
+  onOpenEffectHelp,
 }: {
   outcomeLabel: string;
   effects: EditableDilemmaOutcomeEffect[];
   houses?: any[];
   onChange: (effects: EditableDilemmaOutcomeEffect[]) => void;
+  onOpenEffectHelp?: (event: React.MouseEvent<HTMLButtonElement>) => void;
 }) {
   const headingId = useId();
   const [nextType, setNextType] = useState<DilemmaOutcomeEffectType>("chronicle");
@@ -469,9 +476,22 @@ export function DilemmaOutcomeEffectEditor({
   return (
     <section className="dilemma-outcome-effects-edit" aria-labelledby={headingId}>
       <div className="dilemma-outcome-effects-head">
-        <p id={headingId} className="section-label dilemma-outcome-effects-heading">
-          {ko.dilemmaEdit.effectSection}
-        </p>
+        <div className="dilemma-outcome-effects-title">
+          <p id={headingId} className="section-label dilemma-outcome-effects-heading">
+            {ko.dilemmaEdit.effectSection}
+          </p>
+          {onOpenEffectHelp ? (
+            <button
+              className="agenda-score-help-button dilemma-outcome-effects-help-button"
+              type="button"
+              aria-label={ko.dilemmaEdit.effectGuideOpenAria}
+              onClick={onOpenEffectHelp}
+            >
+              <TokenIcon type="help" />
+              {ko.dilemmaEdit.effectGuideTitle}
+            </button>
+          ) : null}
+        </div>
         <div className="dilemma-outcome-effects-add">
           <label>
             <span className="visually-hidden">{ko.dilemmaEdit.effectType}</span>
@@ -574,7 +594,7 @@ function SortableDilemmaOutcomeEffectRow({
                 onReplace(createDefaultDilemmaOutcomeEffect(event.target.value as DilemmaOutcomeEffectType, effect.id))
               }
             >
-              {DILEMMA_EFFECT_TYPES.map((type) => (
+              {getDilemmaEffectTypeOptions(effect.type).map((type) => (
                 <option key={type} value={type}>
                   {ko.dilemmaEdit.effectTypeLabels[type]}
                 </option>
@@ -716,6 +736,7 @@ function DilemmaOutcomeEffectFields({
           <input
             type="number"
             value={effect.amount ?? 0}
+            placeholder={ko.dilemmaEdit.effectAmountPlaceholder}
             onChange={(event) => onChange({ amount: parseEffectInteger(event.target.value) })}
           />
         </label>
@@ -739,8 +760,22 @@ function DilemmaOutcomeEffectFields({
         </label>
         <label className="dilemma-effect-field">
           <span>{ko.dilemmaEdit.effectStickerCode}</span>
-          <input value={effect.stickerCode || ""} onChange={(event) => onChange({ stickerCode: event.target.value })} />
+          <input
+            value={effect.stickerCode || ""}
+            placeholder={ko.dilemmaEdit.effectStickerCodePlaceholder}
+            onChange={(event) => onChange({ stickerCode: event.target.value })}
+          />
         </label>
+        <DilemmaEffectSignerSelect
+          houses={houses}
+          value={effect.signedByHouseId || ""}
+          onChange={(houseId) =>
+            onChange({
+              signedByHouseId: houseId,
+              signedByName: houseId ? getDilemmaEffectHouseName(houses, houseId) : "",
+            })
+          }
+        />
       </>
     );
   }
@@ -749,7 +784,11 @@ function DilemmaOutcomeEffectFields({
     return (
       <label className="dilemma-effect-field">
         <span>{ko.dilemmaEdit.effectEnvelopeCode}</span>
-        <input value={effect.envelopeCode || ""} onChange={(event) => onChange({ envelopeCode: event.target.value })} />
+        <input
+          value={effect.envelopeCode || ""}
+          placeholder={ko.dilemmaEdit.effectEnvelopeCodePlaceholder}
+          onChange={(event) => onChange({ envelopeCode: event.target.value })}
+        />
       </label>
     );
   }
@@ -759,7 +798,15 @@ function DilemmaOutcomeEffectFields({
       <>
         <label className="dilemma-effect-field">
           <span>{ko.dilemmaEdit.effectCardCode}</span>
-          <input value={effect.cardCode || ""} onChange={(event) => onChange({ cardCode: event.target.value })} />
+          <input
+            value={effect.cardCode || ""}
+            placeholder={
+              effect.type === "story"
+                ? ko.dilemmaEdit.effectStoryCardCodePlaceholder
+                : ko.dilemmaEdit.effectEventCardCodePlaceholder
+            }
+            onChange={(event) => onChange({ cardCode: event.target.value })}
+          />
         </label>
         <label className="dilemma-effect-field">
           <span>{ko.dilemmaEdit.effectStatus}</span>
@@ -772,16 +819,24 @@ function DilemmaOutcomeEffectFields({
           </select>
         </label>
         {effect.type === "story" ? (
-          <DilemmaEffectSignerSelect
-            houses={houses}
-            value={effect.signedByHouseId || ""}
-            onChange={(houseId) =>
-              onChange({
-                signedByHouseId: houseId,
-                signedByName: houseId ? getDilemmaEffectHouseName(houses, houseId) : "",
-              })
-            }
-          />
+          <>
+            <DilemmaEffectSignerSelect
+              houses={houses}
+              value={effect.signedByHouseId || ""}
+              onChange={(houseId) =>
+                onChange({
+                  signedByHouseId: houseId,
+                  signedByName: houseId ? getDilemmaEffectHouseName(houses, houseId) : "",
+                })
+              }
+            />
+            <DilemmaEffectMentionTextarea
+              label={ko.dilemmaEdit.effectSignerBonus}
+              value={effect.signerBonusText || ""}
+              placeholder={ko.dilemmaEdit.effectSignerBonusPlaceholder}
+              onChange={(signerBonusText) => onChange({ signerBonusText })}
+            />
+          </>
         ) : null}
       </>
     );
@@ -792,15 +847,26 @@ function DilemmaOutcomeEffectFields({
       <>
         <label className="dilemma-effect-field">
           <span>{ko.dilemmaEdit.effectDossierLetter}</span>
-          <input value={effect.dossierLetter || ""} onChange={(event) => onChange({ dossierLetter: event.target.value })} />
+          <input
+            value={effect.dossierLetter || ""}
+            placeholder={ko.dilemmaEdit.effectDossierLetterPlaceholder}
+            onChange={(event) => onChange({ dossierLetter: event.target.value })}
+          />
         </label>
-        <label className="dilemma-effect-field">
-          <span>{ko.dilemmaEdit.effectStorylineSymbol}</span>
-          <input value={effect.storylineSymbol || ""} onChange={(event) => onChange({ storylineSymbol: event.target.value })} />
-        </label>
+        <MysteryStickerPicker
+          value={effect.storylineSymbol || ""}
+          label={ko.dilemmaEdit.effectStorylineSymbol}
+          ariaLabel={ko.dilemmaEdit.effectStorylineSymbolAria}
+          className="dilemma-effect-storyline-picker"
+          onChange={(storylineSymbol) => onChange({ storylineSymbol })}
+        />
         <label className="dilemma-effect-field">
           <span>{ko.dilemmaEdit.effectSlotKey}</span>
-          <input value={effect.slotKey || ""} onChange={(event) => onChange({ slotKey: event.target.value })} />
+          <input
+            value={effect.slotKey || ""}
+            placeholder={ko.dilemmaEdit.effectSlotKeyPlaceholder}
+            onChange={(event) => onChange({ slotKey: event.target.value })}
+          />
         </label>
       </>
     );
@@ -839,6 +905,59 @@ function DilemmaEffectSignerSelect({
           </option>
         ))}
       </select>
+    </label>
+  );
+}
+
+function DilemmaEffectMentionTextarea({
+  label,
+  value,
+  onChange,
+  placeholder,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  placeholder?: string;
+}) {
+  const fieldRef = useRef<HTMLTextAreaElement | HTMLInputElement>(null);
+  const raw = typeof value === "string" ? value : "";
+
+  const focusMentionToken = useCallback(
+    (token: MentionPart) => {
+      if (token.type !== "mention") {
+        return;
+      }
+
+      const field = fieldRef.current;
+      if (!field || typeof field.setSelectionRange !== "function") {
+        return;
+      }
+
+      const start = typeof token.start === "number" ? token.start : 0;
+      const end = typeof token.end === "number" ? token.end : start;
+      field.focus();
+      field.setSelectionRange(start, end);
+    },
+    [],
+  );
+
+  return (
+    <label className="dilemma-effect-field dilemma-effect-mention-field">
+      <span>{label}</span>
+      <ValueMentionTextarea
+        ref={fieldRef}
+        value={raw}
+        maxLength={DILEMMA_OUTCOME_NOTE_MAX}
+        onChange={(event) => onChange((event.target as HTMLTextAreaElement).value.slice(0, DILEMMA_OUTCOME_NOTE_MAX))}
+        placeholder={placeholder}
+      />
+      <MentionRenderedPreview
+        text={raw}
+        wrapperClassName="dilemma-effect-mention-preview"
+        tokenViewClassName="dilemma-mention-token-preview"
+        onTokenClick={hasMentionToken(raw) ? focusMentionToken : undefined}
+      />
     </label>
   );
 }
@@ -882,7 +1001,7 @@ function createDefaultDilemmaOutcomeEffect(
 
   if (type === "story" || type === "event") {
     return type === "story"
-      ? { id, type, cardCode: "", status: "active", signedByHouseId: "", signedByName: "" }
+      ? { id, type, cardCode: "", status: "active", signedByHouseId: "", signedByName: "", signerBonusText: "" }
       : { id, type, cardCode: "", status: "active" };
   }
 

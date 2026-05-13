@@ -98,6 +98,7 @@ assert.match(setCookie, new RegExp(`^${COOKIE_NAME}=`));
 assert.match(setCookie, /HttpOnly/);
 assert.match(setCookie, /SameSite=Lax/);
 assert.equal((persisted as any)?.sessions.gamam?.token.length, 36);
+const versionBeforeAuthenticatedGet = (persisted as any)?.version;
 
 const authenticatedGet = await handleAgendaRequest(
   new Request("http://localhost/api/agenda", { headers: { Cookie: setCookie } }),
@@ -110,6 +111,7 @@ assert.equal(authenticatedGet.headers.get("Cache-Control"), "no-store");
 assert.equal(authenticatedPayload.authenticated, true);
 assert.equal(authenticatedPayload.realtimeEnabled, true);
 assert.equal(authenticatedPayload.state.ownInventory.coins, 10);
+assert.equal((persisted as any)?.version, versionBeforeAuthenticatedGet);
 
 const saveProgress = await handleAgendaRequest(
   jsonRequest(

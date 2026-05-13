@@ -318,9 +318,19 @@ function normalizeDilemmaOutcomeEffect(value: any, index: number): DilemmaOutcom
     const resourceId = normalizePersonalResourceId(candidate.resourceId);
     const polarity = normalizeChroniclePolarity(candidate.polarity);
     const stickerCode = normalizeTextField(candidate.stickerCode);
+    const signedByHouseId = normalizeTextField(candidate.signedByHouseId);
+    const signedByName = normalizeTextField(candidate.signedByName);
 
     return resourceId && polarity && stickerCode
-      ? withDilemmaOutcomeEffectPhotos({ id, type: "chronicle", resourceId, polarity, stickerCode }, photos)
+      ? withDilemmaOutcomeEffectPhotos({
+          id,
+          type: "chronicle",
+          resourceId,
+          polarity,
+          stickerCode,
+          ...(signedByHouseId ? { signedByHouseId } : {}),
+          ...(signedByName ? { signedByName } : {}),
+        }, photos)
       : null;
   }
 
@@ -340,6 +350,7 @@ function normalizeDilemmaOutcomeEffect(value: any, index: number): DilemmaOutcom
     if (candidate.type === "story") {
       const signedByHouseId = normalizeTextField(candidate.signedByHouseId);
       const signedByName = normalizeTextField(candidate.signedByName);
+      const signerBonusText = normalizeTextField(candidate.signerBonusText).slice(0, DILEMMA_OUTCOME_NOTE_MAX);
 
       return withDilemmaOutcomeEffectPhotos({
         id,
@@ -348,6 +359,7 @@ function normalizeDilemmaOutcomeEffect(value: any, index: number): DilemmaOutcom
         status,
         ...(signedByHouseId ? { signedByHouseId } : {}),
         ...(signedByName ? { signedByName } : {}),
+        ...(signerBonusText ? { signerBonusText } : {}),
       }, photos);
     }
 

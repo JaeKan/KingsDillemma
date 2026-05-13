@@ -153,51 +153,175 @@ function getDilemmaResourceLabel(resourceId: PersonalResourceId | string | undef
   return resourceCounters.find((resource) => resource.id === resourceId)?.label || resourceId || "";
 }
 
-function formatDilemmaOutcomeEffectPreview(effect: DilemmaOutcomeEffect): string {
+function getDilemmaOutcomeEffectSignerName(
+  effect: { signedByHouseId?: string; signedByName?: string },
+  houses: RedactedHouse[],
+): string {
+  if (effect.signedByName) {
+    return effect.signedByName;
+  }
+
+  if (!effect.signedByHouseId) {
+    return "";
+  }
+
+  const house = houses.find((candidate) => candidate.id === effect.signedByHouseId || (candidate as any).houseId === effect.signedByHouseId);
+
+  return house ? getHouseKoreanName(house) : effect.signedByHouseId;
+}
+
+type DilemmaOutcomeEffectMeta = {
+  label: string;
+  value: string;
+  renderMention?: boolean;
+  stickerId?: string;
+  iconOnly?: boolean;
+};
+
+function getDilemmaOutcomeEffectSummary(
+  effect: DilemmaOutcomeEffect,
+  houses: RedactedHouse[],
+): { typeLabel: string; primary: string; meta: DilemmaOutcomeEffectMeta[] } {
   if (effect.type === "resource") {
-    return `${getDilemmaResourceLabel(effect.resourceId)} ${formatDilemmaResourceDelta(effect.amount)}`;
+    return {
+      typeLabel: ko.dilemmaEdit.effectTypeLabels.resource,
+      primary: formatDilemmaResourceDelta(effect.amount),
+      meta: [{ label: ko.dilemmaEdit.effectResource, value: getDilemmaResourceLabel(effect.resourceId) }],
+    };
   }
 
   if (effect.type === "chronicle") {
-    return [
-      ko.dilemmaEdit.effectTypeLabels.chronicle,
-      getDilemmaResourceLabel(effect.resourceId),
-      ko.dilemmaEdit.effectPolarityLabels[effect.polarity],
-      effect.stickerCode,
-    ]
-      .filter(Boolean)
-      .join(" · ");
+    return {
+      typeLabel: ko.dilemmaEdit.effectTypeLabels.chronicle,
+      primary: `${ko.dilemmaEdit.effectStickerCode.replace(" 번호", "")} ${effect.stickerCode}`,
+      meta: [
+        { label: ko.dilemmaEdit.effectResource, value: getDilemmaResourceLabel(effect.resourceId) },
+        { label: ko.dilemmaEdit.effectPolarity, value: ko.dilemmaEdit.effectPolarityLabels[effect.polarity] },
+        { label: ko.dilemmaEdit.effectSignerHouse, value: getDilemmaOutcomeEffectSignerName(effect, houses) },
+      ].filter((entry) => Boolean(entry.value)),
+    };
   }
 
   if (effect.type === "envelope") {
-    return `${ko.dilemmaEdit.effectTypeLabels.envelope} ${effect.envelopeCode}`;
+    return {
+      typeLabel: ko.dilemmaEdit.effectTypeLabels.envelope,
+      primary: effect.envelopeCode,
+      meta: [],
+    };
   }
 
   if (effect.type === "story" || effect.type === "event") {
-    return [
-      ko.dilemmaEdit.effectTypeLabels[effect.type],
-      effect.cardCode,
-      ko.dilemmaEdit.effectStatusLabels[effect.status],
-      effect.type === "story" && (effect.signedByName || effect.signedByHouseId)
-        ? `${ko.dilemmaEdit.effectSignerHouse}: ${effect.signedByName || effect.signedByHouseId}`
-        : "",
-    ]
-      .filter(Boolean)
-      .join(" · ");
+    return {
+      typeLabel: ko.dilemmaEdit.effectTypeLabels[effect.type],
+      primary: effect.cardCode,
+      meta: [
+        { label: ko.dilemmaEdit.effectStatus, value: ko.dilemmaEdit.effectStatusLabels[effect.status] },
+        effect.type === "story"
+          ? { label: ko.dilemmaEdit.effectSignerHouse, value: getDilemmaOutcomeEffectSignerName(effect, houses) }
+          : { label: "", value: "" },
+        effect.type === "story"
+          ? { label: ko.dilemmaEdit.effectSignerBonus, value: effect.signerBonusText || "", renderMention: true }
+          : { label: "", value: "" },
+      ].filter((entry) => Boolean(entry.label && entry.value)),
+    };
   }
 
   if (effect.type === "mystery") {
-    return [
-      ko.dilemmaEdit.effectTypeLabels.mystery,
-      effect.dossierLetter,
-      effect.storylineSymbol,
-      effect.slotKey,
-    ]
-      .filter(Boolean)
-      .join(" · ");
+    return {
+      typeLabel: ko.dilemmaEdit.effectTypeLabels.mystery,
+      primary: `${ko.dilemmaEdit.effectDossierLetter} ${effect.dossierLetter}`,
+      meta: [
+        {
+          label: "",
+          value: getMysteryStickerLabel(effect.storylineSymbol),
+          stickerId: effect.storylineSymbol,
+          iconOnly: true,
+        },
+        { label: ko.dilemmaEdit.effectSlotKey, value: effect.slotKey },
+      ].filter((entry) => Boolean(entry.value)),
+    };
   }
 
-  return effect.text;
+  return {
+    typeLabel: ko.dilemmaEdit.effectTypeLabels.note,
+    primary: effect.text,
+    meta: [],
+  };
+}
+
+export function DilemmaOutcomeEffectsSummary({
+  outcome,
+  houses = [],
+}: {
+  outcome: any;
+  houses?: RedactedHouse[];
+}) {
+  const normalizedOutcome = normalizeDilemmaOutcome(outcome || {});
+  const effects = normalizedOutcome.effects.filter((effect) => effect.type !== "resource");
+  const effectPhotos = effects.flatMap((effect) => effect.photos || []);
+
+  if (!effects.length) {
+    return null;
+  }
+
+  return (
+    <section className="dilemma-outcome-effects-summary" aria-label={ko.dilemmaEdit.effectSection}>
+      <p className="section-label dilemma-outcome-effects-summary-heading">{ko.dilemmaEdit.effectSection}</p>
+      <ol className="dilemma-outcome-effects-summary-list">
+        {effects.map((effect, index) => {
+          const summary = getDilemmaOutcomeEffectSummary(effect, houses);
+
+          return (
+            <li
+              className={`dilemma-outcome-effects-summary-card effect-${effect.type}`}
+              key={effect.id || `${effect.type}-${index}`}
+            >
+              <div className="dilemma-outcome-effects-summary-content">
+                <span className="dilemma-outcome-effects-summary-type">{summary.typeLabel}</span>
+                <strong className="dilemma-outcome-effects-summary-primary">{summary.primary}</strong>
+                {summary.meta.length ? (
+                  <ul className="dilemma-outcome-effects-summary-meta">
+                    {summary.meta.map((detail) => (
+                      <li
+                        className={`dilemma-outcome-effects-summary-detail${detail.iconOnly ? " is-icon-only" : ""}`}
+                        key={`${detail.label}-${detail.value}`}
+                        aria-label={detail.iconOnly ? ko.dilemmaEdit.effectStorylineSymbol : undefined}
+                      >
+                        {detail.label ? (
+                          <span className="dilemma-outcome-effects-summary-detail-label">{detail.label}</span>
+                        ) : null}
+                        <span className="dilemma-outcome-effects-summary-detail-value">
+                          {detail.renderMention ? (
+                            <MentionTokenView className="dilemma-mention-token-preview" text={detail.value} />
+                          ) : detail.stickerId && getMysteryStickerEntry(detail.stickerId) ? (
+                            <span className="dilemma-outcome-effects-sticker-value">
+                              <MysteryStickerImage
+                                stickerId={detail.stickerId}
+                                publicPath={getMysteryStickerEntry(detail.stickerId)?.publicPath}
+                                presentation="decorative"
+                              />
+                              {detail.iconOnly ? null : <span>{detail.value}</span>}
+                            </span>
+                          ) : (
+                            detail.value
+                          )}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+              </div>
+            </li>
+          );
+        })}
+      </ol>
+      <DilemmaPhotoStrip
+        photos={effectPhotos}
+        sectionLabel={ko.dilemmaEdit.effectPhotoSectionTitle}
+        stripAriaLabel={ko.dilemmaEdit.effectPhotoSectionTitle}
+      />
+    </section>
+  );
 }
 
 export function DilemmaOutcomePreview({ label, outcome, selected }: { label: string; outcome: any; selected: boolean }) {
@@ -208,16 +332,11 @@ export function DilemmaOutcomePreview({ label, outcome, selected }: { label: str
       normalizedOutcome.resourcePolarities?.[marker.id as DilemmaResultMarkerId] === "negative",
   );
   const resultText = normalizedOutcome.result.trim();
-  const effectSummaries = normalizedOutcome.effects
-    .filter((effect) => effect.type !== "resource")
-    .map((effect) => formatDilemmaOutcomeEffectPreview(effect))
-    .filter(Boolean);
-  const effectPhotos = normalizedOutcome.effects.flatMap((effect) => effect.photos || []);
   const hasResourceDeltas = resourceCounters.some((resource) => {
     const resourceId = resource.id as PersonalResourceId;
     return (normalizedOutcome.resourceDeltas?.[resourceId] || 0) !== 0;
   });
-  const hasBackPanel = Boolean(resultText || hasResourceDeltas || effectSummaries.length || effectPhotos.length);
+  const hasBackPanel = Boolean(resultText || hasResourceDeltas);
 
   return (
     <article className={`dilemma-outcome-preview${selected ? " selected" : ""}`}>
@@ -247,21 +366,6 @@ export function DilemmaOutcomePreview({ label, outcome, selected }: { label: str
             </div>
           ) : null}
           <DilemmaResourceDeltaPreview deltas={normalizedOutcome.resourceDeltas} />
-          {effectSummaries.length ? (
-            <div className="dilemma-outcome-effect-preview">
-              <p className="section-label dilemma-outcome-effect-preview-heading">{ko.dilemmaEdit.effectSection}</p>
-              <ol className="dilemma-outcome-effect-preview-list">
-                {effectSummaries.map((effectSummary, index) => (
-                  <li key={`${effectSummary}-${index}`}>{effectSummary}</li>
-                ))}
-              </ol>
-            </div>
-          ) : null}
-          <DilemmaPhotoStrip
-            photos={effectPhotos}
-            sectionLabel={ko.dilemmaEdit.effectPhotoSectionTitle}
-            stripAriaLabel={ko.dilemmaEdit.effectPhotoSectionTitle}
-          />
         </div>
       ) : null}
     </article>
@@ -303,10 +407,12 @@ export function DilemmaPhotoStrip({
       </div>
       {activePhoto ? (
         <div className="dilemma-photo-lightbox" role="dialog" aria-modal="true" aria-label={activePhoto.name || ko.dilemmaHelpers.defaultPhotoName} onClick={() => setActivePhoto(null)}>
-          <button type="button" className="dilemma-photo-lightbox-close" onClick={() => setActivePhoto(null)}>
-            ×
+          <button type="button" className="dilemma-photo-lightbox-close" aria-label={ko.common.close} onClick={() => setActivePhoto(null)}>
+            <span aria-hidden="true">&times;</span>
           </button>
-          <img src={activePhoto.dataUrl} alt={activePhoto.name || ko.dilemmaHelpers.defaultPhotoName} onClick={(event) => event.stopPropagation()} />
+          <figure className="dilemma-photo-lightbox-frame" onClick={(event) => event.stopPropagation()}>
+            <img src={activePhoto.dataUrl} alt={activePhoto.name || ko.dilemmaHelpers.defaultPhotoName} />
+          </figure>
         </div>
       ) : null}
     </div>
@@ -491,6 +597,8 @@ export function DilemmaSummaryCard({
   const outcomeDisplay =
     (dilemmaOutcomeLabels as Record<string, string>)[dilemma.selectedOutcome || ""] || ko.common.undecided;
   const advantageDisplay = formatDilemmaVoteAdvantage(ayePower, nayPower);
+  const selectedOutcomeRecord =
+    dilemma.selectedOutcome === "aye" ? dilemma.aye : dilemma.selectedOutcome === "nay" ? dilemma.nay : null;
   return (
     <section className="dilemma-ledger-card" aria-labelledby="dilemma-ledger-title">
       <div className="dilemma-summary-head">
@@ -686,6 +794,7 @@ export function DilemmaSummaryCard({
             sectionLabel={ko.dilemmaHistory.labelPhotosCard}
             stripAriaLabel={ko.dilemmaUi.photoStripAria}
           />
+          <DilemmaOutcomeEffectsSummary outcome={selectedOutcomeRecord} houses={houses} />
           {resolutionMemo ? (
             <DilemmaTextPreview label={ko.dilemmaHistory.labelMemo} value={resolutionMemo} />
           ) : null}
@@ -1172,7 +1281,7 @@ export function DilemmaVotingPanel({ state, busy, mutate }: DilemmaVotingPanelPr
       {!selectedOutcome && tieAwaitingModerator && isModerator ? (
         <div className="dilemma-vote-actions" role="group" aria-label={ko.dilemmaUi.moderatorDecideAria}>
           <button
-            className="primary-button compact"
+            className="moderator-decision-button moderator-decision-button--aye"
             type="button"
             onClick={() => resolveTie("aye")}
             disabled={busy}
@@ -1180,7 +1289,7 @@ export function DilemmaVotingPanel({ state, busy, mutate }: DilemmaVotingPanelPr
             {ko.dilemmaUi.moderatorPickAye}
           </button>
           <button
-            className="secondary-button compact"
+            className="moderator-decision-button moderator-decision-button--nay"
             type="button"
             onClick={() => resolveTie("nay")}
             disabled={busy}

@@ -26,6 +26,7 @@ const DilemmaResolutionDialog = React.lazy(() => import("./components/DilemmaRes
 const NextGameSetupDialog = React.lazy(() => import("./components/NextGameSetupDialog"));
 const DilemmaRoleDialog = React.lazy(() => import("./components/DilemmaRoleDialog"));
 const SecretAgendaScoreDialog = React.lazy(() => import("./components/ScoreGuides").then(m => ({ default: m.SecretAgendaScoreDialog })));
+const DilemmaEffectGuideDialog = React.lazy(() => import("./components/DilemmaEffectGuideDialog"));
 
 import { MentionTokenView } from "./components/MentionUI";
 import { AchievementEffectMemo } from "./components/AchievementUI";
@@ -223,6 +224,7 @@ function App() {
   const [scoreGuideOpen, setScoreGuideOpen] = useState(false);
   const [openAgendaGuideOpen, setOpenAgendaGuideOpen] = useState(false);
   const [secretAgendaGuideOpen, setSecretAgendaGuideOpen] = useState(false);
+  const [dilemmaEffectGuideOpen, setDilemmaEffectGuideOpen] = useState(false);
   const [dilemmaHistoryOpen, setDilemmaHistoryOpen] = useState(false);
   const [chronicleLedgerOpen, setChronicleLedgerOpen] = useState(false);
   const [campaignLedgerOpen, setCampaignLedgerOpen] = useState(false);
@@ -242,6 +244,7 @@ function App() {
   const voteOrderToggleRef = useRef(null);
   const openAgendaGuideToggleRef = useRef(null);
   const secretAgendaGuideToggleRef = useRef(null);
+  const dilemmaEffectGuideToggleRef = useRef(null);
   const latestAgendaVersionRef = useRef(0);
   const finalBoardComplete = useMemo(() => isFinalBoardDraftComplete(finalBoardDraft), [finalBoardDraft]);
   const sessionEndChecklistComplete = useMemo(
@@ -770,6 +773,17 @@ function App() {
     setSecretAgendaGuideOpen(false);
   }, []);
 
+  const handleOpenDilemmaEffectGuide = useCallback((event: any) => {
+    const trigger = event?.currentTarget || null;
+    dilemmaEffectGuideToggleRef.current = tipsOpen ? tipsToggleRef.current : trigger || tipsToggleRef.current;
+    closeFloatingMenus();
+    setDilemmaEffectGuideOpen(true);
+  }, [closeFloatingMenus, tipsOpen]);
+
+  const handleCloseDilemmaEffectGuide = useCallback(() => {
+    setDilemmaEffectGuideOpen(false);
+  }, []);
+
   const handleToggleBgmMuted = useCallback(() => {
     const nextMuted = !bgmMuted;
     const nextVolume = !nextMuted && bgmVolume === 0 ? defaultBgmVolume : bgmVolume;
@@ -890,6 +904,7 @@ function App() {
           onOpenVoteOrderDialog={handleOpenVoteOrderDialog}
           onKickSession={handleKickSession}
           onOpenScoreGuide={handleOpenScoreGuide}
+          onOpenDilemmaEffectGuide={handleOpenDilemmaEffectGuide}
           onReset={handleSettingsReset}
           onBgmVolumeChange={handleBgmVolumeChange}
           onToggleRandomDiscard={handleToggleRandomDiscard}
@@ -937,6 +952,7 @@ function App() {
           onOpenVoteOrderDialog={handleOpenVoteOrderDialog}
           onOpenOpenAgendaGuide={handleOpenOpenAgendaGuide}
           onOpenSecretAgendaGuide={handleOpenSecretAgendaGuide}
+          onOpenDilemmaEffectGuide={handleOpenDilemmaEffectGuide}
         />
       )}
       <Suspense fallback={null}>
@@ -966,6 +982,11 @@ function App() {
           onClose={handleCloseNextGameSetup}
         />
         <ScoreGuideDialog open={scoreGuideOpen} onClose={handleCloseScoreGuide} restoreFocusRef={tipsToggleRef as any} />
+        <DilemmaEffectGuideDialog
+          open={dilemmaEffectGuideOpen}
+          onClose={handleCloseDilemmaEffectGuide}
+          restoreFocusRef={dilemmaEffectGuideToggleRef as any}
+        />
         <OpenAgendaScoreDialog
           open={openAgendaGuideOpen}
           onClose={handleCloseOpenAgendaGuide}
@@ -1069,6 +1090,7 @@ function FloatingSettings({
   onOpenVoteOrderDialog,
   onKickSession,
   onOpenScoreGuide,
+  onOpenDilemmaEffectGuide,
   onReset,
   onBgmVolumeChange,
   onToggle,
@@ -1155,6 +1177,10 @@ function FloatingSettings({
           <button className="ghost-button wide" type="button" onClick={onOpenScoreGuide}>
             <TokenIcon type="balance" />
             {ko.app.settings.secretScoreLink}
+          </button>
+          <button className="ghost-button wide" type="button" onClick={onOpenDilemmaEffectGuide}>
+            <TokenIcon type="help" />
+            {ko.app.settings.dilemmaEffectGuide}
           </button>
           <a className="settings-link" href={rulebookPdfUrl} target="_blank" rel="noreferrer">
             <TokenIcon type="scroll" />
@@ -1623,6 +1649,7 @@ function GamePanel({
   onOpenVoteOrderDialog,
   onOpenOpenAgendaGuide,
   onOpenSecretAgendaGuide,
+  onOpenDilemmaEffectGuide,
 }: any) {
   const voteOrderHouses = getDilemmaVoteParticipants(state);
   const currentVoteName = getDilemmaVoteTurnName(state);
@@ -1775,6 +1802,7 @@ function GamePanel({
           onOpenVoteOrderDialog={onOpenVoteOrderDialog}
           onOpenOpenAgendaGuide={onOpenOpenAgendaGuide}
           onOpenSecretAgendaGuide={onOpenSecretAgendaGuide}
+          onOpenDilemmaEffectGuide={onOpenDilemmaEffectGuide}
         />
       </section>
     </section>
@@ -2063,6 +2091,7 @@ function PersonalInventoryPanel({
   onOpenVoteOrderDialog,
   onOpenOpenAgendaGuide,
   onOpenSecretAgendaGuide,
+  onOpenDilemmaEffectGuide,
 }: any) {
   const serverInventory = useMemo(() => normalizeInventory(inventory), [inventory]);
   const serverProgress = useMemo(() => normalizeHouseProgress(progress), [progress]);
@@ -2988,6 +3017,7 @@ function PersonalInventoryPanel({
           photoError={dilemmaPhotoError}
           onAddResolutionPhotos={addResolutionPhotos}
           onRemoveResolutionPhoto={removeResolutionPhoto}
+          onOpenEffectHelp={onOpenDilemmaEffectGuide}
         />
         <AchievementEditDialog
           busy={busy}

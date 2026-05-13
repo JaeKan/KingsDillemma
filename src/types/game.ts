@@ -156,7 +156,14 @@ type DilemmaOutcomeEffectBase = {
 
 export type DilemmaOutcomeEffect = DilemmaOutcomeEffectBase & (
   | { type: "resource"; resourceId: PersonalResourceId; amount: number }
-  | { type: "chronicle"; resourceId: PersonalResourceId; polarity: ChroniclePolarity; stickerCode: string }
+  | {
+      type: "chronicle";
+      resourceId: PersonalResourceId;
+      polarity: ChroniclePolarity;
+      stickerCode: string;
+      signedByHouseId?: HouseId;
+      signedByName?: string;
+    }
   | { type: "envelope"; envelopeCode: string }
   | {
       id: string;
@@ -165,6 +172,7 @@ export type DilemmaOutcomeEffect = DilemmaOutcomeEffectBase & (
       status: "active" | "completed" | "archived";
       signedByHouseId?: HouseId;
       signedByName?: string;
+      signerBonusText?: string;
     }
   | { type: "event"; cardCode: string; status: "active" | "completed" | "archived" }
   | { type: "mystery"; dossierLetter: string; storylineSymbol: string; slotKey: string }

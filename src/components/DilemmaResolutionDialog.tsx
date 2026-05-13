@@ -33,6 +33,7 @@ interface DilemmaResolutionDialogProps {
   photoError: string | null;
   onAddResolutionPhotos: (files: FileList | File[]) => Promise<void>;
   onRemoveResolutionPhoto: (id: string) => void;
+  onOpenEffectHelp?: (event: React.MouseEvent<HTMLButtonElement>) => void;
 }
 
 function DilemmaResolutionMentionTextarea({
@@ -107,6 +108,7 @@ export default function DilemmaResolutionDialog({
   photoError,
   onAddResolutionPhotos,
   onRemoveResolutionPhoto,
+  onOpenEffectHelp,
 }: DilemmaResolutionDialogProps) {
   const dialogRef = useRef<HTMLElement>(null);
   const timeSlotInputId = useId();
@@ -326,7 +328,7 @@ export default function DilemmaResolutionDialog({
       >
         <div className="session-end-heading">
           <span className="session-end-seal" aria-hidden="true">
-            <TokenIcon type="turn" />
+            <TokenIcon type="resolution" />
           </span>
           <div>
             <p className="section-label">{ko.dilemmaResolution.sectionCouncil}</p>
@@ -342,14 +344,19 @@ export default function DilemmaResolutionDialog({
                 {isModerator ? (
                   <div className="dilemma-resolution-moderator-actions" role="group" aria-label={ko.dilemmaUi.moderatorDecideAria}>
                     <button
-                      className="primary-button compact"
+                      className="moderator-decision-button moderator-decision-button--aye"
                       type="button"
                       onClick={() => resolveTie("aye")}
                       disabled={busy}
                     >
                       {ko.dilemmaUi.moderatorPickAye}
                     </button>
-                    <button className="secondary-button compact" type="button" onClick={() => resolveTie("nay")} disabled={busy}>
+                    <button
+                      className="moderator-decision-button moderator-decision-button--nay"
+                      type="button"
+                      onClick={() => resolveTie("nay")}
+                      disabled={busy}
+                    >
                       {ko.dilemmaUi.moderatorPickNay}
                     </button>
                   </div>
@@ -409,6 +416,7 @@ export default function DilemmaResolutionDialog({
                     effects={selectedOutcomeEffects}
                     houses={houses}
                     onChange={setSelectedOutcomeEffects}
+                    onOpenEffectHelp={onOpenEffectHelp}
                   />
                 </div>
               </>
