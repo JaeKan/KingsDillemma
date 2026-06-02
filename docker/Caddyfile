@@ -1,4 +1,15 @@
 {$DOMAIN} {
   encode zstd gzip
-  reverse_proxy web:3000
+
+  redir / /kings-dilemma/ 302
+
+  @kingsDilemma path /kings-dilemma /kings-dilemma/*
+  handle @kingsDilemma {
+    reverse_proxy web:3000
+  }
+
+  @hope path /Hope /Hope/*
+  handle @hope {
+    reverse_proxy host.docker.internal:4000
+  }
 }

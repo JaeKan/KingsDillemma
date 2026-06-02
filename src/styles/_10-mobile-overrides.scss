@@ -14,7 +14,7 @@
   .app-header,
   .council-entry,
   .council-layout,
-  .dilemma-stage {
+  .game-stage {
     grid-template-columns: 1fr;
   }
 
@@ -65,6 +65,40 @@
     scrollbar-gutter: auto;
   }
 
+  .inventory-panel.has-house-profile .score-ledger-grid {
+    height: auto;
+    grid-template-rows: repeat(2, max-content);
+    align-self: start;
+  }
+
+  .inventory-panel.has-house-profile .score-ledger-grid .score-track-row {
+    min-height: 0;
+    height: auto;
+  }
+
+  .inventory-panel.has-house-profile .score-ledger-grid .score-track-body,
+  .inventory-panel.has-house-profile .score-ledger-grid .score-track-groups {
+    height: auto;
+  }
+
+  .inventory-panel.has-house-profile .score-ledger-grid .score-track-group {
+    height: auto;
+  }
+
+  .inventory-panel.has-house-profile > .house-detail-section {
+    justify-items: start;
+  }
+
+  .inventory-panel.has-house-profile > .house-detail-section > .house-profile-card {
+    width: 100%;
+    height: auto;
+    align-self: start;
+  }
+
+  .inventory-panel.has-house-profile .house-profile-main {
+    height: auto;
+  }
+
   .entry-brief {
     min-height: auto;
   }
@@ -95,9 +129,6 @@
   .ledger-heading,
   .session-check-panel,
   .session-score-heading,
-  .dilemma-summary-head,
-  .inventory-header,
-  .inventory-actions,
   .agenda-section-heading,
   .action-card,
   .own-choice {
@@ -139,9 +170,7 @@
       "resources"
       "house"
       "challenge"
-      "agenda"
-      "progress"
-      "actions";
+      "progress";
     height: auto;
   }
 
@@ -151,21 +180,10 @@
       "resources"
       "house"
       "challenge"
-      "agenda"
-      "progress"
-      "actions";
+      "progress";
   }
 
   .seat-grid,
-  .dilemma-facts,
-  .dilemma-vote-breakdown,
-  .dilemma-outcome-grid,
-  .dilemma-dialog-grid,
-  .dilemma-dialog-grid.compact,
-  .dilemma-history-layout,
-  .dilemma-photo-editor-grid,
-  .dilemma-outcome-selector-grid,
-  .dilemma-outcome-edit-grid,
   .inventory-grid,
   .inventory-resource-grid,
   .session-board-grid,
@@ -183,25 +201,6 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .dilemma-summary-actions {
-    width: 100%;
-    justify-content: stretch;
-  }
-
-  .dilemma-vote-options {
-    grid-template-columns: 1fr;
-  }
-
-  .dilemma-status-pill,
-  .dilemma-summary-button {
-    flex: 1 1 0;
-    max-width: none;
-  }
-
-  .dilemma-dialog {
-    padding: 16px;
-  }
-
   .achievement-dialog {
     padding: 16px;
   }
@@ -215,77 +214,36 @@
     min-height: 50px;
   }
 
-  .dilemma-history-dialog {
-    padding: 16px;
-  }
-
-  .vote-order-dialog {
-    padding: 16px;
-  }
-
-  .dilemma-role-dialog {
-    padding: 16px;
-  }
-
-  .dilemma-role-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .vote-order-ring {
-    --seat-size: 54px;
-    --seat-badge-size: 44px;
-    --seat-radius: clamp(82px, 25vw, 106px);
-    width: min(100%, calc((var(--seat-radius) * 2) + var(--seat-size) + 20px));
-  }
-
-  .vote-order-seat-preview {
-    --seat-size: 54px;
-    --seat-badge-size: 44px;
-  }
-
-  .vote-order-seat {
-    max-width: min(7rem, 36vw);
-    min-height: 0;
-  }
-
-  .vote-order-house {
-    font-size: 0.62rem;
-  }
-
-  .vote-order-rank {
-    width: var(--seat-badge-size);
-    height: var(--seat-badge-size);
-    font-size: 0.62rem;
-  }
-
-  .dilemma-history-list {
-    max-height: none;
-  }
-
-  .dilemma-photo-editor-head {
-    align-items: stretch;
-    flex-direction: column;
-  }
-
-  .dilemma-photo-add {
-    width: 100%;
-  }
-
   .alignment-progress-row {
-    grid-template-columns: minmax(0, 1fr) auto auto;
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .alignment-progress-row .counter-controls,
+  .alignment-progress-row .house-alignment-reward-controls {
+    grid-column: 1 / -1;
+    justify-self: stretch;
   }
 
   .achievement-progress-row--challenge {
-    grid-template-columns: minmax(0, 1fr) max-content;
+    grid-template-columns: minmax(0, 1fr) max-content minmax(42px, auto);
+  }
+
+  .achievement-progress-row--challenge .achievement-challenge-toggle {
+    grid-column: 1 / 3;
   }
 
   .achievement-progress-row--challenge .progress-pips,
   .achievement-progress-row--challenge .counter-controls {
-    grid-column: 1 / -1;
+    grid-column: 1 / 3;
   }
 
   .achievement-progress-row--challenge .achievement-challenge-status {
-    justify-self: end;
+    justify-self: center;
+  }
+
+  .achievement-progress-row--challenge .achievement-card-action-rail {
+    grid-column: 3;
+    grid-row: 1 / 3;
   }
 
   .achievement-effect-row {
@@ -328,13 +286,32 @@
   }
 
   .house-profile-card,
-  .house-profile-grid,
-  .house-alignment-track {
+  .house-profile-grid {
     grid-template-columns: 1fr;
   }
 
   .house-profile-card {
     align-items: start;
+  }
+
+  .inventory-panel {
+    gap: 4px;
+  }
+
+  .inventory-section {
+    gap: 4px;
+  }
+
+  .inventory-section .achievement-section-heading {
+    gap: 3px;
+  }
+
+  .inventory-section .achievement-primary-panel,
+  .inventory-section .achievement-progress-panel,
+  .inventory-section .alignment-achievement-panel,
+  .inventory-section .achievement-primary-list,
+  .alignment-achievement-list {
+    gap: 4px;
   }
 
   .counter-controls {
@@ -374,13 +351,19 @@
     width: auto;
   }
 
+  .achievement-progress-row .counter-controls {
+    justify-content: flex-start;
+    justify-self: start;
+    gap: 4px;
+    width: max-content;
+  }
+
   .achievement-progress-row .counter-controls output,
   .alignment-progress-row .counter-controls output {
     flex: 0 0 auto;
     min-width: 34px;
   }
 
-  .inventory-actions>div,
   .session-end-actions,
   .score-guide-actions,
   .score-guide-actions button,
@@ -393,26 +376,31 @@
     width: auto;
   }
 
-  .inventory-actions>div,
   .session-end-actions {
     flex-direction: column;
   }
 
-  .vote-order-dialog .vote-order-actions {
+  .inventory-toolbar {
+    align-items: center;
     flex-direction: row;
-    justify-content: flex-end;
-    gap: 8px;
+    flex-wrap: wrap;
   }
 
-  .vote-order-dialog .vote-order-actions button {
-    width: auto;
+  .inventory-toolbar-title {
+    flex: 1 1 min(100%, 240px);
+  }
+
+  .inventory-toolbar-actions {
     flex: 0 0 auto;
-    min-width: 104px;
+    flex-direction: row;
+    margin-left: auto;
+    width: auto;
   }
 
-  .vote-order-dialog .vote-order-actions .primary-button {
-    min-width: 132px;
+  .inventory-toolbar-actions button {
+    width: auto;
   }
+
 }
 
 @media (prefers-reduced-motion: reduce) {

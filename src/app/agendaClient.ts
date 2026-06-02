@@ -1,7 +1,20 @@
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useIsMutating, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AGENDA_PARALLEL_SESSION_MAX } from "../../shared/agenda-api.mts";
+import { joinAppBasePath, normalizeAppBasePath } from "../../shared/app-base-path.mts";
 import { ko } from "../resources/gameResources";
+
+type ViteImportMeta = ImportMeta & {
+  env?: {
+    BASE_URL?: string;
+  };
+};
+
+function getClientAppBasePath(): string {
+  const baseUrl = (import.meta as ViteImportMeta).env?.BASE_URL;
+
+  return normalizeAppBasePath(baseUrl, "");
+}
 
 function getAgendaSessionKeySegment(): string {
   if (typeof window === "undefined") {
@@ -23,16 +36,18 @@ function getAgendaSessionKeySegment(): string {
   return raw;
 }
 
-function agendaApiPathWithSession(): string {
+export function agendaApiPathWithSession(): string {
   const segment = getAgendaSessionKeySegment();
+  const path = joinAppBasePath(getClientAppBasePath(), "/api/agenda");
 
-  return segment === "default" ? "/api/agenda" : `/api/agenda?session=${segment}`;
+  return segment === "default" ? path : `${path}?session=${segment}`;
 }
 
 export function agendaEventsPathWithSession(): string {
   const segment = getAgendaSessionKeySegment();
+  const path = joinAppBasePath(getClientAppBasePath(), "/api/agenda/events");
 
-  return segment === "default" ? "/api/agenda/events" : `/api/agenda/events?session=${segment}`;
+  return segment === "default" ? path : `${path}?session=${segment}`;
 }
 
 const agendaMutationKeyBase = ["agenda", "mutation"] as const;
@@ -92,6 +107,30 @@ export function shouldForceRefreshAfterAdminModeToggle(result: any, expectedAdmi
   }
 
   return adminValue !== expectedAdmin;
+}
+
+export function parseAgendaRealtimeVersion(data: unknown) {
+  if (typeof data !== "string") {
+    return 0;
+  }
+
+  try {
+    const payload = JSON.parse(data) as { version?: unknown };
+    const version =
+      typeof payload.version === "number"
+        ? payload.version
+        : typeof payload.version === "string"
+          ? Number.parseInt(payload.version, 10)
+          : 0;
+
+    return Number.isFinite(version) && version > 0 ? Math.floor(version) : 0;
+  } catch {
+    return 0;
+  }
+}
+
+export function shouldSkipAgendaRealtimeRefresh(targetVersion: number, latestVersion: number) {
+  return targetVersion > 0 && latestVersion >= targetVersion;
 }
 
 function isNonBlockingAgendaAction(payload: any) {

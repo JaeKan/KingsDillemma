@@ -54,7 +54,7 @@
   box-sizing: border-box;
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  grid-auto-flow: row dense;
+  grid-auto-flow: row;
   align-items: stretch;
   gap: 6px;
   padding: 6px;
@@ -192,6 +192,50 @@
 .settings-volume-heading span {
   color: var(--gold-2);
   font-variant-numeric: tabular-nums;
+}
+
+.settings-volume-label-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.settings-volume-mute-button {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  min-width: 34px;
+  min-height: 34px;
+  border: 1px solid transparent;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--gold-2);
+  cursor: pointer;
+  gap: 0;
+  padding: 0;
+}
+
+.settings-volume-mute-button:hover {
+  border-color: transparent;
+  background: rgba(234, 223, 189, 0.1);
+}
+
+.settings-volume-mute-button:focus-visible {
+  outline: 2px solid rgba(216, 178, 90, 0.86);
+  outline-offset: 2px;
+}
+
+.settings-volume-mute-button[aria-pressed="true"] {
+  color: var(--ink);
+}
+
+.settings-volume-mute-button svg {
+  width: 18px;
+  height: 18px;
 }
 
 .settings-volume-control input[type="range"] {

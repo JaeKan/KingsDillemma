@@ -2,7 +2,9 @@ import React, { Suspense, useCallback, useEffect, useMemo, useRef, useState } fr
 import {
   agendaEventsPathWithSession,
   agendaRequest,
+  parseAgendaRealtimeVersion,
   shouldForceRefreshAfterAdminModeToggle,
+  shouldSkipAgendaRealtimeRefresh,
   useAgendaMutations,
   useAgendaRefresh,
   useAgendaStateQuery,
@@ -12,32 +14,22 @@ import { Tooltip } from "./components/Tooltip";
 
 // Lazy loaded components for modular features
 const SessionEndDialog = React.lazy(() => import("./components/SessionEndDialog"));
-const VoteOrderDialog = React.lazy(() => import("./components/VoteOrderDialog"));
 const OpenAgendaScoreDialog = React.lazy(() => import("./components/ScoreGuides").then(m => ({ default: m.OpenAgendaScoreDialog })));
-const DilemmaHistoryDialog = React.lazy(() => import("./components/DilemmaHistoryDialog"));
-const ChronicleLedgerDialog = React.lazy(() => import("./components/ChronicleLedgerDialog"));
-const CampaignLedgerDialog = React.lazy(() => import("./components/CampaignLedgerDialog"));
-const CampaignBackfillDialog = React.lazy(() => import("./components/CampaignBackfillDialog"));
 const ScoreGuideDialog = React.lazy(() => import("./components/ScoreGuides").then(m => ({ default: m.ScoreGuideDialog })));
 const AchievementEditDialog = React.lazy(() => import("./components/AchievementEditDialog"));
 const SpecialAbilityLegendDialog = React.lazy(() => import("./components/SpecialAbilityLegendDialog"));
-const DilemmaEditDialog = React.lazy(() => import("./components/DilemmaEditDialog"));
-const DilemmaResolutionDialog = React.lazy(() => import("./components/DilemmaResolutionDialog"));
-const NextGameSetupDialog = React.lazy(() => import("./components/NextGameSetupDialog"));
-const DilemmaRoleDialog = React.lazy(() => import("./components/DilemmaRoleDialog"));
 const SecretAgendaScoreDialog = React.lazy(() => import("./components/ScoreGuides").then(m => ({ default: m.SecretAgendaScoreDialog })));
-const DilemmaEffectGuideDialog = React.lazy(() => import("./components/DilemmaEffectGuideDialog"));
+const BoardProcessingGuideDialog = React.lazy(() => import("./components/BoardProcessingGuideDialog"));
+const BoardProcessingHistoryDialog = React.lazy(() => import("./components/BoardProcessingHistoryDialog"));
+const BoardProcessingPanel = React.lazy(() => import("./components/BoardProcessingPanel"));
 
 import { MentionTokenView } from "./components/MentionUI";
 import { AchievementEffectMemo } from "./components/AchievementUI";
 
 // Feature components
-const StatusItem = React.lazy(() => import("./components/DilemmaUI").then(m => ({ default: m.StatusItem })));
-const VoteOrderTrack = React.lazy(() => import("./components/DilemmaUI").then(m => ({ default: m.VoteOrderTrack })));
-const GameMessage = React.lazy(() => import("./components/DilemmaUI").then(m => ({ default: m.GameMessage })));
-const DilemmaVotingPanel = React.lazy(() => import("./components/DilemmaUI").then(m => ({ default: m.DilemmaVotingPanel })));
-const DilemmaSummaryCard = React.lazy(() => import("./components/DilemmaUI").then(m => ({ default: m.DilemmaSummaryCard })));
-const TurnTrack = React.lazy(() => import("./components/DilemmaUI").then(m => ({ default: m.TurnTrack as any })));
+const CouncilStatusStack = React.lazy(() => import("./components/CouncilStatusUI").then(m => ({ default: m.CouncilStatusStack })));
+const GameMessage = React.lazy(() => import("./components/CouncilStatusUI").then(m => ({ default: m.GameMessage })));
+const TurnTrack = React.lazy(() => import("./components/CouncilStatusUI").then(m => ({ default: m.TurnTrack as any })));
 const TurnTrackAny = TurnTrack as any;
 
 import {
@@ -48,7 +40,6 @@ import {
   achievementEffectOptionById,
   agendaScoringZones,
   alignmentRewardCountMax,
-  alignmentRewardTypeLabels,
   alignmentRewardTypes,
   bgmMutedStorageKey,
   bgmSource,
@@ -56,12 +47,6 @@ import {
   boardRows,
   defaultBgmVolume,
   defaultHouseAlignmentOrder,
-  dilemmaPhotoAllowedTypes,
-  dilemmaPhotoLimit,
-  dilemmaPhotoMaxDataUrlLength,
-  dilemmaPhotoMaxDimension,
-  dilemmaPhotoMaxInputBytes,
-  dilemmaPhotoQuality,
   houseAchievementMarkMax,
   houseAchievementRows,
   houseAlignmentLabelById,
@@ -76,7 +61,6 @@ import {
   REQUIRED_HOUSE_COUNT,
   resourceCounters,
   rulebookPdfUrl,
-  rulebookReferenceTips,
   scoreTrackCounters,
   sessionEndChecklistItems,
   sessionEndUnavailableMessage,
@@ -94,22 +78,8 @@ import {
   getHouseDisplayName,
   getCouncilStageLabel,
   getCouncilProcedureTitle,
-  getDilemmaProgressLabel,
-  getDilemmaVoteParticipants,
-  getDilemmaVoteTurnName,
-  getSuggestedDilemmaVoteTurnHouseId,
-  getVoteOrderHouses,
-  isVoteOrderSettingLocked,
 } from "./utils/house-helpers";
-
-import {
-  isDilemmaBlank,
-  normalizeDilemmaRecord,
-  normalizeResolutionChecklist,
-  createDilemmaDraft,
-  createDilemmaPayload,
-  createClientId,
-} from "./utils/dilemma-helpers";
+import { clampBgmVolumeValue, getBgmDisplayVolumePercent, getBgmUnmutedVolume } from "./utils/bgm-volume";
 function CarrotWaitAction() {
   const shakeRef = useRef<(() => void) | null>(null);
   const loadRef = useRef<Promise<void> | null>(null);
@@ -154,8 +124,7 @@ function createSessionEndChecklistState() {
 }
 
 function clampBgmVolume(value: any) {
-  const volume = Number(value);
-  return Number.isFinite(volume) ? Math.min(Math.max(volume, 0), 1) : defaultBgmVolume;
+  return clampBgmVolumeValue(value, defaultBgmVolume);
 }
 
 function readStoredBgmMuted() {
@@ -224,27 +193,20 @@ function App() {
   const [scoreGuideOpen, setScoreGuideOpen] = useState(false);
   const [openAgendaGuideOpen, setOpenAgendaGuideOpen] = useState(false);
   const [secretAgendaGuideOpen, setSecretAgendaGuideOpen] = useState(false);
-  const [dilemmaEffectGuideOpen, setDilemmaEffectGuideOpen] = useState(false);
-  const [dilemmaHistoryOpen, setDilemmaHistoryOpen] = useState(false);
-  const [chronicleLedgerOpen, setChronicleLedgerOpen] = useState(false);
-  const [campaignLedgerOpen, setCampaignLedgerOpen] = useState(false);
-  const [campaignBackfillOpen, setCampaignBackfillOpen] = useState(false);
-  const [voteOrderDialogOpen, setVoteOrderDialogOpen] = useState(false);
-  const [nextGameSetupOpen, setNextGameSetupOpen] = useState(false);
+  const [specialAbilityLegendOpen, setSpecialAbilityLegendOpen] = useState(false);
+  const [boardProcessingGuideOpen, setBoardProcessingGuideOpen] = useState(false);
+  const [boardProcessingHistoryOpen, setBoardProcessingHistoryOpen] = useState(false);
   const [bgmMuted, setBgmMuted] = useState(readStoredBgmMuted);
   const [bgmVolume, setBgmVolume] = useState(readStoredBgmVolume);
   const finalScoringRequest = useRef(0);
   const bgmAudioRef = useRef(null);
   const settingsToggleRef = useRef(null);
   const tipsToggleRef = useRef(null);
-  const dilemmaHistoryToggleRef = useRef(null);
-  const chronicleLedgerRestoreFocusRef = useRef(null);
-  const campaignLedgerRestoreFocusRef = useRef(null);
-  const campaignBackfillRestoreFocusRef = useRef(null);
-  const voteOrderToggleRef = useRef(null);
   const openAgendaGuideToggleRef = useRef(null);
   const secretAgendaGuideToggleRef = useRef(null);
-  const dilemmaEffectGuideToggleRef = useRef(null);
+  const specialAbilityLegendButtonRef = useRef(null);
+  const boardProcessingGuideToggleRef = useRef(null);
+  const boardProcessingHistoryToggleRef = useRef(null);
   const latestAgendaVersionRef = useRef(0);
   const finalBoardComplete = useMemo(() => isFinalBoardDraftComplete(finalBoardDraft), [finalBoardDraft]);
   const sessionEndChecklistComplete = useMemo(
@@ -312,6 +274,10 @@ function App() {
 
       const refreshTargetVersion = pendingVersion;
       pendingVersion = 0;
+      if (shouldSkipAgendaRealtimeRefresh(refreshTargetVersion, latestAgendaVersionRef.current)) {
+        return;
+      }
+
       void refresh().then(() => {
         if (pendingVersion > Math.max(latestAgendaVersionRef.current, refreshTargetVersion)) {
           runRefresh();
@@ -320,7 +286,7 @@ function App() {
     };
 
     const scheduleRefresh = (version = 0) => {
-      if (version > 0 && version <= latestAgendaVersionRef.current) {
+      if (shouldSkipAgendaRealtimeRefresh(version, latestAgendaVersionRef.current)) {
         return;
       }
 
@@ -335,18 +301,11 @@ function App() {
     };
 
     const refreshFromStateEvent = (event: MessageEvent) => {
-      const payload = (() => {
-        try {
-          return JSON.parse(event.data) as { version?: unknown };
-        } catch {
-          return {};
-        }
-      })();
-      scheduleRefresh(Number(payload.version) || 0);
+      scheduleRefresh(parseAgendaRealtimeVersion(event.data));
     };
 
-    const refreshFromConnectionEvent = () => {
-      scheduleRefresh();
+    const refreshFromConnectionEvent = (event?: Event) => {
+      scheduleRefresh(event instanceof MessageEvent ? parseAgendaRealtimeVersion(event.data) : 0);
     };
 
     const events = new EventSource(agendaEventsPathWithSession());
@@ -645,15 +604,6 @@ function App() {
     await handleEndSession();
   };
 
-  const handleOpenNextGameSetup = () => {
-    setSettingsOpen(false);
-    setNextGameSetupOpen(true);
-  };
-
-  const handleCloseNextGameSetup = () => {
-    setNextGameSetupOpen(false);
-  };
-
   const handleToggleSettings = useCallback(() => {
     setTipsOpen(false);
     setSettingsOpen((current) => !current);
@@ -669,80 +619,9 @@ function App() {
     setTipsOpen(false);
   }, []);
 
-  const handleOpenDilemmaHistory = useCallback(() => {
+  const handleOpenScoreGuide = useCallback((event?: any) => {
     closeFloatingMenus();
-    setDilemmaHistoryOpen(true);
-  }, [closeFloatingMenus]);
-
-  const handleCloseDilemmaHistory = useCallback(() => {
-    setDilemmaHistoryOpen(false);
-  }, []);
-
-  const handleOpenChronicleLedger = useCallback((event: any) => {
-    chronicleLedgerRestoreFocusRef.current = settingsToggleRef.current || event?.currentTarget || null;
-    closeFloatingMenus();
-    setChronicleLedgerOpen(true);
-  }, [closeFloatingMenus]);
-
-  const handleCloseChronicleLedger = useCallback(() => {
-    setChronicleLedgerOpen(false);
-  }, []);
-
-  const handleOpenCampaignLedger = useCallback((event: any) => {
-    campaignLedgerRestoreFocusRef.current = settingsToggleRef.current || event?.currentTarget || null;
-    closeFloatingMenus();
-    setCampaignLedgerOpen(true);
-  }, [closeFloatingMenus]);
-
-  const handleCloseCampaignLedger = useCallback(() => {
-    setCampaignLedgerOpen(false);
-  }, []);
-
-  const handleOpenCampaignBackfill = useCallback((event: any) => {
-    campaignBackfillRestoreFocusRef.current = settingsToggleRef.current || event?.currentTarget || null;
-    closeFloatingMenus();
-    setCampaignBackfillOpen(true);
-  }, [closeFloatingMenus]);
-
-  const handleCloseCampaignBackfill = useCallback(() => {
-    setCampaignBackfillOpen(false);
-  }, []);
-
-  const handleOpenVoteOrderDialog = useCallback((eventOrOptions: any) => {
-    closeFloatingMenus();
-
-    const restoreFocusTarget =
-      eventOrOptions?.restoreFocusTarget || settingsToggleRef.current || eventOrOptions?.currentTarget || null;
-
-    if (restoreFocusTarget) {
-      voteOrderToggleRef.current = restoreFocusTarget;
-    }
-
-    setVoteOrderDialogOpen(true);
-  }, [closeFloatingMenus]);
-
-  const handleCloseVoteOrderDialog = useCallback(() => {
-    setVoteOrderDialogOpen(false);
-  }, []);
-
-  const handleSaveVoteOrder = useCallback(
-    async ({ voteOrder }: { voteOrder: any }) => (await mutate({ action: "saveDilemmaVoteOrder", voteOrder })) as boolean,
-    [mutate],
-  );
-
-  const handleDeleteDilemmaHistory = useCallback(
-    async (historyId: any) => {
-      if (!historyId) {
-        return null;
-      }
-
-      return await mutate({ action: "deleteDilemmaHistory", historyId });
-    },
-    [mutate],
-  );
-
-  const handleOpenScoreGuide = useCallback(() => {
-    closeFloatingMenus();
+    void event;
     setScoreGuideOpen(true);
   }, [closeFloatingMenus]);
 
@@ -751,42 +630,59 @@ function App() {
   }, []);
 
   const handleOpenOpenAgendaGuide = useCallback((event: any) => {
+    closeFloatingMenus();
     if (event?.currentTarget) {
       openAgendaGuideToggleRef.current = event.currentTarget;
     }
     setOpenAgendaGuideOpen(true);
-  }, []);
+  }, [closeFloatingMenus]);
 
   const handleCloseOpenAgendaGuide = useCallback(() => {
     setOpenAgendaGuideOpen(false);
   }, []);
 
   const handleOpenSecretAgendaGuide = useCallback((event: any) => {
-    closeFloatingMenus();
-    if (event?.currentTarget) {
-      secretAgendaGuideToggleRef.current = event.currentTarget;
-    }
-    setSecretAgendaGuideOpen(true);
-  }, [closeFloatingMenus]);
+    void handleOpenScoreGuide(event);
+  }, [handleOpenScoreGuide]);
 
   const handleCloseSecretAgendaGuide = useCallback(() => {
     setSecretAgendaGuideOpen(false);
   }, []);
 
-  const handleOpenDilemmaEffectGuide = useCallback((event: any) => {
-    const trigger = event?.currentTarget || null;
-    dilemmaEffectGuideToggleRef.current = tipsOpen ? tipsToggleRef.current : trigger || tipsToggleRef.current;
+  const handleOpenSpecialAbilityLegend = useCallback((event: any) => {
+    specialAbilityLegendButtonRef.current = event?.currentTarget || tipsToggleRef.current;
     closeFloatingMenus();
-    setDilemmaEffectGuideOpen(true);
+    setSpecialAbilityLegendOpen(true);
+  }, [closeFloatingMenus]);
+
+  const handleCloseSpecialAbilityLegend = useCallback(() => {
+    setSpecialAbilityLegendOpen(false);
+  }, []);
+
+  const handleOpenBoardProcessingGuide = useCallback((event: any) => {
+    const trigger = event?.currentTarget || null;
+    boardProcessingGuideToggleRef.current = tipsOpen ? tipsToggleRef.current : trigger || tipsToggleRef.current;
+    closeFloatingMenus();
+    setBoardProcessingGuideOpen(true);
   }, [closeFloatingMenus, tipsOpen]);
 
-  const handleCloseDilemmaEffectGuide = useCallback(() => {
-    setDilemmaEffectGuideOpen(false);
+  const handleCloseBoardProcessingGuide = useCallback(() => {
+    setBoardProcessingGuideOpen(false);
+  }, []);
+
+  const handleOpenBoardProcessingHistory = useCallback(() => {
+    boardProcessingHistoryToggleRef.current = settingsToggleRef.current;
+    closeFloatingMenus();
+    setBoardProcessingHistoryOpen(true);
+  }, [closeFloatingMenus]);
+
+  const handleCloseBoardProcessingHistory = useCallback(() => {
+    setBoardProcessingHistoryOpen(false);
   }, []);
 
   const handleToggleBgmMuted = useCallback(() => {
     const nextMuted = !bgmMuted;
-    const nextVolume = !nextMuted && bgmVolume === 0 ? defaultBgmVolume : bgmVolume;
+    const nextVolume = nextMuted ? bgmVolume : getBgmUnmutedVolume(bgmVolume, defaultBgmVolume);
     const audio = bgmAudioRef.current as any;
 
     setBgmMuted(nextMuted);
@@ -859,10 +755,6 @@ function App() {
 
   const sessionChecking = sessionStatus === "checking";
   const isCouncilRoute = Boolean(state && (authenticated || admin || spectator));
-  const voteOrderLocked = Boolean(state && isVoteOrderSettingLocked(state));
-  const canEditVoteOrder = Boolean(
-    (authenticated || admin) && state && getVoteOrderHouses(state).length > 0 && (admin || !voteOrderLocked),
-  );
   const routeClass = sessionChecking ? "is-session-checking" : isCouncilRoute ? "is-council" : "is-entry";
 
   return (
@@ -881,7 +773,6 @@ function App() {
           bgmVolume={bgmVolume}
           busy={busy}
           canEndSession={Boolean((authenticated || admin) && state?.phase === "complete")}
-          canEditVoteOrder={canEditVoteOrder}
           canToggleRandomDiscard={Boolean(
             (authenticated || admin) &&
               state &&
@@ -890,21 +781,18 @@ function App() {
                 (state.phase === "discard" && !state.discardedHiddenCount && !state.selectedCount)),
           )}
           open={settingsOpen}
-          historyCount={state?.dilemmaHistory?.length || 0}
           randomDiscardEnabled={state?.randomDiscardEnabled ?? true}
           state={state}
           tipsOpen={tipsOpen}
           onEndSession={handleSettingsEndSession}
           onLogout={handleSettingsLogout}
-          onOpenNextGameSetup={handleOpenNextGameSetup}
-          onOpenDilemmaHistory={handleOpenDilemmaHistory}
-          onOpenChronicleLedger={handleOpenChronicleLedger}
-          onOpenCampaignLedger={handleOpenCampaignLedger}
-          onOpenCampaignBackfill={handleOpenCampaignBackfill}
-          onOpenVoteOrderDialog={handleOpenVoteOrderDialog}
           onKickSession={handleKickSession}
           onOpenScoreGuide={handleOpenScoreGuide}
-          onOpenDilemmaEffectGuide={handleOpenDilemmaEffectGuide}
+          onOpenSecretAgendaGuide={handleOpenSecretAgendaGuide}
+          onOpenOpenAgendaGuide={handleOpenOpenAgendaGuide}
+          onOpenSpecialAbilityLegend={handleOpenSpecialAbilityLegend}
+          onOpenBoardProcessingGuide={handleOpenBoardProcessingGuide}
+          onOpenBoardProcessingHistory={handleOpenBoardProcessingHistory}
           onReset={handleSettingsReset}
           onBgmVolumeChange={handleBgmVolumeChange}
           onToggleRandomDiscard={handleToggleRandomDiscard}
@@ -913,10 +801,8 @@ function App() {
           onClose={closeFloatingMenus}
           onToggle={handleToggleSettings}
           onToggleTips={handleToggleTips}
-          historyToggleRef={dilemmaHistoryToggleRef}
           tipsToggleRef={tipsToggleRef}
           toggleRef={settingsToggleRef}
-          voteOrderLocked={voteOrderLocked}
         />
       ) : null}
 
@@ -949,10 +835,6 @@ function App() {
           busy={busy}
           mutate={mutate}
           refresh={refresh}
-          onOpenVoteOrderDialog={handleOpenVoteOrderDialog}
-          onOpenOpenAgendaGuide={handleOpenOpenAgendaGuide}
-          onOpenSecretAgendaGuide={handleOpenSecretAgendaGuide}
-          onOpenDilemmaEffectGuide={handleOpenDilemmaEffectGuide}
         />
       )}
       <Suspense fallback={null}>
@@ -974,19 +856,31 @@ function App() {
           onEndCauseChange={setSessionEndCause}
           onToggle={handleToggleSessionEndCheck}
         />
-        <NextGameSetupDialog
-          open={nextGameSetupOpen}
-          state={state}
-          busy={busy}
-          mutate={mutate}
-          onClose={handleCloseNextGameSetup}
-        />
         <ScoreGuideDialog open={scoreGuideOpen} onClose={handleCloseScoreGuide} restoreFocusRef={tipsToggleRef as any} />
-        <DilemmaEffectGuideDialog
-          open={dilemmaEffectGuideOpen}
-          onClose={handleCloseDilemmaEffectGuide}
-          restoreFocusRef={dilemmaEffectGuideToggleRef as any}
+        <SpecialAbilityLegendDialog
+          open={specialAbilityLegendOpen}
+          restoreFocusRef={specialAbilityLegendButtonRef as any}
+          onClose={handleCloseSpecialAbilityLegend}
         />
+        <BoardProcessingGuideDialog
+          open={boardProcessingGuideOpen}
+          onClose={handleCloseBoardProcessingGuide}
+          restoreFocusRef={boardProcessingGuideToggleRef as any}
+        />
+        {state?.phase === "complete" && state.isAdmin ? (
+          <BoardProcessingHistoryDialog
+            busy={busy}
+            canManageBoardProcessing={state.isAdmin}
+            currentHouseId={state.currentHouseId}
+            history={state.boardProcessingHistory}
+            houses={state.houses || []}
+            items={state.boardProcessingItems || []}
+            mutate={mutate}
+            onClose={handleCloseBoardProcessingHistory}
+            open={boardProcessingHistoryOpen}
+            restoreFocusRef={boardProcessingHistoryToggleRef as any}
+          />
+        ) : null}
         <OpenAgendaScoreDialog
           open={openAgendaGuideOpen}
           onClose={handleCloseOpenAgendaGuide}
@@ -996,54 +890,6 @@ function App() {
           open={secretAgendaGuideOpen}
           onClose={handleCloseSecretAgendaGuide}
           restoreFocusRef={secretAgendaGuideToggleRef as any}
-        />
-        <DilemmaHistoryDialog
-          busy={busy}
-          currentHouseId={state?.currentHouseId || null}
-          houses={state ? getHouses(state) : []}
-          history={state?.dilemmaHistory || []}
-          open={dilemmaHistoryOpen}
-          onClose={handleCloseDilemmaHistory}
-          onDelete={handleDeleteDilemmaHistory}
-          restoreFocusRef={dilemmaHistoryToggleRef as any}
-        />
-        {chronicleLedgerOpen ? (
-          <ChronicleLedgerDialog
-            busy={busy}
-            mutate={mutate}
-            open={chronicleLedgerOpen}
-            state={state}
-            onClose={handleCloseChronicleLedger}
-            restoreFocusRef={chronicleLedgerRestoreFocusRef as any}
-          />
-        ) : null}
-        {campaignLedgerOpen ? (
-          <CampaignLedgerDialog
-            busy={busy}
-            mutate={mutate}
-            open={campaignLedgerOpen}
-            state={state}
-            onClose={handleCloseCampaignLedger}
-            restoreFocusRef={campaignLedgerRestoreFocusRef as any}
-          />
-        ) : null}
-        {campaignBackfillOpen ? (
-          <CampaignBackfillDialog
-            busy={busy}
-            mutate={mutate}
-            open={campaignBackfillOpen}
-            state={state}
-            onClose={handleCloseCampaignBackfill}
-            restoreFocusRef={campaignBackfillRestoreFocusRef as any}
-          />
-        ) : null}
-        <VoteOrderDialog
-          busy={busy}
-          open={voteOrderDialogOpen}
-          state={state}
-          onClose={handleCloseVoteOrderDialog}
-          onSave={handleSaveVoteOrder}
-          restoreFocusRef={voteOrderToggleRef as any}
         />
       </Suspense>
     </main>
@@ -1073,24 +919,20 @@ function FloatingSettings({
   bgmVolume,
   busy,
   canEndSession,
-  canEditVoteOrder,
   canToggleRandomDiscard,
-  historyCount,
   open,
   randomDiscardEnabled,
   state,
   tipsOpen,
   onEndSession,
   onLogout,
-  onOpenNextGameSetup,
-  onOpenDilemmaHistory,
-  onOpenChronicleLedger,
-  onOpenCampaignLedger,
-  onOpenCampaignBackfill,
-  onOpenVoteOrderDialog,
   onKickSession,
   onOpenScoreGuide,
-  onOpenDilemmaEffectGuide,
+  onOpenSecretAgendaGuide,
+  onOpenOpenAgendaGuide,
+  onOpenSpecialAbilityLegend,
+  onOpenBoardProcessingGuide,
+  onOpenBoardProcessingHistory,
   onReset,
   onBgmVolumeChange,
   onToggle,
@@ -1099,12 +941,10 @@ function FloatingSettings({
   onToggleRandomDiscard,
   onToggleTips,
   onClose,
-  historyToggleRef,
   tipsToggleRef,
   toggleRef,
-  voteOrderLocked,
 }: any) {
-  const bgmVolumePercent = Math.round(bgmVolume * 100);
+  const bgmVolumePercent = getBgmDisplayVolumePercent(bgmVolume, bgmMuted);
   const floatRef = React.useRef<HTMLDivElement>(null);
   const currentHouseId = state?.currentHouseId || "";
   const activeAdminHouseId = state?.adminHouseId || "";
@@ -1160,193 +1000,139 @@ function FloatingSettings({
         >
           <TokenIcon type="tip" />
         </button>
-        <button
-          ref={historyToggleRef}
-          className="settings-toggle"
-          type="button"
-          aria-haspopup="dialog"
-          aria-label={ko.app.settings.dilemmaHistoryCount(historyCount)}
-          onClick={onOpenDilemmaHistory}
-        >
-          <TokenIcon type="history" />
-        </button>
       </div>
       {tipsOpen ? (
         <div className="settings-menu tips-menu" id="tips-menu">
           <p className="section-label">{ko.app.settings.referencesSection}</p>
-          <button className="ghost-button wide" type="button" onClick={onOpenScoreGuide}>
+          <button className="ghost-button wide" type="button" onClick={onOpenOpenAgendaGuide}>
+            <TokenIcon type="balance" />
+            {ko.app.inventory.openScoreBtn}
+          </button>
+          <button className="ghost-button wide" type="button" onClick={onOpenSecretAgendaGuide || onOpenScoreGuide}>
             <TokenIcon type="balance" />
             {ko.app.settings.secretScoreLink}
           </button>
-          <button className="ghost-button wide" type="button" onClick={onOpenDilemmaEffectGuide}>
+          <button className="ghost-button wide" type="button" onClick={onOpenSpecialAbilityLegend}>
             <TokenIcon type="help" />
-            {ko.app.settings.dilemmaEffectGuide}
+            {ko.app.settings.specialAbilityLegend}
+          </button>
+          <button className="ghost-button wide" type="button" onClick={onOpenBoardProcessingGuide}>
+            <TokenIcon type="help" />
+            {ko.app.settings.boardProcessingGuide}
           </button>
           <a className="settings-link" href={rulebookPdfUrl} target="_blank" rel="noreferrer">
             <TokenIcon type="scroll" />
             {ko.app.settings.rulebookPdf}
             <TokenIcon type="external" />
           </a>
-          <div className="tips-collection" aria-label={ko.app.settings.tipsCollectionTitle}>
-            <div className="tips-collection-heading">
-              <strong>{ko.app.settings.tipsCollectionTitle}</strong>
-              <span>{ko.app.settings.tipsCollectionHint}</span>
-            </div>
-            <div className="tips-collection-list">
-              {rulebookReferenceTips.map((tip) => (
-                <article className="tips-card" key={tip.id}>
-                  <h3>{tip.title}</h3>
-                  <p>{tip.body}</p>
-                  <small>{tip.reference}</small>
-                </article>
-              ))}
-            </div>
-          </div>
         </div>
       ) : null}
       {open ? (
         <div className="settings-menu" id="settings-menu">
-          {authenticated ? (
-            <Tooltip className="settings-tooltip-anchor" label={adminModeTooltip}>
-              <button
-                className={`settings-switch-control${adminModeBlocked ? " disabled" : ""}`}
-                type="button"
-                aria-pressed={admin}
-                aria-label={ko.app.settings.adminModeAria(admin)}
-                onClick={onToggleAdminMode}
-                disabled={busy || adminModeBlocked}
-              >
-                <span>
-                  <strong>{ko.app.settings.adminMode}</strong>
-                </span>
-                <span className="settings-state-segment" aria-hidden="true">
-                  <span className={admin ? "active" : ""}>ON</span>
-                  <span className={!admin ? "active" : ""}>OFF</span>
-                </span>
-              </button>
-            </Tooltip>
-          ) : null}
-          {authenticated ? (
+          {authenticated || admin ? (
             <>
               <p className="section-label">{ko.app.settings.gameFlowSection}</p>
-              <Tooltip
-                className="settings-tooltip-anchor"
-                label={
-                  voteOrderLocked
-                    ? ko.app.settings.voteOrderLocked
-                    : canEditVoteOrder
-                      ? ko.app.settings.voteOrderHint
-                      : ko.app.settings.voteOrderNeedFive
-                }
-              >
-                <button
-                  className="ghost-button wide"
-                  type="button"
-                  onClick={onOpenVoteOrderDialog}
-                  disabled={busy || !canEditVoteOrder}
+              {authenticated ? (
+                <Tooltip
+                  className="settings-tooltip-anchor"
+                  label={canEndSession ? ko.app.settings.sessionEndReady : sessionEndUnavailableMessage}
                 >
-                  <TokenIcon type="turn" />
-                  {ko.app.settings.voteOrderButton}
+                  <button
+                    className="ghost-button wide session-end-button"
+                    type="button"
+                    onClick={onEndSession}
+                    disabled={busy || !canEndSession}
+                  >
+                    <TokenIcon type="seal" />
+                    {ko.app.settings.sessionEndPrep}
+                  </button>
+                </Tooltip>
+              ) : null}
+              {state?.phase === "complete" && state?.isAdmin ? (
+                <button className="ghost-button wide" type="button" onClick={onOpenBoardProcessingHistory}>
+                  <TokenIcon type="history" />
+                  {ko.app.settings.boardProcessingHistory}
                 </button>
-              </Tooltip>
-              <Tooltip
-                className="settings-tooltip-anchor"
-                label={canEndSession ? ko.app.settings.sessionEndReady : sessionEndUnavailableMessage}
-              >
-                <button
-                  className="ghost-button wide session-end-button"
-                  type="button"
-                  onClick={onEndSession}
-                  disabled={busy || !canEndSession}
-                >
-                  <TokenIcon type="seal" />
-                  {ko.app.settings.sessionEndPrep}
-                </button>
-              </Tooltip>
-              <Tooltip className="settings-tooltip-anchor" label={ko.app.settings.nextGameSetupHint}>
-                <button
-                  className="ghost-button wide"
-                  type="button"
-                  onClick={onOpenNextGameSetup}
-                  disabled={busy}
-                >
-                  <TokenIcon type="scroll" />
-                  {ko.app.settings.nextGameSetup}
-                </button>
-              </Tooltip>
-            </>
-          ) : null}
-          <p className="section-label">{ko.app.settings.physicalBoardSection}</p>
-          {authenticated ? (
-            <>
+              ) : null}
               <button
-                className="ghost-button wide"
+                className={`settings-switch-control${!canToggleRandomDiscard ? " disabled" : ""}`}
                 type="button"
-                aria-haspopup="dialog"
-                onClick={onOpenChronicleLedger}
-                disabled={busy}
+                aria-pressed={randomDiscardEnabled}
+                aria-label={ko.app.settings.randomDiscardAria(randomDiscardEnabled)}
+                onClick={onToggleRandomDiscard}
+                disabled={busy || !canToggleRandomDiscard}
               >
-                <TokenIcon type="history" />
-                {ko.app.settings.chronicleLedger}
-              </button>
-              <button
-                className="ghost-button wide"
-                type="button"
-                aria-haspopup="dialog"
-                onClick={onOpenCampaignLedger}
-                disabled={busy}
-              >
-                <TokenIcon type="sheet" />
-                {ko.app.settings.campaignLedger}
-              </button>
-              <button
-                className="ghost-button wide"
-                type="button"
-                aria-haspopup="dialog"
-                onClick={onOpenCampaignBackfill}
-                disabled={busy}
-              >
-                <TokenIcon type="save" />
-                {ko.app.settings.campaignBackfill}
+                <span>
+                  <strong>{ko.app.settings.randomDiscard}</strong>
+                </span>
+                <span className="settings-state-segment" aria-hidden="true">
+                  <span className={randomDiscardEnabled ? "active" : ""}>ON</span>
+                  <span className={!randomDiscardEnabled ? "active" : ""}>OFF</span>
+                </span>
               </button>
             </>
           ) : null}
-          {admin ? (
+          {authenticated || admin ? (
             <>
               <p className="section-label">{ko.app.settings.adminSection}</p>
-              {(state?.houses || []).filter((house: any) => house.hasSession).length ? (
-                (state?.houses || [])
-                  .filter((house: any) => house.hasSession)
-                  .map((house: any) => (
-                    <button
-                      className="ghost-button wide"
-                      type="button"
-                      key={house.id}
-                      onClick={() => onKickSession(house.id)}
-                      disabled={busy}
-                    >
-                      <TokenIcon type="exit" />
-                      {ko.app.settings.kickHouse(getHouseKoreanName(house))}
-                    </button>
-                  ))
-              ) : (
-                <p className="settings-empty">{ko.app.settings.noActiveSessions}</p>
-              )}
+              {authenticated ? (
+                <Tooltip className="settings-tooltip-anchor" label={adminModeTooltip}>
+                  <button
+                    className={`settings-switch-control${adminModeBlocked ? " disabled" : ""}`}
+                    type="button"
+                    aria-pressed={admin}
+                    aria-label={ko.app.settings.adminModeAria(admin)}
+                    onClick={onToggleAdminMode}
+                    disabled={busy || adminModeBlocked}
+                  >
+                    <span>
+                      <strong>{ko.app.settings.adminMode}</strong>
+                    </span>
+                    <span className="settings-state-segment" aria-hidden="true">
+                      <span className={admin ? "active" : ""}>ON</span>
+                      <span className={!admin ? "active" : ""}>OFF</span>
+                    </span>
+                  </button>
+                </Tooltip>
+              ) : null}
+              {admin ? (
+                (state?.houses || []).filter((house: any) => house.hasSession).length ? (
+                  (state?.houses || [])
+                    .filter((house: any) => house.hasSession)
+                    .map((house: any) => (
+                      <button
+                        className="ghost-button wide"
+                        type="button"
+                        key={house.id}
+                        onClick={() => onKickSession(house.id)}
+                        disabled={busy}
+                      >
+                        <TokenIcon type="exit" />
+                        {ko.app.settings.kickHouse(getHouseKoreanName(house))}
+                      </button>
+                    ))
+                ) : (
+                  <p className="settings-empty">{ko.app.settings.noActiveSessions}</p>
+                )
+              ) : null}
             </>
           ) : null}
           <p className="section-label">{ko.app.settings.appSection}</p>
-          <button
-            className="ghost-button wide"
-            type="button"
-            aria-pressed={bgmMuted}
-            onClick={onToggleBgmMuted}
-          >
-            <TokenIcon type={bgmMuted ? "soundOff" : "soundOn"} />
-            {bgmMuted ? ko.app.settings.bgmUnmute : ko.app.settings.bgmMute}
-          </button>
           <div className="settings-volume-control">
             <div className="settings-volume-heading">
-              <label htmlFor="bgm-volume">{ko.app.settings.bgmVolume}</label>
+              <div className="settings-volume-label-group">
+                <label htmlFor="bgm-volume">{ko.app.settings.bgmVolume}</label>
+                <button
+                  className="settings-volume-mute-button"
+                  type="button"
+                  aria-pressed={bgmMuted}
+                  aria-label={ko.app.settings.bgmToggle}
+                  title={bgmMuted ? ko.app.settings.bgmUnmute : ko.app.settings.bgmMute}
+                  onClick={onToggleBgmMuted}
+                >
+                  <TokenIcon type={bgmMuted ? "soundOff" : "soundOn"} />
+                </button>
+              </div>
               <span>{bgmVolumePercent}%</span>
             </div>
             <input
@@ -1359,22 +1145,6 @@ function FloatingSettings({
               onChange={onBgmVolumeChange}
             />
           </div>
-          <button
-            className={`settings-switch-control${!canToggleRandomDiscard ? " disabled" : ""}`}
-            type="button"
-            aria-pressed={randomDiscardEnabled}
-            aria-label={ko.app.settings.randomDiscardAria(randomDiscardEnabled)}
-            onClick={onToggleRandomDiscard}
-            disabled={busy || !canToggleRandomDiscard}
-          >
-            <span>
-              <strong>{ko.app.settings.randomDiscard}</strong>
-            </span>
-            <span className="settings-state-segment" aria-hidden="true">
-              <span className={randomDiscardEnabled ? "active" : ""}>ON</span>
-              <span className={!randomDiscardEnabled ? "active" : ""}>OFF</span>
-            </span>
-          </button>
           {authenticated || spectator ? (
             <button className="ghost-button wide" type="button" onClick={onLogout} disabled={busy}>
               <TokenIcon type="exit" />
@@ -1641,22 +1411,13 @@ function NameField({ displayName, setDisplayName }: any) {
   );
 }
 
-function GamePanel({
+export function GamePanel({
   state,
   busy,
   mutate,
   refresh,
-  onOpenVoteOrderDialog,
-  onOpenOpenAgendaGuide,
-  onOpenSecretAgendaGuide,
-  onOpenDilemmaEffectGuide,
 }: any) {
-  const voteOrderHouses = getDilemmaVoteParticipants(state);
-  const currentVoteName = getDilemmaVoteTurnName(state);
   const draftTurnName = state.turn ? getHouseDisplayName(state, state.turn) : ko.app.gamePanel.beforeStart;
-  const leaderName = getHouseDisplayName(state, state.dilemmaLeader);
-  const moderatorName = getHouseDisplayName(state, state.dilemmaModerator);
-  const dilemmaProgressLabel = getDilemmaProgressLabel(state);
   const currentHouse = getCurrentHouse(state);
   const currentHouseChosenName =
     currentHouse?.hasCustomName && typeof currentHouse.name === "string"
@@ -1668,6 +1429,9 @@ function GamePanel({
   const hasCouncilContext = Boolean(state.canDiscard);
   const councilStageLabel = getCouncilStageLabel(state);
   const councilProcedureTitle = getCouncilProcedureTitle(state);
+  const showDraftStatusDetails = state.phase !== "complete";
+  const showCouncilProcedure = state.phase !== "complete";
+  const showBoardProcessingInputPanel = Boolean(state.phase === "complete" && state.isAdmin);
   const handleSaveAlignmentReward = useCallback(
     (agendaId: any, reward: any) => mutate({ action: "saveAlignmentReward", agendaId, reward }),
     [mutate],
@@ -1675,6 +1439,19 @@ function GamePanel({
 
   return (
     <section className="council-layout">
+      <PersonalInventoryPanel
+        inventory={state.ownInventory}
+        progress={state.ownHouseProgress}
+        house={currentHouse}
+        ownChoice={state.ownChoice}
+        houses={state.houses || []}
+        houseId={state.currentHouseId}
+        busy={busy}
+        mutate={mutate}
+        refresh={refresh}
+        onSaveAlignmentReward={handleSaveAlignmentReward}
+        renderLayout={({ prioritySections, mainPanel }: any) => (
+          <>
       <div className="council-sidebar-column">
         <aside className="council-sidebar" aria-live="polite">
           <section className="sidebar-status-section" aria-labelledby="sidebar-status-title">
@@ -1684,87 +1461,75 @@ function GamePanel({
               </span>
               <h2 id="sidebar-status-title">{ko.app.gamePanel.statusTitle}</h2>
             </div>
-            <section className={`dilemma-stage phase-${state.phase}`} aria-labelledby="stage-title">
-              <div className="stage-copy">
-                <p className="section-label">{ko.app.gamePanel.councilProcedure}</p>
-                <h2 id="stage-title">{councilProcedureTitle}</h2>
-                <Suspense fallback={null}>
-                  <GameMessage state={state} />
-                </Suspense>
-                {state.phase === "complete" && !isDilemmaBlank(state.dilemma) ? (
-                  <Suspense fallback={<div className="dilemma-vote-panel-placeholder" />}>
-                    <DilemmaVotingPanel state={state} busy={busy} mutate={mutate} />
+            {showCouncilProcedure ? (
+              <section className={`game-stage phase-${state.phase}`} aria-labelledby="stage-title">
+                <div className="stage-copy">
+                  <p className="section-label">{ko.app.gamePanel.councilProcedure}</p>
+                  <h2 id="stage-title">{councilProcedureTitle}</h2>
+                  <Suspense fallback={null}>
+                    <GameMessage state={state} />
                   </Suspense>
-                ) : null}
-              </div>
-              <div className="stage-tableau" aria-hidden="true">
-                <div className="balance-rail">
-                  <span />
-                  <span />
-                  <span />
                 </div>
-                <div className="tableau-token coin-token">
-                  <TokenIcon type="coin" />
+                <div className="stage-tableau" aria-hidden="true">
+                  <div className="balance-rail">
+                    <span />
+                    <span />
+                    <span />
+                  </div>
+                  <div className="tableau-token coin-token">
+                    <TokenIcon type="coin" />
+                  </div>
+                  <div className="tableau-token power-token">
+                    <TokenIcon type="power" />
+                  </div>
+                  <div className="tableau-token seal-token">
+                    <TokenIcon type="seal" />
+                  </div>
                 </div>
-                <div className="tableau-token power-token">
-                  <TokenIcon type="power" />
-                </div>
-                <div className="tableau-token seal-token">
-                  <TokenIcon type="seal" />
-                </div>
-              </div>
-            </section>
+              </section>
+            ) : null}
             <Suspense fallback={null}>
-              <div className="status-stack">
-                <StatusItem icon="house" label={ko.app.gamePanel.myHouse} value={currentHouseChosenName || ko.app.gamePanel.spectator} />
-                <StatusItem
-                  icon="turn"
-                  label={state.phase === "complete" ? ko.app.gamePanel.voteTurn : ko.app.gamePanel.turn}
-                  value={state.phase === "complete" ? currentVoteName || ko.app.gamePanel.wait : draftTurnName}
-                  splitParenthetical
-                />
-                <StatusItem icon="scroll" label={ko.app.gamePanel.currentPhase} value={councilStageLabel} />
-                {state.phase === "complete" ? (
-                  <>
-                    <StatusItem icon="leader" label={ko.app.gamePanel.leader} value={leaderName || ko.common.notSpecified} splitParenthetical />
-                    <StatusItem icon="moderator" label={ko.app.gamePanel.moderator} value={moderatorName || ko.common.notSpecified} splitParenthetical />
-                    <StatusItem icon="seal" label={ko.app.gamePanel.dilemma} value={dilemmaProgressLabel} />
-                  </>
-                ) : (
-                  <StatusItem
-                    icon="seal"
-                    label={state.phase === "house-select" ? ko.app.gamePanel.housePick : ko.app.gamePanel.agendaPick}
-                    value={
-                      state.phase === "house-select"
-                        ? `${state.claimedHouseCount} / ${state.requiredHouseCount}`
-                        : `${state.selectedCount} / ${state.draftOrder.length || REQUIRED_HOUSE_COUNT}`
-                    }
-                  />
-                )}
-              </div>
+              <CouncilStatusStack
+                claimedHouseCount={state.claimedHouseCount}
+                councilStageLabel={councilStageLabel}
+                currentHouseName={currentHouseChosenName || ko.app.gamePanel.spectator}
+                draftOrderCount={state.draftOrder.length}
+                draftTurnName={draftTurnName}
+                phase={state.phase}
+                requiredHouseCount={state.requiredHouseCount}
+                selectedCount={state.selectedCount}
+              />
             </Suspense>
-            <Suspense fallback={null}>
-              {state.phase === "complete" ? (
-                <VoteOrderTrack
-                  houses={voteOrderHouses}
-                  leaderHouseId={state.dilemmaLeader}
-                  moderatorHouseId={state.dilemmaModerator}
-                  turn={state.dilemmaVoteTurn ?? getSuggestedDilemmaVoteTurnHouseId(state)}
-                />
-              ) : (
+            {showDraftStatusDetails ? (
+              <Suspense fallback={null}>
                 <TurnTrackAny houses={state.houses} draftOrder={state.draftOrder} turn={state.turn} phase={state.phase} />
-              )}
-            </Suspense>
-            <p className="privacy-note">{ko.app.gamePanel.privacyNote}</p>
+              </Suspense>
+            ) : null}
+            {showDraftStatusDetails ? <p className="privacy-note">{ko.app.gamePanel.privacyNote}</p> : null}
           </section>
         </aside>
+        {prioritySections}
+        {showBoardProcessingInputPanel ? (
+          <Suspense fallback={null}>
+            <BoardProcessingPanel
+              busy={busy}
+              canManageBoardProcessing={state.isAdmin}
+              currentHouseId={state.currentHouseId}
+              history={state.boardProcessingHistory}
+              houses={state.houses || []}
+              items={state.boardProcessingItems || []}
+              mode="input"
+              mutate={mutate}
+            />
+          </Suspense>
+        ) : null}
         <CarrotWaitAction />
       </div>
 
       <section
         className={`council-main${showAgendaList ? " has-agenda" : ""}${
           hasCouncilContext ? " has-context" : " no-context"
-        }${state.phase === "complete" ? " has-dilemma" : ""}`}
+        }`}
       >
         {hasCouncilContext ? (
           <aside className="council-context" aria-label={ko.app.gamePanel.draftAssistAria}>
@@ -1779,46 +1544,20 @@ function GamePanel({
             mutate={mutate}
           />
         ) : null}
-        <PersonalInventoryPanel
-          inventory={state.ownInventory}
-          progress={state.ownHouseProgress}
-          house={currentHouse}
-          ownChoice={state.ownChoice}
-          dilemma={state.phase === "complete" ? state.dilemma : null}
-          dilemmaHistory={state.dilemmaHistory || []}
-          dilemmaLeader={state.dilemmaLeader}
-          dilemmaModerator={state.dilemmaModerator}
-          houses={state.houses || []}
-          houseId={state.currentHouseId}
-          canEditDilemmaRoles={state.phase === "complete" ? Boolean(state.canEditDilemmaRoles) : false}
-          canEditDilemmaCard={state.phase === "complete" ? state.canEditDilemmaCard : undefined}
-          canEnterDilemmaResolution={state.phase === "complete" ? Boolean(state.canEnterDilemmaResolution) : false}
-          canPublishDilemmaResolution={state.phase === "complete" ? Boolean(state.canPublishDilemmaResolution) : false}
-          canResetDilemmaResult={Boolean(state.canResetDilemmaResult)}
-          busy={busy}
-          mutate={mutate}
-          refresh={refresh}
-          onSaveAlignmentReward={handleSaveAlignmentReward}
-          onOpenVoteOrderDialog={onOpenVoteOrderDialog}
-          onOpenOpenAgendaGuide={onOpenOpenAgendaGuide}
-          onOpenSecretAgendaGuide={onOpenSecretAgendaGuide}
-          onOpenDilemmaEffectGuide={onOpenDilemmaEffectGuide}
-        />
+        {mainPanel}
       </section>
+          </>
+        )}
+      />
     </section>
   );
 }
 
 function HouseProfileCard({
-  busy,
   house,
-  progress,
   showCrest = true,
   showSectionLabel = true,
-  onSaveAlignmentReward,
 }: any) {
-  const normalizedProgress = useMemo(() => normalizeHouseProgress(progress), [progress]);
-
   if (!house) {
     return null;
   }
@@ -1850,66 +1589,7 @@ function HouseProfileCard({
           <HouseProfileField label={ko.app.gamePanel.narrativeGoal} value={house.goal} />
           <HouseProfileField label={ko.app.gamePanel.preferredAgenda} value={getAlignmentKoreanLabels(house.alignments).join(" / ")} />
         </div>
-        <HouseAlignmentTrack
-          alignments={house.alignments || []}
-          busy={busy}
-          progress={normalizedProgress}
-          onSaveAlignmentReward={onSaveAlignmentReward}
-        />
       </div>
-    </div>
-  );
-}
-
-function HouseAlignmentTrack({ alignments, busy, progress, onSaveAlignmentReward }: any) {
-  const favoriteAlignments = new Set(alignments);
-  const alignmentByAgendaId = useMemo(
-    () => new Map(houseAlignmentRows.map((alignment) => [alignment.agendaId, alignment])),
-    [],
-  );
-  const rows = defaultHouseAlignmentOrder.map((agendaId) => alignmentByAgendaId.get(agendaId)).filter(Boolean);
-
-  return (
-    <div className="house-alignment-panel">
-      <div className="house-alignment-heading">
-        <span>{ko.app.gamePanel.alignmentSpan}</span>
-      </div>
-      <div className="house-alignment-track" aria-label={ko.app.gamePanel.alignmentTrackAria}>
-        {rows.map((alignment) => (
-          <HouseAlignmentRewardRow
-            alignment={alignment}
-            busy={busy}
-            key={(alignment as any).agendaId}
-            preferred={favoriteAlignments.has((alignment as any).id)}
-            reward={progress?.alignmentRewards?.[(alignment as any).agendaId]}
-            onSaveAlignmentReward={onSaveAlignmentReward}
-          />
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function HouseAlignmentRewardRow({
-  alignment,
-  busy,
-  preferred,
-  reward,
-  onSaveAlignmentReward,
-}: any) {
-  return (
-    <div
-      className={`house-alignment-row${preferred ? " preferred" : ""}`}
-    >
-      <span className="house-alignment-title">
-        {alignment.koreanLabel}
-      </span>
-      <AlignmentRewardInlineEditor
-        alignment={alignment}
-        busy={busy}
-        reward={reward}
-        onSaveAlignmentReward={onSaveAlignmentReward}
-      />
     </div>
   );
 }
@@ -2073,46 +1753,20 @@ function PersonalInventoryPanel({
   progress,
   house,
   ownChoice,
-  dilemma,
-  dilemmaHistory,
-  dilemmaLeader,
-  dilemmaModerator,
   houses,
   houseId,
-  canEditDilemmaRoles = false,
-  canEditDilemmaCard,
-  canEnterDilemmaResolution = false,
-  canPublishDilemmaResolution = false,
-  canResetDilemmaResult = false,
   busy,
   mutate,
-  refresh,
   onSaveAlignmentReward,
-  onOpenVoteOrderDialog,
-  onOpenOpenAgendaGuide,
-  onOpenSecretAgendaGuide,
-  onOpenDilemmaEffectGuide,
+  renderLayout,
 }: any) {
   const serverInventory = useMemo(() => normalizeInventory(inventory), [inventory]);
   const serverProgress = useMemo(() => normalizeHouseProgress(progress), [progress]);
-  const serverDilemma = useMemo(() => normalizeDilemmaRecord(dilemma), [dilemma]);
   const [draft, setDraft] = useState(serverInventory);
   const [progressDraft, setProgressDraft] = useState(serverProgress);
   const [ledgerSaveStatus, setLedgerSaveStatus] = useState("saved");
-  const [dilemmaDialogOpen, setDilemmaDialogOpen] = useState(false);
-  const [dilemmaResolutionOpen, setDilemmaResolutionOpen] = useState(false);
-  const [dilemmaRoleDialogOpen, setDilemmaRoleDialogOpen] = useState(false);
-  const [dilemmaDraft, setDilemmaDraft] = useState(() => createDilemmaDraft(serverDilemma));
-  const [dilemmaResolutionDraft, setDilemmaResolutionDraft] = useState(() => createDilemmaDraft(serverDilemma));
-  const [dilemmaEditToken, setDilemmaEditToken] = useState("");
-  const [dilemmaPhotoError, setDilemmaPhotoError] = useState("");
-  const [dilemmaPhotoBusy, setDilemmaPhotoBusy] = useState(false);
-  const dilemmaIsBlank = useMemo(() => isDilemmaBlank(serverDilemma), [serverDilemma]);
   const [achievementEditor, setAchievementEditor] = useState<any>(null);
   const [achievementLegendOpen, setAchievementLegendOpen] = useState(false);
-  const dilemmaEditButtonRef = useRef<any>(null);
-  const dilemmaResolutionButtonRef = useRef<any>(null);
-  const dilemmaRoleButtonRef = useRef<any>(null);
   const achievementEditButtonRef = useRef<any>(null);
   const achievementLegendButtonRef = useRef<any>(null);
   const ledgerAutosaveTimerRef = useRef(null);
@@ -2147,32 +1801,6 @@ function PersonalInventoryPanel({
       queueMicrotask(() => setProgressDraft(serverProgress));
     }
   }, [progressDirty, progressDraft, serverProgress]);
-
-  useEffect(() => {
-    if (!dilemmaDialogOpen) {
-      queueMicrotask(() => {
-        setDilemmaDraft(createDilemmaDraft(serverDilemma));
-        setDilemmaPhotoError("");
-        setDilemmaPhotoBusy(false);
-      });
-    }
-  }, [dilemmaDialogOpen, serverDilemma]);
-
-  useEffect(() => {
-    if (!dilemmaResolutionOpen) {
-      return;
-    }
-
-    queueMicrotask(() => {
-      setDilemmaResolutionDraft((prev) => ({
-        ...createDilemmaDraft(serverDilemma),
-        resolutionNotes: prev.resolutionNotes,
-        timeCounterSlot: prev.timeCounterSlot,
-        resolutionPhotos: prev.resolutionPhotos,
-        resolutionChecklist: prev.resolutionChecklist,
-      }));
-    });
-  }, [dilemmaResolutionOpen, serverDilemma]);
 
   useEffect(() => {
     latestLedgerDraftRef.current = {
@@ -2436,292 +2064,6 @@ function PersonalInventoryPanel({
     setLedgerSaveStatus("pending");
   };
 
-  const openDilemmaRoleDialog = useCallback(() => {
-    setDilemmaRoleDialogOpen(true);
-  }, []);
-
-  const closeDilemmaRoleDialog = useCallback(() => {
-    setDilemmaRoleDialogOpen(false);
-  }, []);
-
-  const saveDilemmaRoles = useCallback(
-    async (roles: any) => await mutate({ action: "saveDilemmaRoles", roles }),
-    [mutate],
-  );
-
-  const beginDilemmaEdit = useCallback(async () => {
-    if (!dilemma || !houseId) {
-      return;
-    }
-
-    if (canEditDilemmaCard === false) {
-      void refresh({ force: true });
-      return;
-    }
-
-    setDilemmaResolutionOpen(false);
-
-    const result = await mutate({ action: "beginDilemmaEdit" });
-
-    if (!result?.dilemmaEditToken) {
-      void refresh({ force: true });
-      return;
-    }
-
-    setDilemmaEditToken(result.dilemmaEditToken);
-    setDilemmaDraft(createDilemmaDraft(result.state?.dilemma || serverDilemma));
-    setDilemmaPhotoError("");
-    setDilemmaDialogOpen(true);
-  }, [canEditDilemmaCard, dilemma, houseId, mutate, refresh, serverDilemma]);
-
-  const beginDilemmaResolutionEdit = useCallback(async () => {
-    if (!dilemma || !houseId || (!canEnterDilemmaResolution && !canResetDilemmaResult)) {
-      return;
-    }
-
-    setDilemmaDialogOpen(false);
-
-    const result = await mutate({ action: "beginDilemmaEdit" });
-
-    if (!result?.dilemmaEditToken) {
-      void refresh({ force: true });
-      return;
-    }
-
-    setDilemmaEditToken(result.dilemmaEditToken);
-    setDilemmaResolutionDraft(createDilemmaDraft(result.state?.dilemma || serverDilemma));
-    setDilemmaPhotoError("");
-    setDilemmaResolutionOpen(true);
-  }, [canEnterDilemmaResolution, canResetDilemmaResult, dilemma, houseId, mutate, refresh, serverDilemma]);
-
-  const updateDilemmaField = useCallback((field: any, value: any) => {
-    setDilemmaDraft((current) => ({
-      ...current,
-      [field]: value,
-    }));
-  }, []);
-
-  const updateDilemmaOutcome = useCallback((side: any, field: any, value: any) => {
-    setDilemmaDraft((current) => ({
-      ...current,
-      [side]: {
-        ...(current as any)[side],
-        [field]: value,
-      },
-    }));
-  }, []);
-
-  const cancelDilemmaEdit = useCallback(async () => {
-    const token = dilemmaEditToken;
-    setDilemmaDialogOpen(false);
-    setDilemmaResolutionOpen(false);
-    setDilemmaEditToken("");
-    setDilemmaDraft(createDilemmaDraft(serverDilemma));
-    setDilemmaResolutionDraft(createDilemmaDraft(serverDilemma));
-    setDilemmaPhotoError("");
-
-    if (token) {
-      await mutate({ action: "cancelDilemmaEdit", dilemmaEditToken: token });
-    }
-  }, [dilemmaEditToken, mutate, serverDilemma]);
-
-  const addDilemmaPhotos = useCallback(async (files: any) => {
-    const fileList = Array.from(files || []);
-
-    if (!fileList.length) {
-      return;
-    }
-
-    const remainingSlots = Math.max(dilemmaPhotoLimit - dilemmaDraft.photos.length, 0);
-
-    if (remainingSlots <= 0) {
-      setDilemmaPhotoError(ko.app.inventory.photoSlotLimit(dilemmaPhotoLimit));
-      return;
-    }
-
-    setDilemmaPhotoBusy(true);
-    setDilemmaPhotoError("");
-
-    try {
-      const nextPhotos: any[] = [];
-
-      for (const file of fileList.slice(0, remainingSlots)) {
-        nextPhotos.push(await createDilemmaPhotoAttachment(file));
-      }
-
-      setDilemmaDraft((current) => ({
-        ...current,
-        photos: [...current.photos, ...nextPhotos].slice(0, dilemmaPhotoLimit),
-      }));
-    } catch (photoError: any) {
-      setDilemmaPhotoError(photoError.message || ko.app.inventory.photoAttachFail);
-    } finally {
-      setDilemmaPhotoBusy(false);
-    }
-  }, [dilemmaDraft.photos.length]);
-
-  const removeDilemmaPhoto = useCallback((photoId: any) => {
-    setDilemmaDraft((current) => ({
-      ...current,
-      photos: current.photos.filter((photo) => photo.id !== photoId),
-    }));
-    setDilemmaPhotoError("");
-  }, []);
-
-  const addResolutionPhotos = useCallback(async (files: any) => {
-    const fileList = Array.from(files || []);
-
-    if (!fileList.length) {
-      return;
-    }
-
-    const remainingSlots = Math.max(dilemmaPhotoLimit - dilemmaResolutionDraft.resolutionPhotos.length, 0);
-
-    if (remainingSlots <= 0) {
-      setDilemmaPhotoError(ko.app.inventory.photoSlotLimit(dilemmaPhotoLimit));
-      return;
-    }
-
-    setDilemmaPhotoBusy(true);
-    setDilemmaPhotoError("");
-
-    try {
-      const nextPhotos: any[] = [];
-
-      for (const file of fileList.slice(0, remainingSlots)) {
-        nextPhotos.push(await createDilemmaPhotoAttachment(file));
-      }
-
-      setDilemmaResolutionDraft((current) => ({
-        ...current,
-        resolutionPhotos: [...current.resolutionPhotos, ...nextPhotos].slice(0, dilemmaPhotoLimit),
-      }));
-    } catch (photoError: any) {
-      setDilemmaPhotoError(photoError.message || ko.app.inventory.photoAttachFail);
-    } finally {
-      setDilemmaPhotoBusy(false);
-    }
-  }, [dilemmaResolutionDraft.resolutionPhotos.length]);
-
-  const removeResolutionPhoto = useCallback((photoId: any) => {
-    setDilemmaResolutionDraft((current) => ({
-      ...current,
-      resolutionPhotos: current.resolutionPhotos.filter((photo) => photo.id !== photoId),
-    }));
-    setDilemmaPhotoError("");
-  }, []);
-
-  const resetDilemma = useCallback(async () => {
-    if (!canResetDilemmaResult) {
-      return;
-    }
-
-    if (!window.confirm(ko.app.inventory.dilemmaResetConfirm)) {
-      return;
-    }
-
-    setDilemmaDialogOpen(false);
-    setDilemmaResolutionOpen(false);
-    setDilemmaEditToken("");
-    setDilemmaDraft(createDilemmaDraft());
-    setDilemmaResolutionDraft(createDilemmaDraft());
-    setDilemmaPhotoError("");
-    setDilemmaPhotoBusy(false);
-
-    await mutate({ action: "resetDilemma" });
-  }, [canResetDilemmaResult, mutate]);
-
-  const updateDilemmaResolutionField = useCallback((field: any, value: any) => {
-    setDilemmaResolutionDraft((current) => ({
-      ...current,
-      [field]: value,
-    }));
-  }, []);
-
-  const saveDilemma = useCallback(async () => {
-    if (!dilemmaEditToken) {
-      return;
-    }
-
-    if (dilemmaPhotoBusy) {
-      setDilemmaPhotoError(ko.app.inventory.photoProcessing);
-      return;
-    }
-
-    const fromResolution = dilemmaResolutionOpen;
-
-    if (fromResolution) {
-      const liveDraft = createDilemmaDraft(normalizeDilemmaRecord(serverDilemma));
-      const resolutionDraft = createDilemmaDraft(dilemmaResolutionDraft);
-      const dilemmaPayload = createDilemmaPayload({
-        ...liveDraft,
-        aye: resolutionDraft.aye,
-        nay: resolutionDraft.nay,
-        selectedOutcome: resolutionDraft.selectedOutcome || liveDraft.selectedOutcome,
-        resolutionNotes: resolutionDraft.resolutionNotes,
-        timeCounterSlot: resolutionDraft.timeCounterSlot,
-        resolutionPhotos: resolutionDraft.resolutionPhotos,
-        resolutionChecklist: resolutionDraft.resolutionChecklist ?? liveDraft.resolutionChecklist,
-      });
-
-      const result = await mutate({
-        action: "saveDilemma",
-        dilemmaEditToken,
-        dilemma: dilemmaPayload,
-        fromResolution: true,
-      });
-
-      if (result) {
-        setDilemmaDialogOpen(false);
-        setDilemmaResolutionOpen(false);
-        setDilemmaEditToken("");
-      }
-      return;
-    }
-
-    const dilemmaPayload = createDilemmaPayload(dilemmaDraft);
-    dilemmaPayload.aye = {
-      ...dilemmaPayload.aye,
-      result: "",
-      resourceDeltas: {},
-      effects: [],
-    };
-    dilemmaPayload.nay = {
-      ...dilemmaPayload.nay,
-      result: "",
-      resourceDeltas: {},
-      effects: [],
-    };
-    const live = normalizeDilemmaRecord(serverDilemma);
-    dilemmaPayload.votes = live.votes;
-    dilemmaPayload.voteNotes = live.voteNotes;
-    dilemmaPayload.selectedOutcome = live.selectedOutcome || "";
-    dilemmaPayload.resolutionNotes = live.resolutionNotes || "";
-    dilemmaPayload.timeCounterSlot = live.timeCounterSlot || "";
-    dilemmaPayload.resolutionPhotos = live.resolutionPhotos;
-    dilemmaPayload.resolutionChecklist = normalizeResolutionChecklist(live.resolutionChecklist);
-
-    const result = await mutate({
-      action: "saveDilemma",
-      dilemmaEditToken,
-      dilemma: dilemmaPayload,
-    });
-
-    if (result) {
-      setDilemmaDialogOpen(false);
-      setDilemmaResolutionOpen(false);
-      setDilemmaEditToken("");
-    }
-  }, [dilemmaDraft, dilemmaEditToken, dilemmaPhotoBusy, dilemmaResolutionDraft, dilemmaResolutionOpen, mutate, serverDilemma]);
-
-  const publishDilemma = useCallback(async () => {
-    if (!houseId || !serverDilemma || isDilemmaBlank(serverDilemma)) {
-      return;
-    }
-
-    await mutate({ action: "publishDilemma" });
-  }, [houseId, mutate, serverDilemma]);
-
   const ledgerSaving = ledgerSaveStatus === "saving" || ledgerSaveStatus === "pending" || isDirty;
   const ledgerStatusText =
     ledgerSaveStatus === "error"
@@ -2743,66 +2085,105 @@ function PersonalInventoryPanel({
   );
   const narrativeAchievementComplete = progressDraft.narrativeAchievement || narrativeAchievementCount >= narrativeAchievementMax;
 
-  return (
-    <>
-      {dilemma ? (
-        <Suspense fallback={<div className="dilemma-summary-placeholder" />}>
-          <DilemmaSummaryCard
-            busy={busy}
-            currentHouseId={houseId}
-            dilemma={serverDilemma}
-            leaderHouseId={dilemmaLeader}
-            moderatorHouseId={dilemmaModerator}
-            history={dilemmaHistory || []}
-            houses={houses || []}
-            canEditDilemmaRoles={canEditDilemmaRoles}
-            canEditDilemmaCard={canEditDilemmaCard}
-            canEnterDilemmaResolution={canEnterDilemmaResolution}
-            canPublishDilemmaResolution={canPublishDilemmaResolution}
-            canResetDilemmaResult={canResetDilemmaResult}
-            editButtonRef={dilemmaEditButtonRef as any}
-            resolutionButtonRef={dilemmaResolutionButtonRef as any}
-            roleButtonRef={dilemmaRoleButtonRef as any}
-            onEdit={beginDilemmaEdit}
-            onOpenResolutionEntry={beginDilemmaResolutionEdit}
-            onOpenRoleDialog={openDilemmaRoleDialog}
-            onPublish={publishDilemma}
-            onReset={resetDilemma}
-          />
-        </Suspense>
-      ) : null}
-
-      <section className={`inventory-panel${house ? " has-house-profile" : ""}`} aria-labelledby="inventory-title">
-      <div className="inventory-header">
-        <div className="panel-title-row">
-          <span className="panel-title-icon" aria-hidden="true">
-            <TokenIcon type="castle" />
-          </span>
-          <h2 id="inventory-title">{ko.app.inventory.title}</h2>
+  const tokenSection = (
+    <div className="inventory-section resource-section sidebar-ledger-section sidebar-ledger-tokens">
+      <div className="inventory-counter-group">
+        <h3>{ko.app.inventory.tokens}</h3>
+        <div className="inventory-resource-grid">
+          {tokenCounters.map((counter) => (
+            <CounterRow
+              key={counter.id}
+              label={counter.label}
+              value={(draft as any)[counter.id]}
+              max={counter.max}
+              icon={counter.icon}
+              tone={counter.tone}
+              showMax={false}
+              disabled={busy}
+              onDecrease={() => adjustCounter(counter, -1)}
+              onIncrease={() => adjustCounter(counter, 1)}
+            />
+          ))}
         </div>
-        <span className={ledgerStatusClassName} aria-live="polite">{ledgerStatusText}</span>
       </div>
+    </div>
+  );
 
-      <div className="inventory-section resource-section">
-        <div className="inventory-counter-group">
-          <h3>{ko.app.inventory.tokens}</h3>
-          <div className="inventory-resource-grid">
-            {tokenCounters.map((counter) => (
-              <CounterRow
-                key={counter.id}
-                label={counter.label}
-                value={(draft as any)[counter.id]}
-                max={counter.max}
-                icon={counter.icon}
-                tone={counter.tone}
-                showMax={false}
+  const agendaSection = (
+    <div className={`inventory-section inventory-agenda-section sidebar-ledger-section sidebar-ledger-agenda${ownChoice ? " has-secret-agenda" : ""}`}>
+      <div className="agenda-section-header">
+        <h3 className="agenda-section-title">
+          <span className="agenda-section-title-lead">
+            <span className="agenda-section-title-main">
+              <span>{ko.app.inventory.agendaTitle}</span>
+            </span>
+            <span className="agenda-type-legend" aria-hidden="true">
+              <span>
+                <i className="agenda-type-dot common" />
+                {ko.app.inventory.agendaCommon}
+              </span>
+              {ownChoice ? (
+                <span>
+                  <i className="agenda-type-dot secret" />
+                  {ko.app.inventory.agendaSecret}
+                </span>
+              ) : null}
+            </span>
+          </span>
+        </h3>
+      </div>
+      <div className="agenda-progress-grid">
+        <div className="agenda-progress-group open-agenda-group" aria-label={ko.app.inventory.openAgendaAria}>
+          <div className="open-agenda-ledger">
+            {openAgendaTokenTypes.map((type) => (
+              <OpenAgendaTokenRow
+                key={type.id}
+                type={type}
+                selectedTokens={(progressDraft as any).openAgendaTokens[type.id] || []}
                 disabled={busy}
-                onDecrease={() => adjustCounter(counter, -1)}
-                onIncrease={() => adjustCounter(counter, 1)}
+                onToggle={(resourceId: any) => toggleOpenAgendaToken(type.id, resourceId)}
               />
             ))}
           </div>
         </div>
+        {ownChoice ? (
+          <div className="agenda-progress-group inventory-secret-agenda" aria-label={ko.app.inventory.secretAgendaAria}>
+            <OwnChoice agenda={ownChoice} />
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
+
+  const prioritySections = (
+    <div className="sidebar-ledger-stack" aria-label={ko.app.inventory.title}>
+      {tokenSection}
+      {agendaSection}
+    </div>
+  );
+
+  const mainPanel = (
+    <section className={`inventory-panel${house ? " has-house-profile" : ""}`} aria-labelledby="inventory-title">
+      <div className="inventory-toolbar">
+        <div className="inventory-toolbar-title">
+          <div className="panel-title-row">
+            <span className="panel-title-icon" aria-hidden="true">
+              <TokenIcon type="castle" />
+            </span>
+            <h2 id="inventory-title">{ko.app.inventory.title}</h2>
+          </div>
+          <span className={ledgerStatusClassName} aria-live="polite">{ledgerStatusText}</span>
+        </div>
+        <div className="inventory-toolbar-actions">
+          <span className="visually-hidden">{ledgerStatusDescription}</span>
+          <button className="ghost-button" type="button" onClick={applyGameStartDefaults} disabled={busy}>
+            <TokenIcon type="reset" />
+            {ko.app.inventory.defaultsButton}
+          </button>
+        </div>
+      </div>
+
+      <div className="inventory-section resource-section">
         <div className="inventory-counter-group">
           <h3>{ko.app.inventory.victoryPoints}</h3>
           <div className="inventory-resource-grid score-ledger-grid">
@@ -2829,12 +2210,9 @@ function PersonalInventoryPanel({
             <h3>{ko.app.inventory.detail}</h3>
           </div>
           <HouseProfileCard
-            busy={busy}
             house={house}
-            progress={serverProgress}
             showCrest={false}
             showSectionLabel={false}
-            onSaveAlignmentReward={onSaveAlignmentReward}
           />
         </div>
       ) : null}
@@ -2855,6 +2233,7 @@ function PersonalInventoryPanel({
               count={narrativeAchievementCount}
               detail={progressDraft.narrativeAchievementDetail}
               disabled={busy}
+              houses={houses || []}
               max={narrativeAchievementMax}
               onDecrease={() => adjustNarrativeAchievement(-1)}
               onEdit={(event: any) => openAchievementEditor(event, "narrative")}
@@ -2871,6 +2250,7 @@ function PersonalInventoryPanel({
                   challengeComplete={progressDraft.houseAchievementComplete[row.id] === true}
                   detail={progressDraft.houseAchievementDetails[row.id]}
                   disabled={busy}
+                  houses={houses || []}
                   onDecrease={() => adjustHouseAchievement(row.id, -1)}
                   onEdit={(event: any) => openAchievementEditor(event, "challenge", row.id)}
                   onIncrease={() => adjustHouseAchievement(row.id, 1)}
@@ -2880,62 +2260,6 @@ function PersonalInventoryPanel({
             </div>
           </div>
         </section>
-      </div>
-
-      <div className={`inventory-section inventory-agenda-section${ownChoice ? " has-secret-agenda" : ""}`}>
-        <h3 className="agenda-section-title">
-          <span className="agenda-section-title-lead">
-            <span className="agenda-section-title-main">
-              <span>{ko.app.inventory.agendaTitle}</span>
-            </span>
-            <span className="agenda-type-legend" aria-hidden="true">
-              <span>
-                <i className="agenda-type-dot common" />
-                {ko.app.inventory.agendaCommon}
-              </span>
-              {ownChoice ? (
-                <span>
-                  <i className="agenda-type-dot secret" />
-                  {ko.app.inventory.agendaSecret}
-                </span>
-              ) : null}
-            </span>
-          </span>
-          <span className="agenda-section-title-actions">
-            <AgendaScoreGuideButton
-              label={ko.app.inventory.openScoreBtn}
-              ariaLabel={ko.app.inventory.openScoreAria}
-              onClick={onOpenOpenAgendaGuide}
-            />
-            {ownChoice ? (
-              <AgendaScoreGuideButton
-                label={ko.app.inventory.secretScoreBtn}
-                ariaLabel={ko.app.inventory.secretScoreAria}
-                onClick={onOpenSecretAgendaGuide}
-              />
-            ) : null}
-          </span>
-        </h3>
-        <div className="agenda-progress-grid">
-          <div className="agenda-progress-group open-agenda-group" aria-label={ko.app.inventory.openAgendaAria}>
-            <div className="open-agenda-ledger">
-              {openAgendaTokenTypes.map((type) => (
-                <OpenAgendaTokenRow
-                  key={type.id}
-                  type={type}
-                  selectedTokens={(progressDraft as any).openAgendaTokens[type.id] || []}
-                  disabled={busy}
-                  onToggle={(resourceId: any) => toggleOpenAgendaToken(type.id, resourceId)}
-                />
-              ))}
-            </div>
-          </div>
-          {ownChoice ? (
-            <div className="agenda-progress-group inventory-secret-agenda" aria-label={ko.app.inventory.secretAgendaAria}>
-              <OwnChoice agenda={ownChoice} />
-            </div>
-          ) : null}
-        </div>
       </div>
 
       <div className="inventory-section progress-section">
@@ -2957,6 +2281,7 @@ function PersonalInventoryPanel({
                   disabled={busy}
                   onDecrease={() => adjustAlignmentAchievement(alignment?.agendaId, -1)}
                   onIncrease={() => adjustAlignmentAchievement(alignment?.agendaId, 1)}
+                  onSaveAlignmentReward={onSaveAlignmentReward}
                 />
               ))}
             </div>
@@ -2964,64 +2289,11 @@ function PersonalInventoryPanel({
         </div>
       </div>
 
-      <div className="inventory-actions">
-        <span>{ledgerStatusDescription}</span>
-        <div>
-          <button className="ghost-button" type="button" onClick={applyGameStartDefaults} disabled={busy}>
-            <TokenIcon type="reset" />
-            {ko.app.inventory.defaultsButton}
-          </button>
-        </div>
-      </div>
       <Suspense fallback={null}>
-        <DilemmaRoleDialog
-          busy={busy}
-          houses={houses || []}
-          leaderHouseId={dilemmaLeader}
-          moderatorHouseId={dilemmaModerator}
-          open={dilemmaRoleDialogOpen}
-          restoreFocusRef={dilemmaRoleButtonRef as any}
-          onClose={closeDilemmaRoleDialog}
-          onOpenVoteOrderDialog={onOpenVoteOrderDialog}
-          onSave={saveDilemmaRoles}
-        />
-        <DilemmaEditDialog
-          busy={busy}
-          draft={dilemmaDraft}
-          isNewDilemma={dilemmaIsBlank}
-          open={dilemmaDialogOpen}
-          restoreFocusRef={dilemmaEditButtonRef as any}
-          onCancel={cancelDilemmaEdit}
-          onAddPhotos={addDilemmaPhotos}
-          onFieldChange={updateDilemmaField}
-          onOutcomeChange={updateDilemmaOutcome}
-          onRemovePhoto={removeDilemmaPhoto}
-          onSave={saveDilemma}
-          photoBusy={dilemmaPhotoBusy}
-          photoError={dilemmaPhotoError}
-        />
-        <DilemmaResolutionDialog
-          busy={busy}
-          currentHouseId={houseId}
-          dilemmaModeratorId={dilemmaModerator}
-          draft={dilemmaResolutionDraft as any}
-          history={dilemmaHistory || []}
-          houses={houses || []}
-          mutate={mutate}
-          open={dilemmaResolutionOpen}
-          restoreFocusRef={dilemmaResolutionButtonRef as any}
-          onCancel={cancelDilemmaEdit}
-          onFieldChange={updateDilemmaResolutionField}
-          onSave={saveDilemma}
-          photoBusy={dilemmaPhotoBusy}
-          photoError={dilemmaPhotoError}
-          onAddResolutionPhotos={addResolutionPhotos}
-          onRemoveResolutionPhoto={removeResolutionPhoto}
-          onOpenEffectHelp={onOpenDilemmaEffectGuide}
-        />
         <AchievementEditDialog
           busy={busy}
           editor={achievementEditor}
+          houses={houses || []}
           legendButtonRef={achievementLegendButtonRef}
           legendOpen={achievementLegendOpen}
           open={Boolean(achievementEditor)}
@@ -3037,9 +2309,10 @@ function PersonalInventoryPanel({
           onClose={() => setAchievementLegendOpen(false)}
         />
       </Suspense>
-      </section>
-    </>
+    </section>
   );
+
+  return renderLayout ? renderLayout({ prioritySections, mainPanel }) : mainPanel;
 }
 
 function ScoreTrackRow({ label, value, max, icon, tone, disabled, onDecrease, onIncrease }: any) {
@@ -3168,18 +2441,24 @@ function OpenAgendaTokenRow({ type, selectedTokens, disabled, onToggle }: any) {
           const isDisabled = disabled || (!isSelected && selectedTokens.length >= openAgendaTokenLimit);
 
           return (
-            <button
+            <Tooltip
               key={resource.id}
-              className={`resource-token-chip tone-${resource.tone}${isSelected ? " selected" : ""}`}
-              type="button"
-              aria-pressed={isSelected}
-              aria-label={ko.app.inventory.openAgendaTokenChipAria(type.shortLabel, resource.label)}
-              onClick={() => onToggle(resource.id)}
-              disabled={isDisabled}
+              className="open-agenda-resource-tooltip"
+              label={resource.label}
+              ariaLabel={ko.app.inventory.openAgendaTokenChipAria(type.shortLabel, resource.label)}
             >
-              <TokenIcon type={resource.icon} />
-              <span className="resource-token-chip-label">{resource.label}</span>
-            </button>
+              <button
+                className={`resource-token-chip tone-${resource.tone}${isSelected ? " selected" : ""}`}
+                type="button"
+                aria-pressed={isSelected}
+                aria-label={ko.app.inventory.openAgendaTokenChipAria(type.shortLabel, resource.label)}
+                onClick={() => onToggle(resource.id)}
+                disabled={isDisabled}
+              >
+                <TokenIcon type={resource.icon} />
+                <span className="resource-token-chip-label">{resource.label}</span>
+              </button>
+            </Tooltip>
           );
         })}
       </div>
@@ -3192,6 +2471,7 @@ function NarrativeAchievementRow({
   count,
   detail,
   disabled,
+  houses = [],
   max,
   onDecrease,
   onEdit,
@@ -3210,6 +2490,7 @@ function NarrativeAchievementRow({
         challengeComplete={complete}
         detail={normalizedDetail}
         disabled={disabled}
+        houses={houses}
         onDecrease={onDecrease}
         onEdit={onEdit}
         onIncrease={onIncrease}
@@ -3234,37 +2515,39 @@ function NarrativeAchievementRow({
           <span className="achievement-item-title-line">
             <strong>{ko.app.inventory.narrativeChallenge}</strong>
           </span>
-          <AchievementDetailPreview detail={normalizedDetail} />
+          <AchievementDetailPreview detail={normalizedDetail} houses={houses} />
         </span>
       </button>
-      {complete ? (
-        <button
-          className="achievement-challenge-status complete"
-          type="button"
-          disabled={disabled}
-          onClick={onToggle}
-          aria-label={ko.app.inventory.achieveCancelAria}
-        >
-          <small>{ko.app.inventory.achieveSmall}</small>
-        </button>
-      ) : (
-        <Tooltip label={ko.app.inventory.achieveEditTooltip}>
+      <div className="achievement-card-action-rail">
+        {complete ? (
           <button
-            className="achievement-edit-button"
+            className="achievement-challenge-status complete"
             type="button"
-            onClick={onEdit}
             disabled={disabled}
-            aria-label={ko.app.inventory.achieveEditAria}
+            onClick={onToggle}
+            aria-label={ko.app.inventory.achieveCancelAria}
           >
-            <TokenIcon type="edit" />
+            <small>{ko.app.inventory.achieveSmall}</small>
           </button>
-        </Tooltip>
-      )}
+        ) : (
+          <Tooltip label={ko.app.inventory.achieveEditTooltip}>
+            <button
+              className="achievement-edit-button"
+              type="button"
+              onClick={onEdit}
+              disabled={disabled}
+              aria-label={ko.app.inventory.achieveEditAria}
+            >
+              <TokenIcon type="edit" />
+            </button>
+          </Tooltip>
+        )}
+      </div>
     </div>
   );
 }
 
-function AchievementDetailPreview({ detail }: { detail: any }) {
+function AchievementDetailPreview({ detail, houses = [] }: { detail: any; houses?: any[] }) {
   const hasCondition = Boolean(detail.conditionText);
   const effectEntries = normalizeAchievementEffectEntries(
     detail?.effectEntries,
@@ -3281,10 +2564,10 @@ function AchievementDetailPreview({ detail }: { detail: any }) {
 
   return (
     <span className="achievement-detail-preview">
-      {hasCondition ? <MentionTokenView className="achievement-detail-condition" text={detail.conditionText} /> : null}
+      {hasCondition ? <MentionTokenView className="achievement-detail-condition" houses={houses} text={detail.conditionText} /> : null}
       {hasEffect ? (
         <span className="achievement-detail-segment">
-          <AchievementEffectMemo detail={detail} />
+          <AchievementEffectMemo detail={detail} houses={houses} />
         </span>
       ) : null}
     </span>
@@ -3300,6 +2583,7 @@ function AchievementProgressRow({
   onEdit,
   onIncrease,
   detail,
+  houses = [],
   challengeComplete = false,
   onToggleChallengeComplete,
 }: any) {
@@ -3325,7 +2609,7 @@ function AchievementProgressRow({
           </span>
           <span className="achievement-item-copy">
             <strong className="achievement-challenge-title">{label}</strong>
-            <AchievementDetailPreview detail={normalizedDetail} />
+            <AchievementDetailPreview detail={normalizedDetail} houses={houses} />
           </span>
         </button>
       ) : (
@@ -3355,29 +2639,31 @@ function AchievementProgressRow({
           <TokenIcon type="plus" />
         </button>
       </div>
-      {challengeComplete && onToggleChallengeComplete ? (
-        <button
-          className="achievement-challenge-status complete"
-          type="button"
-          disabled={disabled}
-          onClick={onToggleChallengeComplete}
-          aria-label={ko.app.inventory.challengeCancelAria(label)}
-        >
-          <small>{ko.app.inventory.achieveSmall}</small>
-        </button>
-      ) : onEdit ? (
-        <Tooltip label={ko.app.inventory.challengeEditTooltip(label)}>
+      <div className="achievement-card-action-rail">
+        {challengeComplete && onToggleChallengeComplete ? (
           <button
-            className="achievement-edit-button"
+            className="achievement-challenge-status complete"
             type="button"
-            onClick={onEdit}
             disabled={disabled}
-            aria-label={ko.app.inventory.challengeEditAria(label)}
+            onClick={onToggleChallengeComplete}
+            aria-label={ko.app.inventory.challengeCancelAria(label)}
           >
-            <TokenIcon type="edit" />
+            <small>{ko.app.inventory.achieveSmall}</small>
           </button>
-        </Tooltip>
-      ) : null}
+        ) : onEdit ? (
+          <Tooltip label={ko.app.inventory.challengeEditTooltip(label)}>
+            <button
+              className="achievement-edit-button"
+              type="button"
+              onClick={onEdit}
+              disabled={disabled}
+              aria-label={ko.app.inventory.challengeEditAria(label)}
+            >
+              <TokenIcon type="edit" />
+            </button>
+          </Tooltip>
+        ) : null}
+      </div>
     </div>
   );
 }
@@ -3390,10 +2676,10 @@ function AlignmentProgressRow({
   disabled,
   onDecrease,
   onIncrease,
+  onSaveAlignmentReward,
 }: any) {
   const complete = value >= max;
   const normalizedReward = normalizeAlignmentReward(reward);
-  const showReward = complete && normalizedReward.crownType && normalizedReward.count > 0;
 
   return (
     <div className={`alignment-progress-row${complete ? " complete" : ""}`}>
@@ -3401,15 +2687,13 @@ function AlignmentProgressRow({
         <strong>{alignment.koreanLabel}</strong>
         <small>{alignment.label}</small>
       </span>
-      {showReward ? (
-        <AlignmentRewardCrowns
-          crownType={normalizedReward.crownType}
-          count={normalizedReward.count}
-          label={alignment.koreanLabel}
-        />
-      ) : (
-        <ProgressPips value={value} max={max} label={ko.app.inventory.alignmentAchievementAria(alignment.koreanLabel)} />
-      )}
+      <AlignmentRewardInlineEditor
+        alignment={alignment}
+        busy={disabled}
+        reward={normalizedReward}
+        onSaveAlignmentReward={onSaveAlignmentReward}
+      />
+      <ProgressPips value={value} max={max} label={ko.app.inventory.alignmentAchievementAria(alignment.koreanLabel)} />
       <div className="counter-controls">
         <button
           className="stepper-button compact"
@@ -3437,20 +2721,6 @@ function AlignmentProgressRow({
   );
 }
 
-function AlignmentRewardCrowns({ crownType, count, label }: any) {
-  const rewardLabel = alignmentRewardTypeLabels[crownType] || ko.app.inventory.rewardFallback;
-
-  return (
-    <span
-      className={`alignment-reward-crowns tone-${crownType}`}
-      aria-label={ko.app.inventory.rewardCrownsAria(label, rewardLabel, count)}
-    >
-      {Array.from({ length: count }, (_, index) => (
-        <TokenIcon type={crownType} key={index} />
-      ))}
-    </span>
-  );
-}
 function ProgressPips({ value, max, label }: any) {
   return (
     <span className="progress-pips" aria-label={`${label} ${value}/${max}`}>
@@ -3486,72 +2756,6 @@ function isFinalBoardDraftComplete(draft: any) {
 
 function createFinalBoardPayload(draft: any) {
   return Object.fromEntries(resourceCounters.map((resource) => [resource.id, Number(draft[resource.id])]));
-}
-
-async function createDilemmaPhotoAttachment(file: any) {
-  if (!dilemmaPhotoAllowedTypes.has(file?.type)) {
-    throw new Error(ko.dilemmaHelpers.photoErrors.imageOnly);
-  }
-
-  if (file.size > dilemmaPhotoMaxInputBytes) {
-    throw new Error(ko.dilemmaHelpers.photoErrors.maxSize);
-  }
-
-  const dataUrl = await resizeDilemmaPhoto(file);
-
-  if (dataUrl.length > dilemmaPhotoMaxDataUrlLength) {
-    throw new Error(ko.dilemmaHelpers.photoErrors.tooLarge);
-  }
-
-  const mimeType = dataUrl.startsWith("data:image/png") ? "image/png" : "image/jpeg";
-
-  return {
-    id: createClientId(),
-    name: file.name || ko.dilemmaEdit.photoAlt,
-    mimeType,
-    dataUrl,
-    size: file.size,
-    addedAt: new Date().toISOString(),
-    addedBy: null,
-    addedByName: "",
-  };
-}
-
-async function resizeDilemmaPhoto(file: any) {
-  const inputDataUrl = await readFileAsDataUrl(file);
-  const image = await loadImage(inputDataUrl);
-  const scale = Math.min(1, dilemmaPhotoMaxDimension / Math.max((image as any).naturalWidth, (image as any).naturalHeight));
-  const width = Math.max(1, Math.round((image as any).naturalWidth * scale));
-  const height = Math.max(1, Math.round((image as any).naturalHeight * scale));
-  const canvas = document.createElement("canvas");
-  canvas.width = width;
-  canvas.height = height;
-  const context = canvas.getContext("2d");
-
-  if (!context) {
-    throw new Error(ko.dilemmaHelpers.photoErrors.processFail);
-  }
-
-  context.drawImage(image as any, 0, 0, width, height);
-  return canvas.toDataURL("image/jpeg", dilemmaPhotoQuality);
-}
-
-function readFileAsDataUrl(file: any) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(typeof reader.result === "string" ? reader.result : "");
-    reader.onerror = () => reject(new Error(ko.dilemmaHelpers.photoErrors.readFail));
-    reader.readAsDataURL(file);
-  });
-}
-
-function loadImage(src: any) {
-  return new Promise((resolve, reject) => {
-    const image = new Image();
-    image.onload = () => resolve(image);
-    image.onerror = () => reject(new Error(ko.dilemmaHelpers.photoErrors.loadFail));
-    image.src = src;
-  });
 }
 
 function normalizeInventory(value: any) {
@@ -4146,14 +3350,17 @@ function OwnChoice({ agenda }: { agenda: any }) {
   }
 
   return (
-    <div className="own-choice">
-      <div>
-        <div className="own-choice-heading">
+    <div className="own-choice secret-agenda-card-frame">
+      <div className="secret-agenda-card-inner">
+        <div className="own-choice-heading secret-agenda-card-title-row">
           <h3>
             <AgendaTitle agenda={agenda} />
           </h3>
         </div>
-        <AgendaScoringBoard agenda={agenda} />
+        <div className="secret-agenda-card-body">
+          <AgendaSecretContent agenda={agenda} />
+          <AgendaScoringBoard agenda={agenda} />
+        </div>
       </div>
     </div>
   );
@@ -4192,12 +3399,31 @@ function ActionPanel({ state, busy, mutate }: { state: any; busy: boolean; mutat
 }
 
 function AgendaList({ agendas, busy, mode = "choose", mutate }: { agendas: any[]; busy: boolean; mode?: string; mutate: any }) {
-  const [expanded, setExpanded] = useState(false);
+  const [expandedAgendaIds, setExpandedAgendaIds] = useState<Set<string>>(() => new Set());
   const discardMode = mode === "discard";
+  const allExpanded = agendas.length > 0 && agendas.every((agenda: any) => expandedAgendaIds.has(agenda.id));
 
   if (!agendas.length) {
     return null;
   }
+
+  const toggleAgenda = (agendaId: string) => {
+    setExpandedAgendaIds((current) => {
+      const next = new Set(current);
+
+      if (next.has(agendaId)) {
+        next.delete(agendaId);
+      } else {
+        next.add(agendaId);
+      }
+
+      return next;
+    });
+  };
+
+  const toggleAllAgendas = () => {
+    setExpandedAgendaIds(allExpanded ? new Set() : new Set(agendas.map((agenda: any) => agenda.id)));
+  };
 
   return (
     <section className="agenda-section" aria-labelledby="agenda-title">
@@ -4214,9 +3440,10 @@ function AgendaList({ agendas, busy, mode = "choose", mutate }: { agendas: any[]
             key={agenda.id}
             agenda={agenda}
             busy={busy}
-            expanded={expanded}
+            expanded={expandedAgendaIds.has(agenda.id)}
             mode={mode}
             mutate={mutate}
+            onToggle={() => toggleAgenda(agenda.id)}
           />
         ))}
       </div>
@@ -4225,18 +3452,32 @@ function AgendaList({ agendas, busy, mode = "choose", mutate }: { agendas: any[]
           className="ghost-button agenda-expand-toggle"
           type="button"
           aria-controls="agenda-list"
-          aria-expanded={expanded}
-          onClick={() => setExpanded((current) => !current)}
+          aria-expanded={allExpanded}
+          onClick={toggleAllAgendas}
         >
-          <TokenIcon type={expanded ? "minus" : "plus"} />
-          {ko.app.agendaUi.expand(expanded)}
+          <TokenIcon type={allExpanded ? "minus" : "plus"} />
+          {ko.app.agendaUi.expand(allExpanded)}
         </button>
       </div>
     </section>
   );
 }
 
-function AgendaCard({ agenda, busy, expanded, mode = "choose", mutate }: { agenda: any; busy: boolean; expanded: boolean; mode?: string; mutate: any }) {
+function AgendaCard({
+  agenda,
+  busy,
+  expanded,
+  mode = "choose",
+  mutate,
+  onToggle,
+}: {
+  agenda: any;
+  busy: boolean;
+  expanded: boolean;
+  mode?: string;
+  mutate: any;
+  onToggle: () => void;
+}) {
   const detailId = `agenda-detail-${agenda.id}`;
   const discardMode = mode === "discard";
   const choose = () => {
@@ -4252,69 +3493,85 @@ function AgendaCard({ agenda, busy, expanded, mode = "choose", mutate }: { agend
   };
 
   return (
-    <article className={`agenda-card${expanded ? " expanded" : ""}`}>
-      <div className="agenda-card-top">
-        <span className="agenda-sigil" aria-hidden="true">
-          <TokenIcon type="scroll" />
-        </span>
-        <div className="agenda-card-title">
-          <div className="agenda-card-label-row">
-            <div className="agenda-card-label-actions">
-              <p className="section-label">{ko.app.agendaUi.secretAgendaSection}</p>
+    <article className={`agenda-card secret-agenda-card-frame${expanded ? " expanded" : ""}`}>
+      <div className="secret-agenda-card-inner">
+        <div className="agenda-card-top">
+          <span className="agenda-sigil" aria-hidden="true">
+            <TokenIcon type="crown" />
+          </span>
+          <div className="agenda-card-title">
+            <div className="agenda-card-label-row">
+              <div className="agenda-card-label-actions">
+                <p className="section-label">{ko.app.agendaUi.secretAgendaSection}</p>
+                <button
+                  className="ghost-button agenda-card-expand-button"
+                  type="button"
+                  aria-controls={detailId}
+                  aria-expanded={expanded}
+                  onClick={onToggle}
+                >
+                  <TokenIcon type={expanded ? "minus" : "plus"} />
+                  {ko.app.agendaUi.toggleContent(expanded)}
+                </button>
+              </div>
+              <button className="primary-button" type="button" onClick={choose} disabled={busy}>
+                <TokenIcon type={discardMode ? "flame" : "key"} />
+                {discardMode ? ko.app.agendaUi.actionDiscard : ko.app.agendaUi.actionPick}
+              </button>
             </div>
-            <button className="primary-button" type="button" onClick={choose} disabled={busy}>
-              <TokenIcon type={discardMode ? "flame" : "key"} />
-              {discardMode ? ko.app.agendaUi.actionDiscard : ko.app.agendaUi.actionPick}
-            </button>
+            <h3>
+              <AgendaTitle agenda={agenda} />
+            </h3>
           </div>
-          <h3>
-            <AgendaTitle agenda={agenda} />
-          </h3>
         </div>
-      </div>
-      <div className="agenda-card-detail" hidden={!expanded} id={detailId}>
-        <AgendaScoringBoard agenda={agenda} />
+        <div className="agenda-card-detail" hidden={!expanded} id={detailId}>
+          <div className="secret-agenda-card-body">
+            <AgendaSecretContent agenda={agenda} />
+            <AgendaScoringBoard agenda={agenda} />
+          </div>
+        </div>
       </div>
     </article>
   );
 }
 
-function AgendaScoreGuideButton({ label, ariaLabel, onClick }: { label: string; ariaLabel: string; onClick: any }) {
-  if (!onClick) {
-    return null;
-  }
-
+function AgendaSecretContent({ agenda }: { agenda: any }) {
   return (
-    <button
-      className="agenda-score-help-button"
-      type="button"
-      aria-label={ariaLabel}
-      onClick={onClick}
-    >
-      <TokenIcon type="help" />
-      {label}
-    </button>
+    <div className="agenda-secret-content">
+      <div className="agenda-secret-content-block">
+        <span>{ko.app.agendaUi.goalTitle}</span>
+        <p>{agenda.resourceGoal}</p>
+      </div>
+      {agenda.note ? (
+        <div className="agenda-secret-content-block">
+          <span>{ko.app.agendaUi.noteTitle}</span>
+          <p>{agenda.note}</p>
+        </div>
+      ) : null}
+    </div>
   );
 }
 
 function AgendaScoringBoard({ agenda }: { agenda: any }) {
   return (
     <div className="agenda-score-board" aria-label={ko.app.agendaUi.agendaScoreBoardAria(formatAgendaTitle(agenda))}>
+      <div className="agenda-score-tables">
+        <AgendaScoreTrack
+          title={ko.app.agendaUi.resourceZonesTitle}
+          items={agenda.resourceScoring.map((item: any) => ({
+            label: item.label,
+            vp: item.vp,
+          }))}
+        />
+        <AgendaScoreTrack
+          title={ko.app.agendaUi.wealthRankTitle}
+          items={agenda.coinRanking.map((item: any) => ({
+            label: ko.app.agendaUi.rankLabel(item.rank),
+            vp: item.vp,
+          }))}
+        />
+      </div>
       <AgendaResourceZoneStrip agenda={agenda} />
-      <AgendaScoreTrack
-        title={ko.app.agendaUi.resourceZonesTitle}
-        items={agenda.resourceScoring.map((item: any) => ({
-          label: item.label,
-          vp: item.vp,
-        }))}
-      />
-      <AgendaScoreTrack
-        title={ko.app.agendaUi.wealthRankTitle}
-        items={agenda.coinRanking.map((item: any) => ({
-          label: ko.app.agendaUi.rankLabel(item.rank),
-          vp: item.vp,
-        }))}
-      />
     </div>
   );
 }
@@ -4325,7 +3582,7 @@ function AgendaResourceZoneStrip({ agenda }: { agenda: any }) {
   const isActiveRow = (row: any) => zones.some((zone: any) => row >= zone.from && row <= zone.to);
 
   return (
-    <div className={`agenda-zone-strip${hasDistanceMode ? " distance" : ""}`}>
+    <div className={`agenda-zone-strip secret-agenda-progress-spine${hasDistanceMode ? " distance" : ""}`}>
       <div className="agenda-score-title">{hasDistanceMode ? ko.app.agendaUi.scoreTitleDistance : ko.app.agendaUi.scoreTitleBoard}</div>
       <div className="agenda-zone-cells" aria-label={ko.app.agendaUi.zoneAria}>
         {boardRows.map((row) => {
@@ -4351,9 +3608,12 @@ function AgendaScoreTrack({ title, items }: { title: string; items: any[] }) {
   const maxVp = items.length ? Math.max(...items.map((item: any) => item.vp)) : 0;
 
   return (
-    <div className="agenda-score-track">
-      <div className="agenda-score-title">{title}</div>
-      <div className="agenda-score-segments">
+    <div className="agenda-score-track agenda-score-table">
+      <div className="agenda-score-title agenda-score-table-title">
+        <span>{title}</span>
+        <TokenIcon type="crown" />
+      </div>
+      <div className="agenda-score-segments agenda-score-table-rows">
         {items.map((item: any) => {
           const intensity = maxVp > 0 ? item.vp / maxVp : 0;
           const isBest = item.vp === maxVp && maxVp > 0;
@@ -4374,7 +3634,7 @@ function AgendaScoreTrack({ title, items }: { title: string; items: any[] }) {
               aria-label={ko.app.agendaUi.rowScoreAria(item.label, item.vp)}
             >
               <span>{item.label}</span>
-              <strong>+{item.vp}</strong>
+              <strong>{item.vp > 0 ? `+${item.vp}` : item.vp}</strong>
             </div>
           );
         })}

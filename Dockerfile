@@ -13,7 +13,9 @@ COPY . .
 # Vite는 빌드 시점에 VITE_* 만 인라인합니다. 필요 시 예:
 # docker build --build-arg VITE_API_BASE=https://example.com -t kings-dilemma .
 ARG VITE_API_BASE=
+ARG VITE_APP_BASE_PATH=/kings-dilemma
 ENV VITE_API_BASE=${VITE_API_BASE}
+ENV VITE_APP_BASE_PATH=${VITE_APP_BASE_PATH}
 
 RUN npm run build
 

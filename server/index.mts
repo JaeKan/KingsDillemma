@@ -8,6 +8,7 @@ import {
   resolveAgendaStateRowKey,
   type AgendaStateStore,
 } from "../shared/agenda-api.mts";
+import { DEFAULT_APP_BASE_PATH, joinAppBasePath, normalizeAppBasePath } from "../shared/app-base-path.mts";
 import { normalizeState } from "../netlify/functions/_shared/agenda-state.mts";
 import type { GameState } from "../netlify/functions/_shared/agenda-state.mts";
 import { createMysqlAgendaPool } from "./mysql-agenda-store.mts";
@@ -20,6 +21,13 @@ const indexHtmlPath = path.join(distDir, "index.html");
 const port = parsePositiveInteger(process.env.PORT, 3000);
 const host = process.env.HOST || "0.0.0.0";
 const bodyLimitBytes = parsePositiveInteger(process.env.REQUEST_BODY_LIMIT_BYTES, 5 * 1024 * 1024);
+const appBasePath = normalizeAppBasePath(process.env.APP_BASE_PATH, DEFAULT_APP_BASE_PATH);
+const baseApiPath = joinAppBasePath(appBasePath, "/api");
+const agendaApiPath = joinAppBasePath(appBasePath, "/api/agenda");
+const agendaEventsPath = joinAppBasePath(appBasePath, "/api/agenda/events");
+const agendaApiRoutePaths = appBasePath ? [agendaApiPath, "/api/agenda"] : ["/api/agenda"];
+const agendaEventsRoutePaths = appBasePath ? [agendaEventsPath, "/api/agenda/events"] : ["/api/agenda/events"];
+const assetMountPaths = appBasePath ? [joinAppBasePath(appBasePath, "/assets"), "/assets"] : ["/assets"];
 
 const app = express();
 const mysqlPool = createMysqlAgendaPool();
@@ -40,7 +48,7 @@ const mysqlAgendaStoreFactory = (rowKey: string): AgendaStateStore => {
 app.disable("x-powered-by");
 app.set("trust proxy", true);
 
-app.get("/api/agenda/events", async (req: express.Request, res: express.Response) => {
+app.get(agendaEventsRoutePaths, async (req: express.Request, res: express.Response) => {
   try {
     const webRequest = await toWebRequest(req);
     const rowKey = resolveAgendaStateRowKey(webRequest.url);
@@ -53,14 +61,14 @@ app.get("/api/agenda/events", async (req: express.Request, res: express.Response
       return;
     }
 
-    agendaEvents.connect(req, res, rowKey);
+    agendaEvents.connect(req, res, rowKey, state);
   } catch (error) {
     console.error(error);
     res.status(500).json({ ok: false, error: "Unexpected server error." });
   }
 });
 
-app.all("/api/agenda", async (req: express.Request, res: express.Response) => {
+app.all(agendaApiRoutePaths, async (req: express.Request, res: express.Response) => {
   try {
     const webRequest = await toWebRequest(req);
     const response = await handleAgendaRequest(
@@ -84,17 +92,51 @@ app.all("/api/agenda", async (req: express.Request, res: express.Response) => {
   }
 });
 
-app.use(
-  "/assets",
-  express.static(assetsDir, {
-    immutable: true,
-    maxAge: "1y",
-  }),
-);
+if (appBasePath) {
+  app.get("/", (_req: express.Request, res: express.Response) => {
+    res.redirect(302, `${appBasePath}/`);
+  });
+
+  app.get(appBasePath, (req: express.Request, res: express.Response, next: express.NextFunction) => {
+    if (req.path !== appBasePath) {
+      next();
+      return;
+    }
+
+    res.redirect(301, `${appBasePath}/`);
+  });
+}
+
+for (const mountPath of assetMountPaths) {
+  app.use(
+    mountPath,
+    express.static(assetsDir, {
+      immutable: true,
+      maxAge: "1y",
+      redirect: false,
+    }),
+  );
+}
+
+if (appBasePath) {
+  app.use(
+    appBasePath,
+    express.static(distDir, {
+      index: false,
+      redirect: false,
+      setHeaders(res: express.Response, filePath: string) {
+        if (filePath.endsWith(".html")) {
+          res.setHeader("Cache-Control", "public, max-age=0, must-revalidate");
+        }
+      },
+    }),
+  );
+}
 
 app.use(
   express.static(distDir, {
     index: false,
+    redirect: false,
     setHeaders(res: express.Response, filePath: string) {
       if (filePath.endsWith(".html")) {
         res.setHeader("Cache-Control", "public, max-age=0, must-revalidate");
@@ -104,7 +146,7 @@ app.use(
 );
 
 app.use((req: express.Request, res: express.Response, next: express.NextFunction) => {
-  if (req.path.startsWith("/api/")) {
+  if (isApiRequestPath(req.path)) {
     res.status(404).json({ ok: false, error: "Not found." });
     return;
   }
@@ -131,7 +173,10 @@ app.use((error: unknown, _req: express.Request, res: express.Response, _next: ex
 });
 
 const server = app.listen(port, host, () => {
-  console.log(`Kings Dilemma server listening on http://${host}:${port}`);
+  console.log(
+    `Kings Dilemma server listening on http://${host}:${port}${appBasePath || "/"} ` +
+      `(base path: ${appBasePath || "/"})`,
+  );
 });
 
 for (const signal of ["SIGINT", "SIGTERM"] as const) {
@@ -169,7 +214,7 @@ function createAgendaEventHub() {
   };
 
   return {
-    connect(req: express.Request, res: express.Response, rowKey: string) {
+    connect(req: express.Request, res: express.Response, rowKey: string, state: GameState) {
       res.status(200);
       res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
       res.setHeader("Cache-Control", "no-store, no-transform");
@@ -187,7 +232,7 @@ function createAgendaEventHub() {
       };
       nextClientId += 1;
       clients.add(client);
-      sendEvent(client, "connected", { ok: true });
+      sendEvent(client, "connected", { ok: true, version: state.version, updatedAt: state.updatedAt });
 
       req.on("close", () => {
         removeClient(client);
@@ -252,6 +297,15 @@ function getRequestProtocol(req: express.Request) {
   }
 
   return req.protocol || "http";
+}
+
+function isApiRequestPath(pathname: string) {
+  return (
+    pathname === "/api" ||
+    pathname.startsWith("/api/") ||
+    pathname === baseApiPath ||
+    pathname.startsWith(`${baseApiPath}/`)
+  );
 }
 
 function readBody(req: express.Request) {

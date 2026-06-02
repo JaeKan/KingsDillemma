@@ -1,46 +1,23 @@
 import {
   AgendaStateError,
   PLAYER_COUNT,
-  addChronicleSticker,
-  ageChroniclesForNextGame,
   applyChoose,
   applyDiscard,
-  applyDilemmaVoteSettlement,
-  applyCampaignBackfill,
-  applyDilemmaVotes,
-  applyNextGameSetupAutomation,
-  applyOpenAgendaAssignments,
   applySessionEndRewards,
-  beginDilemmaEdit,
   calculateFinalScores,
-  cancelDilemmaEdit,
   clearSession,
   createInitialState,
-  deleteChronicleSticker,
-  deleteCampaignCard,
-  deleteCampaignEnvelope,
-  deleteDilemmaHistoryEntry,
-  deleteMysterySticker,
+  deleteBoardProcessingItem,
   endSession,
   getActiveSessionHouseIds,
   normalizeState,
   parseHouseId,
-  publishDilemmaRecord,
   redactState,
   registerSession,
-  resetDilemmaRecord,
-  resolveModeratorDecision,
   saveAlignmentOrder,
-  saveDilemmaRecord,
-  saveDilemmaRoles,
-  saveDilemmaVote,
-  saveDilemmaVoteOrder,
+  saveBoardProcessingItem,
   saveAlignmentReward,
-  saveCampaignCard,
-  saveCampaignEnvelope,
   saveHouseProgress,
-  saveMysterySticker,
-  saveNextGameSetupChecklist,
   savePlayerInventory,
   setAdminMode,
   setRandomDiscardEnabled,
@@ -50,7 +27,6 @@ import {
   startDraftIfReady,
   touchSession,
   isAdminHouse,
-  updateChronicleSticker,
   type GameState,
   type HouseId,
   type SeatCredential,
@@ -248,95 +224,14 @@ export async function handleAgendaRequest(
       return json({ ok: true, state: redactState(nextState, houseId) }, 200, NO_STORE_HEADERS);
     }
 
-    if (action === "beginDilemmaEdit") {
-      const dilemmaEditToken = crypto.randomUUID();
-      const nextState = beginDilemmaEdit(state, houseId, dilemmaEditToken);
-      await saveState(store, nextState);
-      return json(
-        { ok: true, dilemmaEditToken, state: redactState(nextState, houseId) },
-        200,
-        NO_STORE_HEADERS,
-      );
-    }
-
-    if (action === "cancelDilemmaEdit") {
-      const nextState = cancelDilemmaEdit(state, houseId, body.dilemmaEditToken);
+    if (action === "saveBoardProcessingItem") {
+      const nextState = saveBoardProcessingItem(state, houseId, body.item, crypto.randomUUID(), new Date().toISOString());
       await saveState(store, nextState);
       return json({ ok: true, state: redactState(nextState, houseId) }, 200, NO_STORE_HEADERS);
     }
 
-    if (action === "saveDilemma") {
-      const dilemmaHistoryId =
-        typeof state.dilemma.historyId === "string" && state.dilemma.historyId
-          ? state.dilemma.historyId
-          : crypto.randomUUID();
-      const nextState = saveDilemmaRecord(
-        state,
-        houseId,
-        body.dilemmaEditToken,
-        body.dilemma,
-        dilemmaHistoryId,
-        new Date().toISOString(),
-        { fromResolution: body.fromResolution === true },
-      );
-      await saveState(store, nextState);
-      return json({ ok: true, state: redactState(nextState, houseId) }, 200, NO_STORE_HEADERS);
-    }
-
-    if (action === "publishDilemma") {
-      const dilemmaHistoryId =
-        typeof state.dilemma.historyId === "string" && state.dilemma.historyId
-          ? state.dilemma.historyId
-          : crypto.randomUUID();
-      const nextState = publishDilemmaRecord(state, houseId, dilemmaHistoryId);
-      await saveState(store, nextState);
-      return json({ ok: true, state: redactState(nextState, houseId) }, 200, NO_STORE_HEADERS);
-    }
-
-    if (action === "resetDilemma") {
-      const nextState = resetDilemmaRecord(state, houseId);
-      await saveState(store, nextState);
-      return json({ ok: true, state: redactState(nextState, houseId) }, 200, NO_STORE_HEADERS);
-    }
-
-    if (action === "deleteDilemmaHistory") {
-      const nextState = deleteDilemmaHistoryEntry(state, houseId, body.historyId);
-      await saveState(store, nextState);
-      return json({ ok: true, state: redactState(nextState, houseId) }, 200, NO_STORE_HEADERS);
-    }
-
-    if (action === "saveDilemmaVoteOrder") {
-      const nextState = saveDilemmaVoteOrder(state, houseId, body.voteOrder);
-      await saveState(store, nextState);
-      return json({ ok: true, state: redactState(nextState, houseId) }, 200, NO_STORE_HEADERS);
-    }
-
-    if (action === "saveDilemmaRoles") {
-      const nextState = saveDilemmaRoles(state, houseId, body.roles);
-      await saveState(store, nextState);
-      return json({ ok: true, state: redactState(nextState, houseId) }, 200, NO_STORE_HEADERS);
-    }
-
-    if (action === "saveDilemmaVote") {
-      const nextState = saveDilemmaVote(state, houseId, body.vote);
-      await saveState(store, nextState);
-      return json({ ok: true, state: redactState(nextState, houseId) }, 200, NO_STORE_HEADERS);
-    }
-
-    if (action === "applyDilemmaVotes") {
-      const nextState = applyDilemmaVotes(state, houseId);
-      await saveState(store, nextState);
-      return json({ ok: true, state: redactState(nextState, houseId) }, 200, NO_STORE_HEADERS);
-    }
-
-    if (action === "resolveModeratorDecision") {
-      const nextState = resolveModeratorDecision(state, houseId, body.decision);
-      await saveState(store, nextState);
-      return json({ ok: true, state: redactState(nextState, houseId) }, 200, NO_STORE_HEADERS);
-    }
-
-    if (action === "applyDilemmaVoteSettlement") {
-      const nextState = applyDilemmaVoteSettlement(state, houseId);
+    if (action === "deleteBoardProcessingItem") {
+      const nextState = deleteBoardProcessingItem(state, houseId, body.itemId);
       await saveState(store, nextState);
       return json({ ok: true, state: redactState(nextState, houseId) }, 200, NO_STORE_HEADERS);
     }
@@ -359,90 +254,6 @@ export async function handleAgendaRequest(
 
     if (action === "applySessionEndRewards") {
       const nextState = applySessionEndRewards(state, houseId, body.board, body.cause);
-      await saveState(store, nextState);
-      return json({ ok: true, state: redactState(nextState, houseId) }, 200, NO_STORE_HEADERS);
-    }
-
-    if (action === "applyOpenAgendaAssignments") {
-      const nextState = applyOpenAgendaAssignments(state, houseId, body.assignments);
-      await saveState(store, nextState);
-      return json({ ok: true, state: redactState(nextState, houseId) }, 200, NO_STORE_HEADERS);
-    }
-
-    if (action === "saveNextGameSetupChecklist") {
-      const nextState = saveNextGameSetupChecklist(state, houseId, body.checklist);
-      await saveState(store, nextState);
-      return json({ ok: true, state: redactState(nextState, houseId) }, 200, NO_STORE_HEADERS);
-    }
-
-    if (action === "applyNextGameSetupAutomation") {
-      const nextState = applyNextGameSetupAutomation(state, houseId, body.force);
-      await saveState(store, nextState);
-      return json({ ok: true, state: redactState(nextState, houseId) }, 200, NO_STORE_HEADERS);
-    }
-
-    if (action === "addChronicleSticker") {
-      const nextState = addChronicleSticker(state, houseId, body.input);
-      await saveState(store, nextState);
-      return json({ ok: true, state: redactState(nextState, houseId) }, 200, NO_STORE_HEADERS);
-    }
-
-    if (action === "updateChronicleSticker") {
-      const nextState = updateChronicleSticker(state, houseId, body.stickerId, body.patch);
-      await saveState(store, nextState);
-      return json({ ok: true, state: redactState(nextState, houseId) }, 200, NO_STORE_HEADERS);
-    }
-
-    if (action === "deleteChronicleSticker") {
-      const nextState = deleteChronicleSticker(state, houseId, body.stickerId);
-      await saveState(store, nextState);
-      return json({ ok: true, state: redactState(nextState, houseId) }, 200, NO_STORE_HEADERS);
-    }
-
-    if (action === "saveCampaignEnvelope") {
-      const nextState = saveCampaignEnvelope(state, houseId, body.envelope);
-      await saveState(store, nextState);
-      return json({ ok: true, state: redactState(nextState, houseId) }, 200, NO_STORE_HEADERS);
-    }
-
-    if (action === "deleteCampaignEnvelope") {
-      const nextState = deleteCampaignEnvelope(state, houseId, body.code);
-      await saveState(store, nextState);
-      return json({ ok: true, state: redactState(nextState, houseId) }, 200, NO_STORE_HEADERS);
-    }
-
-    if (action === "saveCampaignCard") {
-      const nextState = saveCampaignCard(state, houseId, body.cardKind, body.card);
-      await saveState(store, nextState);
-      return json({ ok: true, state: redactState(nextState, houseId) }, 200, NO_STORE_HEADERS);
-    }
-
-    if (action === "deleteCampaignCard") {
-      const nextState = deleteCampaignCard(state, houseId, body.cardKind, body.code);
-      await saveState(store, nextState);
-      return json({ ok: true, state: redactState(nextState, houseId) }, 200, NO_STORE_HEADERS);
-    }
-
-    if (action === "saveMysterySticker") {
-      const nextState = saveMysterySticker(state, houseId, body.sticker);
-      await saveState(store, nextState);
-      return json({ ok: true, state: redactState(nextState, houseId) }, 200, NO_STORE_HEADERS);
-    }
-
-    if (action === "deleteMysterySticker") {
-      const nextState = deleteMysterySticker(state, houseId, body.slotKey);
-      await saveState(store, nextState);
-      return json({ ok: true, state: redactState(nextState, houseId) }, 200, NO_STORE_HEADERS);
-    }
-
-    if (action === "applyCampaignBackfill") {
-      const nextState = applyCampaignBackfill(state, houseId, body.backfill);
-      await saveState(store, nextState);
-      return json({ ok: true, state: redactState(nextState, houseId) }, 200, NO_STORE_HEADERS);
-    }
-
-    if (action === "ageChroniclesForNextGame") {
-      const nextState = ageChroniclesForNextGame(state, houseId);
       await saveState(store, nextState);
       return json({ ok: true, state: redactState(nextState, houseId) }, 200, NO_STORE_HEADERS);
     }
@@ -480,36 +291,12 @@ function isKnownStateAction(action: string) {
     action === "saveHouseProgress" ||
     action === "saveAlignmentReward" ||
     action === "saveAlignmentOrder" ||
-    action === "beginDilemmaEdit" ||
-    action === "cancelDilemmaEdit" ||
-    action === "saveDilemma" ||
-    action === "publishDilemma" ||
-    action === "resetDilemma" ||
-    action === "deleteDilemmaHistory" ||
-    action === "saveDilemmaVoteOrder" ||
-    action === "saveDilemmaRoles" ||
-    action === "saveDilemmaVote" ||
+    action === "saveBoardProcessingItem" ||
+    action === "deleteBoardProcessingItem" ||
     action === "startDraftPhase" ||
-    action === "applyDilemmaVotes" ||
-    action === "resolveModeratorDecision" ||
-    action === "applyDilemmaVoteSettlement" ||
     action === "setRandomDiscardEnabled" ||
     action === "calculateFinalScores" ||
     action === "applySessionEndRewards" ||
-    action === "applyOpenAgendaAssignments" ||
-    action === "saveNextGameSetupChecklist" ||
-    action === "applyNextGameSetupAutomation" ||
-    action === "addChronicleSticker" ||
-    action === "updateChronicleSticker" ||
-    action === "deleteChronicleSticker" ||
-    action === "saveCampaignEnvelope" ||
-    action === "deleteCampaignEnvelope" ||
-    action === "saveCampaignCard" ||
-    action === "deleteCampaignCard" ||
-    action === "saveMysterySticker" ||
-    action === "deleteMysterySticker" ||
-    action === "applyCampaignBackfill" ||
-    action === "ageChroniclesForNextGame" ||
     action === "endSession"
   );
 }

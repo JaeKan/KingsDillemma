@@ -8,7 +8,7 @@ interface AchievementEffectEntry {
   text: string;
 }
 
-function AchievementEffectMemo({ detail }: { detail: any }) {
+function AchievementEffectMemo({ detail, houses = [] }: { detail: any; houses?: any[] }) {
   const entries = normalizeAchievementEffectEntries(
     detail?.effectEntries,
     detail?.effects,
@@ -24,13 +24,13 @@ function AchievementEffectMemo({ detail }: { detail: any }) {
   return (
     <span className="achievement-effect-memo">
       {entries.map((entry, index) => (
-        <AchievementEffectEntrySummary entry={entry} key={`${entry.icon}-${entry.text}-${index}`} />
+        <AchievementEffectEntrySummary entry={entry} houses={houses} key={`${entry.icon}-${entry.text}-${index}`} />
       ))}
     </span>
   );
 }
 
-function AchievementEffectEntrySummary({ entry }: { entry: AchievementEffectEntry }) {
+function AchievementEffectEntrySummary({ entry, houses = [] }: { entry: AchievementEffectEntry; houses?: any[] }) {
   const option = getAchievementEffectOption(entry?.icon);
   const hasText = Boolean(entry?.text);
 
@@ -39,7 +39,7 @@ function AchievementEffectEntrySummary({ entry }: { entry: AchievementEffectEntr
       {entry?.icon ? <AchievementEffectBadge effect={entry} /> : null}
       <span className="achievement-effect-entry-label">{option.label} :</span>
       {hasText ? (
-        <MentionTokenView text={entry.text} />
+        <MentionTokenView houses={houses} text={entry.text} />
       ) : (
         <span className="achievement-effect-entry-empty">{ko.achievementUi.emptyEntry}</span>
       )}

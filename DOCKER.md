@@ -7,7 +7,7 @@
 
 ## 앱이 API 서버를 필요로 하는 이유
 
-클라이언트는 같은 출처의 **`/api/agenda`**(및 SSE **`/api/agenda/events`**)를 호출합니다.  
+클라이언트는 같은 출처의 API를 호출합니다. 기본 하위 경로 배포에서는 **`/kings-dilemma/api/agenda`**(및 SSE **`/kings-dilemma/api/agenda/events`**)이며, 루트 배포로 바꾸면 기존 **`/api/agenda`** 계약을 씁니다.
 **정적 파일(nginx `static` 프로필)만** 띄우면 UI는 보이지만 **의제 저장·세션·실시간 갱신은 동작하지 않습니다.**  
 전체 스택은 Express(`Dockerfile.server` / `npm run dev`)가 이 API를 제공합니다.
 
@@ -23,6 +23,7 @@
 - **교차 사용 금지**: 운영 앱(`web`)은 **`MYSQL_*`** 만 사용합니다. **`mysql-dev`** 는 compose에서 **`MYSQL_DEV_DATABASE`**, **`MYSQL_DEV_USER`**, **`MYSQL_DEV_PASSWORD`**, **`MYSQL_DEV_ROOT_PASSWORD`** 로만 설정해, 루트 `.env`의 운영 `MYSQL_*` 와 섞이지 않게 합니다.
 - **로컬 `npm run dev` / `dev:db:reset`**: 루트 **`.env`** 하나를 씁니다. Compose용 `MYSQL_*` / `MYSQL_DEV_*` 와 함께, 호스트에서 개발 DB 컨테이너로 붙으려면 **`MYSQL_USE_DEV_DB=1`**(개발 PC에서만)·`APP_ENV=development`·`NODE_ENV=development` 를 두면 `MYSQL_DATABASE`(운영)와 겹치지 않습니다. 자세한 키는 [`.env.example`](.env.example).
 - **프로덕션(Docker)**: 호스트 루트 **`.env`**에서 `MYSQL_DATABASE`, `MYSQL_USER`, `MYSQL_PASSWORD`, `MYSQL_ROOT_PASSWORD` 는 **운영 `mysql` 전용**, **`MYSQL_DEV_*`** 는 **개발 컨테이너 전용**으로 추가합니다. **`web` 컨테이너**에는 런타임으로만 주입되며, 이미지 빌드 시 레포의 dotenv 파일을 읽지 않습니다([`.dockerignore`](.dockerignore)가 `.env*` 제외, 서버 코드에 dotenv 없음). 운영 서버 `.env`에는 **`MYSQL_USE_DEV_DB` 를 넣지 마세요.**
+- **하위 경로 배포**: 기본 앱 경로는 **`/kings-dilemma`** 입니다. `https://도메인/kings-dilemma/` 로 접속하도록 Vite 빌드 base와 Express 런타임 `APP_BASE_PATH`가 맞춰집니다. 다른 경로로 배포하려면 빌드·런타임 모두 같은 `APP_BASE_PATH` 값을 쓰세요.
 
 ## 1) 권장: 전체 스택(API + MySQL)
 
@@ -123,6 +124,7 @@ docker compose --profile https up --build -d
 ```
 
 `web`·`mysql`·`caddy`가 함께 기동됩니다. `docker/Caddyfile`은 `web:3000`으로 리버스 프록시합니다.
+기본 라우팅은 `/`를 `/kings-dilemma/`로 보내고, `/kings-dilemma*` 요청만 앱 서버로 전달합니다.
 
 ## Vite `VITE_*` 빌드 인자
 
@@ -132,7 +134,7 @@ docker compose --profile https up --build -d
 docker build -t kings-dilemma --build-arg VITE_API_BASE=https://example.com .
 ```
 
-`Dockerfile` / `Dockerfile.server`의 `ARG VITE_API_BASE`에 맞춰 변수명을 추가·바꿀 수 있습니다.
+`Dockerfile` / `Dockerfile.server`는 `VITE_APP_BASE_PATH`도 받습니다. 기본값은 `/kings-dilemma`이며, Express 런타임 `APP_BASE_PATH`와 같은 값이어야 합니다.
 
 ## 관련 파일
 

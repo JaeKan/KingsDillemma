@@ -5,11 +5,13 @@ ARG NODE_VERSION=lts-alpine
 FROM node:${NODE_VERSION} AS builder
 WORKDIR /app
 COPY package*.json ./
-RUN npm ci
+RUN npm ci --include=dev
 COPY . .
 
 ARG VITE_API_BASE=
+ARG VITE_APP_BASE_PATH=/kings-dilemma
 ENV VITE_API_BASE=${VITE_API_BASE}
+ENV VITE_APP_BASE_PATH=${VITE_APP_BASE_PATH}
 
 RUN npm run build
 
@@ -20,7 +22,7 @@ WORKDIR /app
 ENV NODE_ENV=production
 
 COPY package*.json ./
-RUN npm ci --omit=dev && npm install tsx@4.21.0
+RUN npm ci --include=dev
 
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/server ./server
@@ -30,6 +32,7 @@ COPY --from=builder /app/netlify ./netlify
 
 ENV PORT=3000
 ENV HOST=0.0.0.0
+ENV APP_BASE_PATH=/kings-dilemma
 
 EXPOSE 3000
-CMD ["npx", "tsx", "server/index.mts"]
+CMD ["npm", "run", "start"]

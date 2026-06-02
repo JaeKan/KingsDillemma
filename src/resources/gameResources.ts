@@ -13,6 +13,7 @@ export const phaseCopy = {
 };
 
 /** 가문 목록·인원수는 `shared/houses.mjs`가 원본입니다. 앱에서는 여기서만 가져가세요. */
+import { HOUSE_CATALOG } from "../../shared/houses.mjs";
 export { HOUSE_BY_ID, HOUSE_CATALOG, REQUIRED_HOUSE_COUNT } from "../../shared/houses.mjs";
 
 export const defaultNamePattern = /^player\s*[1-5]$/i;
@@ -157,6 +158,17 @@ export const valueMentionItems = [
   ...scoreTrackCounters.map((counter) => ({ ...counter, category: "가문 값" })),
   ...resourceCounters.map((counter) => ({ ...counter, category: "왕국 자원", requiresAmount: false })),
 ];
+
+export const houseMentionItems = HOUSE_CATALOG.map((house: any) => ({
+  id: house.id,
+  label: house.koreanTitle || house.title,
+  tone: "house",
+  motif: house.motif,
+  category: "가문",
+  searchText: [house.koreanTitle, house.title, house.motto, String(house.number), house.id]
+    .filter((value): value is string => typeof value === "string")
+    .join(" "),
+}));
 
 export const openAgendaTokenTypes = [
   { id: "positive", label: "긍정 공개 의제", shortLabel: "긍정", tone: "positive" },

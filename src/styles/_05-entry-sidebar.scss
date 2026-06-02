@@ -2,16 +2,15 @@
   display: grid;
   grid-template-columns: minmax(220px, 0.44fr) minmax(780px, 1.56fr);
   gap: 10px;
-  align-items: stretch;
+  align-items: start;
 }
 
 .entry-brief,
 .seat-ledger,
 .council-sidebar,
 .house-profile-card,
-.dilemma-stage,
+.game-stage,
 .inventory-panel,
-.dilemma-ledger-card,
 .agenda-section,
 .action-card,
 .own-choice {
@@ -21,6 +20,7 @@
 }
 
 .council-sidebar-column {
+  --council-panel-title-size: 1.02rem;
   position: sticky;
   top: 0;
   display: flex;
@@ -29,11 +29,20 @@
   max-height: calc(100vh - 8px);
   max-height: calc(100dvh - 8px);
   min-height: 0;
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 
 .council-sidebar-column > .carrot-wait-action {
   flex-shrink: 0;
+}
+
+.council-sidebar-column > .board-processing-panel {
+  flex-shrink: 0;
+}
+
+.council-sidebar-column > .board-processing-panel .board-processing-history-grid {
+  grid-template-columns: 1fr;
 }
 
 .entry-brief {
@@ -120,6 +129,7 @@
 
 .seat-ledger {
   display: grid;
+  align-content: start;
   gap: 10px;
   background:
     linear-gradient(180deg, rgba(234, 223, 189, 0.98), rgba(216, 202, 163, 0.96)),
@@ -137,8 +147,7 @@
 }
 
 .ledger-heading,
-.inventory-header,
-.inventory-actions,
+.inventory-toolbar,
 .agenda-section-heading,
 .action-card,
 .own-choice {
@@ -184,6 +193,7 @@
 .seat-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
+  align-items: start;
   gap: 7px;
 }
 
@@ -412,16 +422,15 @@ label {
 }
 
 .council-sidebar {
-  flex: 0 1 auto;
+  box-sizing: border-box;
+  flex: 0 0 auto;
   display: grid;
   gap: 10px;
   align-content: start;
-  width: fit-content;
+  width: 100%;
   max-width: 100%;
-  max-height: 100%;
   min-height: 0;
-  overflow-x: hidden;
-  overflow-y: auto;
+  overflow: visible;
   background: rgba(17, 25, 24, 0.94);
   padding: 12px;
 }
@@ -482,7 +491,7 @@ label {
 }
 
 .sidebar-heading h2,
-.inventory-header h2 {
+.inventory-toolbar h2 {
   line-height: 1;
 }
 
@@ -500,7 +509,7 @@ label {
   display: none;
 }
 
-.council-sidebar .dilemma-stage {
+.council-sidebar .game-stage {
   gap: 6px;
   box-shadow: none;
   padding: 10px;
@@ -508,11 +517,11 @@ label {
 
 .council-sidebar .stage-copy h2 {
   margin-bottom: 5px;
-  font-size: 1.08rem;
+  font-size: 0.96rem;
 }
 
 .council-sidebar .message {
-  font-size: 0.78rem;
+  font-size: 0.72rem;
   line-height: 1.35;
 }
 
@@ -530,6 +539,10 @@ label {
   border-bottom: 1px solid rgba(234, 223, 189, 0.12);
 }
 
+.status-stack--complete .status-item:last-child {
+  border-bottom: 0;
+}
+
 .status-icon {
   display: grid;
   place-items: center;
@@ -543,7 +556,7 @@ label {
 
 .status-item span:not(.status-icon) {
   color: var(--muted);
-  font-size: 0.78rem;
+  font-size: 0.72rem;
   font-weight: 750;
   white-space: nowrap;
   word-break: keep-all;
@@ -552,7 +565,7 @@ label {
 .status-item strong {
   min-width: 0;
   color: var(--ink-strong);
-  font-size: 0.82rem;
+  font-size: 0.76rem;
   line-height: 1.25;
   overflow-wrap: anywhere;
   text-align: right;
@@ -567,11 +580,11 @@ label {
 }
 
 .status-item strong .status-value-detail {
-  font-size: 0.74rem;
+  font-size: 0.68rem;
 }
 
 .council-sidebar .status-stack .leader-token-emoji {
-  font-size: 18px;
+  font-size: 16px;
   line-height: 1;
 }
 
@@ -604,107 +617,6 @@ label {
 .turn-node.done {
   background: rgba(63, 123, 101, 0.18);
   color: #bfe3cf;
-}
-
-.vote-order-track {
-  display: grid;
-  gap: 8px;
-}
-
-.vote-order-track-ring {
-  display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 5px;
-  overflow: visible;
-}
-
-.vote-order-track-node {
-  display: grid;
-  place-items: center;
-  justify-self: center;
-  min-width: 0;
-  width: 40px;
-  height: 40px;
-  border: 1px solid rgba(234, 223, 189, 0.2);
-  border-radius: 50%;
-  background: rgba(234, 223, 189, 0.06);
-  color: var(--muted);
-  box-shadow: inset 0 0 0 1px rgba(216, 178, 90, 0.12);
-}
-
-.vote-order-track-node.leader {
-  border-color: rgba(241, 214, 134, 0.7);
-  background: rgba(216, 178, 90, 0.16);
-}
-
-.vote-order-track-node.moderator {
-  box-shadow: inset 0 0 0 2px rgba(122, 164, 187, 0.25);
-}
-
-.vote-order-track-node.current {
-  border-color: rgba(108, 201, 151, 0.7);
-  background: rgba(63, 123, 101, 0.2);
-}
-
-.vote-order-track-legend {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px 10px;
-  color: var(--muted);
-  font-size: 0.65rem;
-  font-weight: 850;
-}
-
-.vote-order-track-legend span {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.vote-order-track-legend span.leader {
-  color: var(--gold-2);
-}
-
-.vote-order-track-legend span.leader .leader-token-emoji {
-  font-size: 12px;
-  line-height: 1;
-}
-
-.vote-order-track-legend span.leader .MuiSvgIcon-root {
-  color: inherit;
-}
-
-.vote-order-track-legend span.moderator {
-  color: #7aa4bb;
-}
-
-.vote-order-track-legend span.moderator .MuiSvgIcon-root {
-  color: inherit;
-  width: 12px;
-  height: 12px;
-  font-size: 12px;
-}
-
-.vote-order-track-legend .legend-current {
-  color: #6cc997;
-}
-
-.vote-order-track-legend i {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-}
-
-.vote-order-track-legend i.leader {
-  background: var(--gold-2);
-}
-
-.vote-order-track-legend i.moderator {
-  background: #7aa4bb;
-}
-
-.vote-order-track-legend i.current {
-  background: #6cc997;
 }
 
 .privacy-note {

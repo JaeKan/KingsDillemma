@@ -1,6 +1,7 @@
 import React, { useRef, useState, useMemo, useEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { 
+  houseMentionItems,
   valueMentionItems, 
   achievementEffectSelectableOptions,
   achievementEffectAmountMax,
@@ -13,6 +14,7 @@ import {
 import { 
   parseMentionText,
   formatValueMention,
+  formatHouseMention,
   formatEffectMention,
   mentionItemRequiresAmount,
   shouldAppendMentionSeparator,
@@ -20,13 +22,14 @@ import {
   normalizeMentionAmount,
   formatMentionDisplayAmount
 } from "../utils/mention-helpers";
-import { TokenIcon, AchievementEffectOptionIcon } from "./GameIcons";
+import { getHouseSeatPlayerLabel } from "../utils/house-helpers";
+import { TokenIcon, AchievementEffectOptionIcon, HouseIcon } from "./GameIcons";
 import { Tooltip } from "./Tooltip";
 
 export interface MentionPart {
   type: "text" | "mention";
   text?: string;
-  kind?: "value" | "effect";
+  kind?: "value" | "effect" | "house";
   start?: number;
   end?: number;
   amount?: number;
@@ -37,11 +40,43 @@ export interface MentionPart {
 interface MentionTokenViewProps {
   className?: string;
   emptyText?: string;
+  houses?: any[];
   onTokenClick?: (mention: MentionPart) => void;
   text: string;
 }
 
-export function MentionTokenView({ className = "", emptyText = "", onTokenClick, text }: MentionTokenViewProps) {
+function getHouseMentionDisplay(item: any, houses: any[] = []) {
+  const house = houses.find((candidate) => candidate?.id === item?.id || candidate?.houseId === item?.id) || null;
+  const canonical = house?.koreanTitle || item?.label || house?.title || ko.common.houseFallback;
+  const seatLabel = house ? getHouseSeatPlayerLabel({ ...house, koreanTitle: canonical }) : "";
+  const playerName =
+    seatLabel && seatLabel !== canonical && seatLabel !== house?.koreanTitle && seatLabel !== house?.title
+      ? seatLabel
+      : "";
+
+  return {
+    label: canonical,
+    playerName,
+    fullLabel: playerName ? `${canonical} (${playerName})` : canonical,
+    motif: house?.motif || item?.motif,
+  };
+}
+
+function createHouseMentionOptions(houses: any[] = []) {
+  return houseMentionItems.map((item) => {
+    const display = getHouseMentionDisplay(item, houses);
+
+    return {
+      ...item,
+      label: display.label,
+      displayName: display.playerName,
+      motif: display.motif,
+      searchText: [item.searchText, display.fullLabel, display.playerName].filter(Boolean).join(" "),
+    };
+  });
+}
+
+export function MentionTokenView({ className = "", emptyText = "", houses = [], onTokenClick, text }: MentionTokenViewProps) {
   const parts = parseMentionText(text) as MentionPart[];
   const hasMention = parts.some((part) => part.type === "mention");
 
@@ -63,6 +98,7 @@ export function MentionTokenView({ className = "", emptyText = "", onTokenClick,
         return (
           <MentionTokenChip
             key={`${part.kind}-${part.start}-${index}`}
+            houses={houses}
             mention={part}
             onClick={onTokenClick ? () => onTokenClick!(part) : undefined}
           />
@@ -77,6 +113,7 @@ export function hasMentionToken(text: string) {
 }
 
 interface MentionRenderedPreviewProps {
+  houses?: any[];
   text: string;
   /** Classes merged onto `MentionTokenView` (after `mention-token-preview`). */
   tokenViewClassName?: string;
@@ -87,6 +124,7 @@ interface MentionRenderedPreviewProps {
 
 /** Live rendered preview for `@` / `!` mention fields; hidden when text is empty/whitespace-only. */
 export function MentionRenderedPreview({
+  houses = [],
   text,
   tokenViewClassName = "",
   wrapperClassName = "",
@@ -102,6 +140,7 @@ export function MentionRenderedPreview({
     <div className={`mention-rendered-preview ${wrapperClassName}`.trim()}>
       <MentionTokenView
         className={`mention-token-preview ${tokenViewClassName}`.trim()}
+        houses={houses}
         onTokenClick={onTokenClick}
         text={raw}
       />
@@ -110,31 +149,47 @@ export function MentionRenderedPreview({
 }
 
 interface MentionTokenChipProps {
+  houses?: any[];
   mention: MentionPart;
   onClick?: () => void;
 }
 
-function MentionTokenChip({ mention, onClick }: MentionTokenChipProps) {
-  const label = `${mention.item.label}${typeof mention.amount === "number" ? ` ${formatMentionDisplayAmount(mention.amount)}` : ""}`;
-  const content = (
-    <>
-      {typeof mention.amount === "number" ? (
-        <span className="mention-token-amount">{formatMentionDisplayAmount(mention.amount)}</span>
-      ) : null}
-      <span className={`mention-token-icon tone-${mention.tone}`} aria-hidden="true">
-        {mention.kind === "effect" ? (
-          <AchievementEffectOptionIcon option={mention.item} />
-        ) : (
-          <TokenIcon type={mention.item.icon} />
-        )}
-      </span>
-    </>
+function MentionTokenChip({ houses = [], mention, onClick }: MentionTokenChipProps) {
+  const houseDisplay = mention.kind === "house" ? getHouseMentionDisplay(mention.item, houses) : null;
+  const mentionLabel = houseDisplay?.fullLabel || mention.item.label;
+  const label = `${mentionLabel}${typeof mention.amount === "number" ? ` ${formatMentionDisplayAmount(mention.amount)}` : ""}`;
+  const chipClassName = `mention-token-chip${mention.kind === "house" ? " house-mention-token-chip" : ""}${onClick ? " editable" : ""}`;
+  const icon = (
+    <span className={`mention-token-icon tone-${mention.tone}`} aria-hidden="true">
+      {mention.kind === "effect" ? (
+        <AchievementEffectOptionIcon option={mention.item} />
+      ) : mention.kind === "house" ? (
+        <HouseIcon motif={mention.item.motif} />
+      ) : (
+        <TokenIcon type={mention.item.icon} />
+      )}
+    </span>
   );
+  const content =
+    mention.kind === "house" ? (
+      <>
+        {icon}
+        <span className="house-mention-token-label">{houseDisplay?.label || mention.item.label}</span>
+        {houseDisplay?.playerName ? <span className="house-mention-token-player">({houseDisplay.playerName})</span> : null}
+      </>
+    ) : (
+      <>
+        {typeof mention.amount === "number" ? (
+          <span className="mention-token-amount">{formatMentionDisplayAmount(mention.amount)}</span>
+        ) : null}
+        {icon}
+      </>
+    );
 
   if (onClick) {
     return (
       <Tooltip label={label}>
-        <button className="mention-token-chip editable" type="button" aria-label={label} onClick={onClick}>
+        <button className={chipClassName} type="button" aria-label={label} onClick={onClick}>
           {content}
         </button>
       </Tooltip>
@@ -143,7 +198,7 @@ function MentionTokenChip({ mention, onClick }: MentionTokenChipProps) {
 
   return (
     <Tooltip label={label}>
-      <span className="mention-token-chip" aria-label={label}>
+      <span className={chipClassName} aria-label={label}>
         {content}
       </span>
     </Tooltip>
@@ -151,7 +206,7 @@ function MentionTokenChip({ mention, onClick }: MentionTokenChipProps) {
 }
 
 interface MentionState {
-  type: "value" | "effect";
+  type: "value" | "effect" | "house";
   triggerIndex: number;
   replaceEnd: number;
   query: string;
@@ -167,10 +222,11 @@ interface ValueMentionTextareaProps {
   multiline?: boolean;
   enableEffectMentions?: boolean;
   onEffectMention?: (effect: { icon: string; amount: number }) => void;
+  houses?: any[];
 }
 
 export const ValueMentionTextarea = React.forwardRef<HTMLTextAreaElement | HTMLInputElement, ValueMentionTextareaProps>(function ValueMentionTextarea(
-  { value, onChange, placeholder, disabled = false, maxLength, multiline = true, enableEffectMentions = false, onEffectMention },
+  { value, onChange, placeholder, disabled = false, maxLength, multiline = true, enableEffectMentions = false, onEffectMention, houses = [] },
   forwardedRef,
 ) {
   const fieldRef = useRef<HTMLDivElement>(null);
@@ -182,14 +238,21 @@ export const ValueMentionTextarea = React.forwardRef<HTMLTextAreaElement | HTMLI
   const [panelPosition, setPanelPosition] = useState({ left: 0, top: 0, maxHeight: 310 });
   const normalizedValue = typeof value === "string" ? value : "";
   const query = mention?.query?.trim().toLowerCase() || "";
-  const mentionItems = mention?.type === "effect" ? achievementEffectSelectableOptions : valueMentionItems;
+  const houseMentionOptions = useMemo(() => createHouseMentionOptions(houses), [houses]);
+  const mentionItems =
+    mention?.type === "effect"
+      ? achievementEffectSelectableOptions
+      : mention?.type === "house"
+        ? houseMentionOptions
+        : valueMentionItems;
   const filteredItems = useMemo(() => {
     if (!query) {
       return mentionItems;
     }
 
     return (mentionItems as any[]).filter((item) => {
-      return item.label.toLowerCase().includes(query) || item.id.toLowerCase().includes(query);
+      const searchText = `${item.label} ${item.id} ${item.searchText || ""}`.toLowerCase();
+      return searchText.includes(query);
     });
   }, [mentionItems, query]);
 
@@ -285,9 +348,9 @@ export const ValueMentionTextarea = React.forwardRef<HTMLTextAreaElement | HTMLI
 
     const triggerCharacter = nextValue[caret - 1];
 
-    if (triggerCharacter === "@" || (enableEffectMentions && triggerCharacter === "!")) {
+    if (triggerCharacter === "@" || triggerCharacter === "#" || (enableEffectMentions && triggerCharacter === "!")) {
       setMention({
-        type: triggerCharacter === "!" ? "effect" : "value",
+        type: triggerCharacter === "!" ? "effect" : triggerCharacter === "#" ? "house" : "value",
         triggerIndex: caret - 1,
         replaceEnd: caret,
         query: "",
@@ -396,7 +459,11 @@ export const ValueMentionTextarea = React.forwardRef<HTMLTextAreaElement | HTMLI
     }
 
     const tokenText =
-      activeMention.type === "effect" ? formatEffectMention(item, activeAmount) : formatValueMention(item, activeAmount);
+      activeMention.type === "effect"
+        ? formatEffectMention(item, activeAmount)
+        : activeMention.type === "house"
+          ? formatHouseMention(item)
+          : formatValueMention(item, activeAmount);
     const replaceEnd = Math.max(activeMention.replaceEnd, activeMention.triggerIndex + 1);
     const separator = shouldAppendMentionSeparator(normalizedValue, replaceEnd) ? " " : "";
     const insertedText = `${tokenText}${separator}`;
@@ -455,20 +522,36 @@ export const ValueMentionTextarea = React.forwardRef<HTMLTextAreaElement | HTMLI
     >
       {mention.item ? (
         <>
-          <span className="value-mention-heading">
-            <span
-              className={`value-mention-icon tone-${mention.type === "effect" ? "effect" : mention.item.tone}`}
-              aria-hidden="true"
-            >
-              {mention.type === "effect" ? (
-                <AchievementEffectOptionIcon option={mention.item} />
-              ) : (
-                <TokenIcon type={mention.item.icon} />
-              )}
-            </span>
-            <strong>{mention.item.label}</strong>
-            <small>{mention.type === "effect" ? ko.mentionUi.categoryEffect : mention.item.category}</small>
-          </span>
+          {(() => {
+            const houseDisplay = mention.type === "house" ? getHouseMentionDisplay(mention.item, houses) : null;
+
+            return (
+              <span className="value-mention-heading">
+                <span
+                  className={`value-mention-icon tone-${mention.type === "effect" ? "effect" : mention.item.tone}`}
+                  aria-hidden="true"
+                >
+                  {mention.type === "effect" ? (
+                    <AchievementEffectOptionIcon option={mention.item} />
+                  ) : mention.type === "house" ? (
+                    <HouseIcon motif={mention.item.motif} />
+                  ) : (
+                    <TokenIcon type={mention.item.icon} />
+                  )}
+                </span>
+                <strong>{houseDisplay?.label || mention.item.label}</strong>
+                <small>
+                  {mention.type === "effect"
+                    ? ko.mentionUi.categoryEffect
+                    : mention.type === "house"
+                      ? houseDisplay?.playerName
+                        ? `(${houseDisplay.playerName})`
+                        : ko.mentionUi.categoryHouse
+                      : mention.item.category}
+                </small>
+              </span>
+            );
+          })()}
           {mentionItemRequiresAmount(mention.type, mention.item) ? (
             <span className="value-mention-amount">
               <button type="button" className="stepper-button compact" onClick={() => adjustAmount(-1)}>
@@ -499,26 +582,50 @@ export const ValueMentionTextarea = React.forwardRef<HTMLTextAreaElement | HTMLI
         </>
       ) : (
         <>
-          <span className="value-mention-title">{mention.type === "effect" ? ko.mentionUi.effectSelectTitle : ko.mentionUi.valueSelectTitle}</span>
+          <span className="value-mention-title">
+            {mention.type === "effect"
+              ? ko.mentionUi.effectSelectTitle
+              : mention.type === "house"
+                ? ko.mentionUi.houseSelectTitle
+                : ko.mentionUi.valueSelectTitle}
+          </span>
           <span className="value-mention-options">
               {filteredItems.length ? (
-              filteredItems.map((item, index) => (
-                <button
-                  type="button"
-                  key={item.id}
-                  className={index === activeMentionIndex ? "active" : ""}
-                  onMouseEnter={() => setActiveMentionIndex(index)}
-                  onClick={() => selectMentionItem(item)}
-                >
-                  <span className={`value-mention-icon tone-${mention.type === "effect" ? "effect" : item.tone}`} aria-hidden="true">
-                    {mention.type === "effect" ? <AchievementEffectOptionIcon option={item} /> : <TokenIcon type={item.icon} />}
-                  </span>
-                  <span>
-                    <strong>{item.label}</strong>
-                    <small>{mention.type === "effect" ? ko.mentionUi.categoryEffect : item.category}</small>
-                  </span>
-                </button>
-              ))
+              filteredItems.map((item, index) => {
+                  const houseDisplay = mention.type === "house" ? getHouseMentionDisplay(item, houses) : null;
+
+                  return (
+                    <button
+                      type="button"
+                      key={item.id}
+                      className={index === activeMentionIndex ? "active" : ""}
+                      onMouseEnter={() => setActiveMentionIndex(index)}
+                      onClick={() => selectMentionItem(item)}
+                    >
+                      <span className={`value-mention-icon tone-${mention.type === "effect" ? "effect" : item.tone}`} aria-hidden="true">
+                        {mention.type === "effect" ? (
+                          <AchievementEffectOptionIcon option={item} />
+                        ) : mention.type === "house" ? (
+                          <HouseIcon motif={item.motif} />
+                        ) : (
+                          <TokenIcon type={item.icon} />
+                        )}
+                      </span>
+                      <span>
+                        <strong>{houseDisplay?.label || item.label}</strong>
+                        <small>
+                          {mention.type === "effect"
+                            ? ko.mentionUi.categoryEffect
+                            : mention.type === "house"
+                              ? houseDisplay?.playerName
+                                ? `(${houseDisplay.playerName})`
+                                : ko.mentionUi.categoryHouse
+                              : item.category}
+                        </small>
+                      </span>
+                    </button>
+                  );
+                })
             ) : (
               <span className="value-mention-empty">{ko.mentionUi.noMatch}</span>
             )}

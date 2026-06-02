@@ -7,35 +7,15 @@
     align-items: start;
   }
 
-  .council-main.has-dilemma {
-    grid-template-areas:
-      "dilemma"
-      "inventory";
-  }
-
   .council-main.has-context {
     grid-template-areas:
       "context"
       "inventory";
   }
 
-  .council-main.has-context.has-dilemma {
-    grid-template-areas:
-      "context"
-      "dilemma"
-      "inventory";
-  }
-
   .council-main.has-agenda {
     grid-template-areas:
       "agenda"
-      "inventory";
-  }
-
-  .council-main.has-agenda.has-dilemma {
-    grid-template-areas:
-      "agenda"
-      "dilemma"
       "inventory";
   }
 
@@ -46,23 +26,15 @@
       "inventory";
   }
 
-  .council-main.has-context.has-agenda.has-dilemma {
-    grid-template-areas:
-      "context"
-      "agenda"
-      "dilemma"
-      "inventory";
-  }
-
   .inventory-panel {
     grid-area: inventory;
     align-items: stretch;
     grid-template-columns:
       minmax(0, 0.88fr) minmax(0, 0.88fr) minmax(0, 1.12fr) minmax(0, 1.12fr);
     grid-template-areas:
-      "head head head actions"
+      "head head head head"
       "resources resources challenge challenge"
-      "agenda agenda progress progress";
+      "progress progress progress progress";
     align-self: start;
     justify-self: stretch;
     width: 100%;
@@ -72,15 +44,37 @@
   .inventory-panel.has-house-profile {
     align-items: stretch;
     grid-template-columns:
-      minmax(0, 0.9fr) minmax(0, 0.9fr) minmax(154px, 0.58fr) minmax(154px, 0.58fr) minmax(0, 1.18fr) minmax(0, 1.18fr);
+      max-content minmax(276px, 0.78fr) minmax(0, 1.22fr);
+    grid-template-rows: auto minmax(0, 1fr) auto;
     grid-template-areas:
-      "head head head head head actions"
-      "resources resources house house challenge challenge"
-      "agenda agenda agenda progress progress progress";
+      "head head head"
+      "resources house challenge"
+      "progress progress progress";
+  }
+
+  .inventory-panel.has-house-profile .resource-section,
+  .inventory-panel.has-house-profile .house-detail-section,
+  .inventory-panel.has-house-profile .inventory-challenge-section {
+    align-self: stretch;
+    height: 100%;
+  }
+
+  .inventory-panel.has-house-profile .resource-section {
+    grid-template-rows: minmax(0, 1fr);
+    gap: 0;
   }
 
   .inventory-panel.has-house-profile .house-detail-section {
-    min-width: min(100%, 308px);
+    min-width: min(100%, 276px);
+  }
+
+  .inventory-panel.has-house-profile .resource-section > .inventory-counter-group {
+    height: 100%;
+  }
+
+  .inventory-panel.has-house-profile .inventory-challenge-section .achievement-primary-list {
+    height: auto;
+    flex: 1 1 auto;
   }
 
   .inventory-panel .resource-section > .inventory-counter-group:first-child > h3,
@@ -176,12 +170,11 @@
     padding-right: 70px;
   }
 
-  .council-context .house-profile-grid,
-  .council-context .house-alignment-track {
+  .council-context .house-profile-grid {
     grid-template-columns: 1fr;
   }
 
-  .council-context .dilemma-stage {
+  .council-context .game-stage {
     padding: 12px;
   }
 
@@ -240,21 +233,30 @@
 @media (min-width: 981px) and (max-width: 1279px) {
   .inventory-panel.has-house-profile {
     align-items: stretch;
-    grid-template-columns:
-      minmax(0, 0.88fr) minmax(0, 0.88fr) minmax(148px, 0.56fr) minmax(148px, 0.56fr) minmax(0, 1.14fr) minmax(0, 1.14fr);
+    grid-template-columns: max-content minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr) auto auto;
     grid-template-areas:
-      "head head head head head actions"
-      "resources resources house house challenge challenge"
-      "agenda agenda agenda progress progress progress";
+      "head head"
+      "resources house"
+      "challenge challenge"
+      "progress progress";
   }
 
   .inventory-panel.has-house-profile .house-detail-section {
-    min-width: min(100%, 300px);
+    min-width: 0;
+    justify-items: start;
   }
 
-  .house-detail-section .house-alignment-track {
-    grid-template-columns: 1fr;
+  .inventory-panel.has-house-profile > .house-detail-section > .house-profile-card {
+    width: 100%;
+    height: auto;
+    align-self: start;
   }
+
+  .inventory-panel.has-house-profile .house-profile-main {
+    height: auto;
+  }
+
 }
 
 @media (min-width: 1600px) {
@@ -294,22 +296,9 @@
     gap: 12px;
   }
 
-  .council-main.has-dilemma {
-    grid-template-areas:
-      "dilemma"
-      "inventory";
-  }
-
   .council-main.has-context {
     grid-template-areas:
       "context"
-      "inventory";
-  }
-
-  .council-main.has-context.has-dilemma {
-    grid-template-areas:
-      "context"
-      "dilemma"
       "inventory";
   }
 
@@ -319,25 +308,10 @@
       "inventory";
   }
 
-  .council-main.has-agenda.has-dilemma {
-    grid-template-areas:
-      "agenda"
-      "dilemma"
-      "inventory";
-  }
-
   .council-main.has-context.has-agenda {
     grid-template-areas:
       "context"
       "agenda"
-      "inventory";
-  }
-
-  .council-main.has-context.has-agenda.has-dilemma {
-    grid-template-areas:
-      "context"
-      "agenda"
-      "dilemma"
       "inventory";
   }
 
@@ -383,26 +357,11 @@
     font-size: 0.78rem;
   }
 
-  .council-context .house-alignment-track {
-    grid-template-columns: 1fr;
-    gap: 6px;
-  }
-
-  .council-context .house-alignment-row {
-    padding: 7px 8px;
-  }
-
   .house-profile-card blockquote {
     font-size: 1rem;
   }
 
-  .house-profile-card p:last-child {
-    -webkit-line-clamp: 2;
-    line-clamp: 2;
-    font-size: 0.9rem;
-  }
-
-  .dilemma-stage {
+  .game-stage {
     grid-area: auto;
     align-content: start;
     align-self: start;
@@ -434,9 +393,9 @@
     grid-template-columns:
       minmax(0, 0.88fr) minmax(0, 0.88fr) minmax(0, 1.12fr) minmax(0, 1.12fr);
     grid-template-areas:
-      "head head head actions"
+      "head head head head"
       "resources resources challenge challenge"
-      "agenda agenda progress progress";
+      "progress progress progress progress";
     align-content: start;
     align-self: start;
     justify-self: stretch;
@@ -449,15 +408,15 @@
   .inventory-panel.has-house-profile {
     align-items: stretch;
     grid-template-columns:
-      minmax(0, 0.9fr) minmax(0, 0.9fr) minmax(154px, 0.58fr) minmax(154px, 0.58fr) minmax(0, 1.18fr) minmax(0, 1.18fr);
+      max-content minmax(276px, 0.78fr) minmax(0, 1.22fr);
     grid-template-areas:
-      "head head head head head actions"
-      "resources resources house house challenge challenge"
-      "agenda agenda agenda progress progress progress";
+      "head head head"
+      "resources house challenge"
+      "progress progress progress";
   }
 
   .inventory-panel.has-house-profile .house-detail-section {
-    min-width: min(100%, 308px);
+    min-width: min(100%, 276px);
   }
 
   .inventory-grid,
@@ -537,18 +496,7 @@
     height: 100%;
   }
 
-  .inventory-actions {
-    align-self: center;
-    justify-content: space-between;
-    border-top: 0;
-    padding-top: 0;
-  }
-
-  .inventory-actions>span {
-    display: inline;
-  }
-
-  .inventory-actions button {
+  .inventory-toolbar-actions button {
     min-height: 40px;
     font-size: 0.9rem;
   }
@@ -569,25 +517,11 @@
     align-items: start;
   }
 
-  .council-main.has-agenda.has-dilemma {
-    grid-template-areas:
-      "agenda"
-      "dilemma"
-      "inventory";
-  }
-
   .council-main.has-context.has-agenda {
     grid-template-columns: minmax(280px, 0.34fr) minmax(0, 1fr);
     grid-template-rows: auto auto;
     grid-template-areas:
       "context agenda"
-      "inventory inventory";
-  }
-
-  .council-main.has-context.has-agenda.has-dilemma {
-    grid-template-areas:
-      "context agenda"
-      "dilemma dilemma"
       "inventory inventory";
   }
 

@@ -93,6 +93,10 @@ export function Tooltip({
     openTriggerRef.current = null;
     setOpen(false);
   }, []);
+  if (!hasLabel && open) {
+    setOpen(false);
+  }
+  const tooltipVisible = open && hasLabel;
   const handleAnchorFocus = useCallback(
     (event: React.FocusEvent<HTMLSpanElement>) => {
       if (!event?.nativeEvent || event.nativeEvent.isTrusted === false) {
@@ -112,20 +116,14 @@ export function Tooltip({
     hide();
   }, [hide]);
 
-  useEffect(() => {
-    if (!hasLabel) {
-      hide();
-    }
-  }, [hasLabel, hide]);
-
   useLayoutEffect(() => {
-    if (open) {
+    if (tooltipVisible) {
       updatePosition();
     }
-  }, [label, open, updatePosition]);
+  }, [label, tooltipVisible, updatePosition]);
 
   useEffect(() => {
-    if (!open) {
+    if (!tooltipVisible) {
       return undefined;
     }
 
@@ -157,7 +155,7 @@ export function Tooltip({
       window.removeEventListener("scroll", handleUpdate, true);
       document.removeEventListener("pointermove", handlePointerMove, true);
     };
-  }, [hide, open, updatePosition]);
+  }, [hide, tooltipVisible, updatePosition]);
 
   return (
     <>
@@ -168,7 +166,7 @@ export function Tooltip({
         role={role}
         tabIndex={tabIndex}
         aria-label={ariaLabel}
-        aria-describedby={open && hasLabel ? tooltipId : undefined}
+        aria-describedby={tooltipVisible ? tooltipId : undefined}
         onPointerDownCapture={hide}
         onMouseDownCapture={hide}
         onClickCapture={hide}
@@ -187,7 +185,7 @@ export function Tooltip({
       >
         {children}
       </span>
-      {open && hasLabel && typeof document !== "undefined"
+      {tooltipVisible && typeof document !== "undefined"
         ? createPortal(
             <div
               ref={tooltipRef}

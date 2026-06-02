@@ -1,4 +1,5 @@
 import { 
+  houseMentionItems,
   valueMentionItems, 
   achievementEffectSelectableOptions,
   valueMentionAmountMax
@@ -8,13 +9,14 @@ import { normalizeAchievementEffectAmount } from "./normalizers";
 // ── 멘션 파싱 ────────────────────────────────────────────────
 
 interface MentionLabel {
-  kind: "value" | "effect";
+  kind: "value" | "effect" | "house";
   item: any;
   label: string;
 }
 
 let sortedValueMentionLabelsCache: MentionLabel[] | null = null;
 let sortedEffectMentionLabelsCache: MentionLabel[] | null = null;
+let sortedHouseMentionLabelsCache: MentionLabel[] | null = null;
 
 function getSortedValueMentionLabels(): MentionLabel[] {
   if (!sortedValueMentionLabelsCache) {
@@ -36,19 +38,23 @@ function getSortedEffectMentionLabels(): MentionLabel[] {
   return sortedEffectMentionLabelsCache;
 }
 
+function getSortedHouseMentionLabels(): MentionLabel[] {
+  if (!sortedHouseMentionLabelsCache) {
+    sortedHouseMentionLabelsCache = houseMentionItems
+      .map((item) => ({ kind: "house" as const, item, label: item.label }))
+      .sort((left, right) => right.label.length - left.label.length);
+  }
+
+  return sortedHouseMentionLabelsCache;
+}
+
 function findNextMentionTrigger(text: string, start: number): number {
   const valueIndex = text.indexOf("@", start);
   const effectIndex = text.indexOf("!", start);
+  const houseIndex = text.indexOf("#", start);
+  const indexes = [valueIndex, effectIndex, houseIndex].filter((index) => index >= 0);
 
-  if (valueIndex < 0) {
-    return effectIndex;
-  }
-
-  if (effectIndex < 0) {
-    return valueIndex;
-  }
-
-  return Math.min(valueIndex, effectIndex);
+  return indexes.length ? Math.min(...indexes) : -1;
 }
 
 export function mentionItemRequiresAmount(type: string, item: any): boolean {
@@ -60,6 +66,10 @@ export function mentionItemRequiresAmount(type: string, item: any): boolean {
     return Boolean(item.amount);
   }
 
+  if (type === "house") {
+    return false;
+  }
+
   return item.requiresAmount !== false;
 }
 
@@ -67,6 +77,7 @@ export function parseMentionText(value: any): any[] {
   const text = typeof value === "string" ? value : "";
   const valueLabels = getSortedValueMentionLabels();
   const effectLabels = getSortedEffectMentionLabels();
+  const houseLabels = getSortedHouseMentionLabels();
   const parts: any[] = [];
 
   let index = 0;
@@ -83,7 +94,7 @@ export function parseMentionText(value: any): any[] {
     }
 
     const trigger = text[triggerIndex];
-    const candidates = trigger === "@" ? valueLabels : effectLabels;
+    const candidates = trigger === "@" ? valueLabels : trigger === "#" ? houseLabels : effectLabels;
     const match = candidates.find((candidate) => text.startsWith(candidate.label, triggerIndex + 1));
 
     if (!match) {
@@ -132,6 +143,14 @@ export function formatValueMention(item: any, amount: any): string {
   const sign = normalizedAmount > 0 ? "+" : "";
 
   return `@${item.label} ${sign}${normalizedAmount}`;
+}
+
+export function formatHouseMention(item: any): string {
+  if (!item?.label) {
+    return "";
+  }
+
+  return `#${item.label}`;
 }
 
 export function formatEffectMention(item: any, amount: any): string {

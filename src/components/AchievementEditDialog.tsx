@@ -16,6 +16,7 @@ import { normalizeAchievementEffectEntries, getAchievementEffectOption } from ".
 interface AchievementEditDialogProps {
   busy: boolean;
   editor: any;
+  houses?: any[];
   legendButtonRef: React.RefObject<HTMLButtonElement>;
   legendOpen: boolean;
   open: boolean;
@@ -29,6 +30,7 @@ interface AchievementEditDialogProps {
 function AchievementEditDialog({
   busy,
   editor,
+  houses = [],
   legendButtonRef,
   legendOpen,
   open,
@@ -192,17 +194,19 @@ function AchievementEditDialog({
           </div>
         </div>
         <form className="achievement-edit-form" onSubmit={submit}>
-          <label className="dilemma-field achievement-condition-field">
+          <label className="form-field achievement-condition-field">
             <span>{ko.achievementEdit.conditionLabel}</span>
             <ValueMentionTextarea
               ref={firstFieldRef}
               value={editor.draft.conditionText}
+              houses={houses}
               maxLength={achievementDetailTextMaxLength}
               onChange={(event) => onChange("conditionText", (event.target as HTMLTextAreaElement).value)}
               placeholder={ko.achievementEdit.conditionPlaceholder}
             />
             <MentionRenderedPreview
               text={conditionTextRaw}
+              houses={houses}
               tokenViewClassName="achievement-condition-preview"
               onTokenClick={
                 hasMentionToken(conditionTextRaw) ? (token) => focusConditionToken(token) : undefined
@@ -210,7 +214,7 @@ function AchievementEditDialog({
             />
           </label>
           {showRequiredCountField ? (
-            <label className="dilemma-field achievement-required-field">
+            <label className="form-field achievement-required-field">
               <span>{ko.achievementEdit.requiredCountLabel}</span>
               <input
                 type="number"
@@ -255,6 +259,7 @@ function AchievementEditDialog({
                           ref={setEffectEntryRef(index)}
                           multiline={false}
                           value={entry.text}
+                          houses={houses}
                           maxLength={achievementDetailTextMaxLength}
                           onChange={(event) =>
                             onChange("effectEntryUpdate", { index, text: (event.target as any).value })
@@ -272,6 +277,7 @@ function AchievementEditDialog({
                       </button>
                       <MentionRenderedPreview
                         text={entry.text}
+                        houses={houses}
                         wrapperClassName="achievement-effect-row-preview"
                         onTokenClick={(token) => focusEffectEntryToken(index, token)}
                       />
@@ -290,7 +296,7 @@ function AchievementEditDialog({
               {ko.achievementEdit.addMemo}
             </button>
           </fieldset>
-          <AchievementEffectMemo detail={editor.draft} />
+          <AchievementEffectMemo detail={editor.draft} houses={houses} />
           <div className="session-end-actions">
             <button className="ghost-button" type="button" onClick={onCancel} disabled={busy}>
               {ko.common.cancel}
