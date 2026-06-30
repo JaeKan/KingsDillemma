@@ -8,11 +8,18 @@ const gameResourcesSource = readFileSync("src/resources/gameResources.ts", "utf8
 const appKoSource = readFileSync("src/resources/ko/app.ts", "utf8");
 const stringsKoSource = readFileSync("src/resources/ko/strings.ts", "utf8");
 const clientTypesSource = readFileSync("src/types/game.ts", "utf8");
+const achievementEditDialogSource = readFileSync("src/components/AchievementEditDialog.tsx", "utf8");
 const boardProcessingPanelSource = readFileSync("src/components/BoardProcessingPanel.tsx", "utf8");
-const boardProcessingHistoryDialogSource = readFileSync("src/components/BoardProcessingHistoryDialog.tsx", "utf8");
+const boardProcessingHistoryMenuSource = readFileSync("src/components/BoardProcessingHistoryMenu.tsx", "utf8");
+const boardProcessingTypeHistoryDialogSource = readFileSync("src/components/BoardProcessingTypeHistoryDialog.tsx", "utf8");
+const gameIconsSource = readFileSync("src/components/GameIcons.tsx", "utf8");
+const specialAbilityLegendDialogSource = readFileSync("src/components/SpecialAbilityLegendDialog.tsx", "utf8");
+const kickHouseDialogPath = "src/components/KickHouseDialog.tsx";
+const kickHouseDialogSource = existsSync(kickHouseDialogPath) ? readFileSync(kickHouseDialogPath, "utf8") : "";
 const dialogStylesSource = readFileSync("src/styles/_04-dialogs-editors.scss", "utf8");
 const entryStylesSource = readFileSync("src/styles/_05-entry-sidebar.scss", "utf8");
 const settingsStylesSource = readFileSync("src/styles/_02-settings.scss", "utf8");
+const councilVotingStylesSource = readFileSync("src/styles/_06-council-voting.scss", "utf8");
 const boardProcessingStylesSource = readFileSync("src/styles/_07-inventory-progress.scss", "utf8");
 const agendaTonesStylesSource = readFileSync("src/styles/_09-agenda-tones.scss", "utf8");
 const responsiveStylesSource = readFileSync("src/styles/_08-desktop-responsive.scss", "utf8");
@@ -50,6 +57,12 @@ function readCssBlocks(source: string, selector: string) {
   const matches = Array.from(source.matchAll(new RegExp(`${escapedSelector}\\s*\\{([^}]*)\\}`, "g")));
   assert.ok(matches.length > 0, `${selector} style blocks should exist`);
   return matches.map((match) => match[1]);
+}
+
+function readZIndex(cssBlock: string, selector: string) {
+  const match = cssBlock.match(/z-index:\s*(\d+)/);
+  assert.ok(match, `${selector} should set a numeric z-index`);
+  return Number(match[1]);
 }
 
 const removedUiTokens = [
@@ -187,12 +200,14 @@ for (const token of [
   assert.equal(clientTypesSource.includes(token), false, `src/types/game.ts should not expose removed feature type: ${token}`);
 }
 
-assert.match(appSource, /agenda-card-expand-button/);
-assert.match(appSource, /toggleContent/);
+assert.match(appSource, /agenda-expand-toggle/);
+assert.match(appSource, /allExpanded/);
+assert.doesNotMatch(appSource, /agenda-card-expand-button/);
+assert.doesNotMatch(appSource, /toggleContent/);
 assert.match(appSource, /AgendaSecretContent/);
 assert.match(appSource, /agenda\.resourceGoal/);
 assert.match(appSource, /agenda\.note/);
-assert.match(appKoSource, /toggleContent/);
+assert.doesNotMatch(appKoSource, /toggleContent/);
 assert.match(appKoSource, /goalTitle/);
 assert.match(appKoSource, /noteTitle/);
 assert.doesNotMatch(agendaApiSource, /setBoardProcessingOwner/);
@@ -200,15 +215,90 @@ assert.match(clientTypesSource, /boardProcessingOwnerHouseId/);
 assert.match(clientTypesSource, /isAdmin/);
 assert.doesNotMatch(appSource, /BoardProcessingOwnerPanel/);
 assert.match(boardProcessingPanelSource, /BoardProcessingEditorDialog/);
+assert.match(boardProcessingPanelSource, /BoardProcessingRecordDialog/);
+assert.match(boardProcessingPanelSource, /board-processing-entry-menu-button/);
+assert.match(boardProcessingPanelSource, /setSelectedHistoryItem/);
 assert.match(boardProcessingPanelSource, /board-processing-dialog/);
+assert.match(
+  boardProcessingPanelSource,
+  /createPortal/,
+  "board-processing modal overlays should escape nested inventory stacking contexts",
+);
+assert.match(
+  boardProcessingPanelSource,
+  /document\.body/,
+  "board-processing modal overlays should mount at document.body so achievement controls cannot layer above them",
+);
 assert.match(boardProcessingPanelSource, /PhotoAttachmentField/);
 assert.match(boardProcessingPanelSource, /photos: draft\.photos/);
 assert.match(boardProcessingPanelSource, /const closeEditor = useCallback/);
-assert.match(boardProcessingHistoryDialogSource, /BoardProcessingPanel/);
-assert.match(boardProcessingHistoryDialogSource, /mode="history"/);
+assert.match(
+  achievementEditDialogSource,
+  /ValueMentionTextarea[\s\S]*value=\{editor\.draft\.conditionText\}[\s\S]*houses=\{houses\}/,
+  "achievement condition text should use value and house mentions",
+);
+assert.match(
+  achievementEditDialogSource,
+  /MentionRenderedPreview[\s\S]*text=\{conditionTextRaw\}[\s\S]*houses=\{houses\}/,
+  "achievement condition text should render a live mention preview",
+);
+assert.match(
+  gameIconsSource,
+  /resolvePublicAssetPath[\s\S]*specialAbilityIconUrls/,
+  "achievement effect memo images should resolve through the app base path",
+);
+assert.match(
+  specialAbilityLegendDialogSource,
+  /resolvePublicAssetPath\(specialAbilityLegendImageUrl\)/,
+  "special ability legend image should resolve through the app base path",
+);
+assert.match(appSource, /src=\{resolvePublicAssetPath\(bgmSource\)\}/, "BGM public asset should resolve through the app base path");
+assert.match(appSource, /href=\{resolvePublicAssetPath\(rulebookPdfUrl\)\}/, "rulebook public asset should resolve through the app base path");
+const sessionEndOverlayBlock = readCssBlock(dialogStylesSource, ".session-end-overlay");
+const valueMentionPanelBlock = readCssBlock(dialogStylesSource, ".value-mention-panel");
+assert.ok(
+  readZIndex(valueMentionPanelBlock, ".value-mention-panel") > readZIndex(sessionEndOverlayBlock, ".session-end-overlay"),
+  "mention suggestions and amount picker should render above modal overlays",
+);
+assert.match(
+  boardProcessingPanelSource,
+  /function MentionTextField[\s\S]*ValueMentionTextarea/,
+  "board-processing mention fields should reuse the shared mention textarea",
+);
+assert.match(
+  boardProcessingPanelSource,
+  /MentionTextField[\s\S]*value=\{draft\.note\}[\s\S]*houses=\{houses\}/,
+  "board-processing note should use value and house mentions",
+);
+assert.match(
+  boardProcessingPanelSource,
+  /MentionTextField[\s\S]*value=\{draft\.signerBonusText\}[\s\S]*houses=\{houses\}/,
+  "board-processing signer bonus should use value and house mentions",
+);
+assert.match(
+  boardProcessingPanelSource,
+  /MentionTokenView[\s\S]*text=\{item\.note\}/,
+  "board-processing record notes should render mention tokens",
+);
+assert.match(boardProcessingHistoryMenuSource, /boardProcessingTypes/);
+assert.match(boardProcessingHistoryMenuSource, /id="board-processing-history-menu"/);
+assert.match(boardProcessingHistoryMenuSource, /board-processing-type-menu-button/);
+assert.match(boardProcessingHistoryMenuSource, /board-processing-type-menu-count/);
+assert.match(boardProcessingHistoryMenuSource, /ko\.boardProcessing\.typeHistoryCount\(count\)/);
+assert.doesNotMatch(boardProcessingHistoryMenuSource, /TokenIcon/);
+assert.doesNotMatch(boardProcessingHistoryMenuSource, /board-processing-entry-menu-button/);
+assert.doesNotMatch(boardProcessingHistoryMenuSource, /role="dialog"/);
+assert.match(boardProcessingTypeHistoryDialogSource, /board-processing-type-dialog-list/);
+assert.match(boardProcessingTypeHistoryDialogSource, /board-processing-type-dialog-target/);
 assert.match(boardProcessingPanelSource, /canManageBoardProcessing/);
-assert.match(boardProcessingHistoryDialogSource, /canManageBoardProcessing/);
+assert.match(boardProcessingHistoryMenuSource, /canManageBoardProcessing/);
 assert.match(appSource, /onOpenBoardProcessingHistory/);
+assert.match(appSource, /onOpenBoardProcessingHistoryType/);
+assert.match(appSource, /BoardProcessingHistoryMenu/);
+assert.match(appSource, /BoardProcessingTypeHistoryDialog/);
+assert.doesNotMatch(appSource, /BoardProcessingHistoryDialog/);
+assert.match(appSource, /boardProcessingHistoryTypeRef\.current = boardProcessingHistoryToggleRef\.current \|\| trigger/);
+assert.match(appSource, /selectedType=\{canManageBoardProcessingHistory \? selectedBoardProcessingHistoryType : null\}/);
 assert.match(appKoSource, /boardProcessingHistory/);
 assert.doesNotMatch(boardProcessingPanelSource, /ownerRequired/);
 assert.match(stringsKoSource, /adminOnly/);
@@ -269,7 +359,7 @@ assert.ok(wideHouseProfileGridBlocks.length >= 2, "wide house inventory layout s
 for (const block of wideHouseProfileGridBlocks) {
   assert.match(
     block,
-    /grid-template-columns:\s*max-content\s+minmax\(276px,\s*0\.78fr\)\s+minmax\(0,\s*1\.22fr\);/,
+    /grid-template-columns:\s*max-content\s+minmax\(248px,\s*0\.7fr\)\s+minmax\(0,\s*1\.3fr\);/,
     "victory score column should size to content while detail stays narrower than challenge",
   );
   assert.match(
@@ -326,10 +416,39 @@ assert.match(
   /height:\s*100%;/,
   "victory score content should fill the equal-height row instead of ending above the detail card",
 );
+const desktopCounterIconBlocks = readCssBlocks(responsiveStylesSource, ".counter-icon");
+const desktopCounterIconBlock = desktopCounterIconBlocks[desktopCounterIconBlocks.length - 1];
+const desktopScoreTrackRowBlocks = readCssBlocks(responsiveStylesSource, ".score-track-row");
+const desktopScoreTrackRowBlock = desktopScoreTrackRowBlocks[desktopScoreTrackRowBlocks.length - 1];
+assert.match(
+  desktopCounterIconBlock,
+  /width:\s*28px;[\s\S]*height:\s*28px;/,
+  "desktop victory score counter icons should stay compact",
+);
+assert.match(
+  desktopScoreTrackRowBlock,
+  /grid-template-columns:\s*minmax\(70px,\s*0\.3fr\)\s+minmax\(0,\s*1fr\);/,
+  "victory score card headline chip should reserve less width",
+);
+assert.match(
+  readCssBlock(responsiveStylesSource, ".score-track-summary .counter-label"),
+  /font-size:\s*0\.92rem;/,
+  "victory score headline label should stay compact",
+);
+assert.match(
+  readCssBlock(responsiveStylesSource, ".score-track-value"),
+  /font-size:\s*1\.04rem;/,
+  "victory score value chip should stay compact",
+);
 assert.match(
   readCssBlock(boardProcessingStylesSource, ".inventory-resource-grid.score-ledger-grid"),
   /grid-template-rows:\s*minmax\(0,\s*1fr\)\s+max-content;/,
   "prestige should take remaining score height while crave keeps compact content height",
+);
+assert.match(
+  readCssBlock(boardProcessingStylesSource, ".inventory-resource-grid.score-ledger-grid"),
+  /z-index:\s*0;/,
+  "prestige and crave score cards should stay below modal overlays",
 );
 assert.match(
   readCssBlock(boardProcessingStylesSource, ".score-track-row.tone-crave"),
@@ -392,11 +511,11 @@ assert.doesNotMatch(
   /\.house-profile-card p:last-child\s*\{[\s\S]*line-clamp/,
   "house detail profile story should not be clamped to a short summary",
 );
-assert.match(appKoSource, /bgmVolume:\s*"BGM"/);
-assert.match(appKoSource, /bgmToggle:\s*"BGM 음소거 전환"/);
-assert.match(appKoSource, /alignmentHeading:\s*"성향"/);
-assert.match(appKoSource, /alignmentListAria:\s*"성향 진행"/);
-assert.doesNotMatch(appKoSource, /alignmentHeading:\s*"업적"/);
+assert.match(appKoSource, /bgmVolume:\s*"BGM 음량"/);
+assert.match(appKoSource, /bgmToggle:\s*"BGM 음소거"/);
+assert.match(appKoSource, /alignmentHeading:\s*"업적"/);
+assert.match(appKoSource, /alignmentListAria:\s*"성향 업적"/);
+assert.doesNotMatch(appKoSource, /alignmentHeading:\s*"성향"/);
 assert.match(appSource, /className="settings-volume-mute-button"/);
 assert.match(appSource, /aria-label=\{ko\.app\.settings\.bgmToggle\}/);
 assert.doesNotMatch(appSource, /className="ghost-button wide"[\s\S]{0,240}aria-pressed=\{bgmMuted\}/);
@@ -407,39 +526,109 @@ assert.match(
 
 const settingsMenuIndex = appSource.indexOf('id="settings-menu"');
 const tipsMenuIndex = appSource.indexOf('id="tips-menu"');
+const settingsFloatActionsIndex = appSource.indexOf('className="settings-float-actions"');
+const settingsMenuScrimIndex = appSource.indexOf('className="settings-menu-scrim"');
 const historyPanelRenderIndex = appSource.indexOf('mode="history"', settingsMenuIndex);
 const historyMenuButtonIndex = appSource.indexOf("onOpenBoardProcessingHistory", settingsMenuIndex);
+const historyFloatButtonIndex = appSource.indexOf("onOpenBoardProcessingHistory", settingsFloatActionsIndex);
+const tipsFloatButtonIndex = appSource.indexOf("onToggleTips", settingsFloatActionsIndex);
 const openAgendaGuideIndex = appSource.indexOf("onOpenOpenAgendaGuide", tipsMenuIndex);
 const secretAgendaGuideIndex = appSource.indexOf("onOpenSecretAgendaGuide", tipsMenuIndex);
 const specialAbilityLegendIndex = appSource.indexOf("onOpenSpecialAbilityLegend", tipsMenuIndex);
 const boardProcessingGuideIndex = appSource.indexOf("onOpenBoardProcessingGuide", tipsMenuIndex);
-const historyAdminGateIndex = appSource.indexOf("state?.isAdmin", settingsMenuIndex);
+const historyAdminGateIndex = appSource.indexOf("canOpenBoardProcessingHistory", settingsFloatActionsIndex);
 const boardProcessingPanelRenderIndex = appSource.indexOf('mode="input"', historyMenuButtonIndex);
 const inputPanelGateIndex = appSource.indexOf("showBoardProcessingInputPanel");
 const carrotRenderIndex = appSource.indexOf("<CarrotWaitAction />", boardProcessingPanelRenderIndex);
 const gameFlowSectionIndex = appSource.indexOf("ko.app.settings.gameFlowSection", settingsMenuIndex);
 const sessionEndPrepIndex = appSource.indexOf("ko.app.settings.sessionEndPrep", settingsMenuIndex);
+const sessionEndAdminGateIndex = appSource.indexOf('canEndSession={Boolean(admin && state?.phase === "complete")}');
 const randomDiscardControlIndex = appSource.indexOf("ko.app.settings.randomDiscardAria", settingsMenuIndex);
+const randomDiscardPhaseGateIndex = appSource.indexOf('state?.phase === "house-select"');
+const randomDiscardHandlerPhaseGuardIndex = appSource.indexOf('state.phase !== "house-select"');
+const kickHouseMenuButtonIndex = appSource.indexOf("ko.app.settings.kickHouseMenu", settingsMenuIndex);
+const kickHouseDialogRenderIndex = appSource.indexOf("<KickHouseDialog");
+const kickHouseDialogOpenStateIndex = appSource.indexOf("kickHouseDialogOpen");
+const perHouseKickButtonIndex = appSource.indexOf("ko.app.settings.kickHouse(getHouseKoreanName", settingsMenuIndex);
 const leaveCouncilIndex = appSource.indexOf("ko.app.settings.leaveCouncil", settingsMenuIndex);
 const resetKingdomIndex = appSource.indexOf("ko.app.settings.resetKingdom", settingsMenuIndex);
 const adminSectionIndex = appSource.indexOf("ko.app.settings.adminSection", settingsMenuIndex);
 const adminModeControlIndex = appSource.indexOf("ko.app.settings.adminModeAria", settingsMenuIndex);
+const adminOnlyControlsIndex = appSource.indexOf("{admin ? (", adminModeControlIndex);
 const appSectionIndex = appSource.indexOf("ko.app.settings.appSection", settingsMenuIndex);
 const bgmVolumeHeadingIndex = appSource.indexOf('className="settings-volume-heading"', settingsMenuIndex);
 const bgmMuteButtonIndex = appSource.indexOf('className="settings-volume-mute-button"', bgmVolumeHeadingIndex);
 assert.ok(settingsMenuIndex > -1, "App should render the hamburger settings menu");
 assert.ok(tipsMenuIndex > -1, "App should render the reference materials menu");
+assert.match(appSource, /const floatingMenuOpen = Boolean\(open \|\| tipsOpen \|\| boardProcessingHistoryOpen\);/, "floating menus should share a single open-state flag for outside-click handling");
+assert.match(appSource, /handleFloatingMenuScrimPointerDown/, "floating menus should close from an explicit outside-click scrim");
+assert.ok(settingsMenuScrimIndex > -1 && settingsMenuScrimIndex < settingsFloatActionsIndex, "floating menu outside-click scrim should render behind the float actions");
 assert.ok(openAgendaGuideIndex > tipsMenuIndex, "reference menu should start with open-agenda score guidance");
 assert.ok(specialAbilityLegendIndex > secretAgendaGuideIndex, "reference menu should expose the special ability legend after agenda score references");
 assert.ok(boardProcessingGuideIndex > specialAbilityLegendIndex, "board-processing guide should remain after the special ability legend reference");
 assert.match(appSource, /specialAbilityLegendOpen/);
 assert.match(appSource, /restoreFocusRef=\{specialAbilityLegendButtonRef as any\}/);
-assert.ok(historyMenuButtonIndex > settingsMenuIndex, "board-processing history should have a hamburger menu item");
-assert.ok(historyAdminGateIndex > settingsMenuIndex, "board-processing history menu item should be gated to admins");
-assert.equal(historyPanelRenderIndex, -1, "board-processing history should open in a modal instead of rendering inline in the hamburger menu");
+assert.ok(historyFloatButtonIndex > settingsFloatActionsIndex && historyFloatButtonIndex < settingsMenuIndex, "board-processing history should have a separate floating action beside the hamburger button");
+assert.ok(tipsFloatButtonIndex > settingsFloatActionsIndex && tipsFloatButtonIndex < historyFloatButtonIndex, "board-processing history floating action should render third after settings and reference buttons");
+assert.equal(historyMenuButtonIndex, -1, "board-processing history should not stay inside the hamburger menu");
+assert.ok(historyAdminGateIndex > settingsFloatActionsIndex && historyAdminGateIndex < settingsMenuIndex, "board-processing history floating action should be gated to admins");
+assert.equal(historyPanelRenderIndex, -1, "board-processing history should render through its own floating menu instead of the hamburger menu");
 assert.ok(inputPanelGateIndex > -1, "App should gate the board-processing input card visibility");
 assert.ok(boardProcessingPanelRenderIndex > inputPanelGateIndex, "board-processing record card should render from the admin-gated input panel");
 assert.ok(carrotRenderIndex > boardProcessingPanelRenderIndex, "board-processing record card should render above carrot action");
+const carrotWaitActionBlock = readCssBlock(councilVotingStylesSource, ".carrot-wait-action");
+const carrotButtonBlock = readCssBlock(councilVotingStylesSource, ".carrot-button");
+const settingsMenuScrimBlock = readCssBlock(settingsStylesSource, ".settings-menu-scrim");
+const boardProcessingInputActionBlock = readCssBlock(boardProcessingStylesSource, ".board-processing-actions--input-only");
+const boardProcessingInputButtonBlock = readCssBlock(boardProcessingStylesSource, ".board-processing-actions--input-only .primary-button");
+const boardProcessingAddCtaBlock = readCssBlock(boardProcessingStylesSource, ".board-processing-add-cta");
+const boardProcessingAddCtaActiveBlock = readCssBlock(boardProcessingStylesSource, ".board-processing-add-cta:active");
+const boardProcessingAddCtaHoverMatch = boardProcessingStylesSource.match(
+  /\.board-processing-add-cta:hover,\s*\.board-processing-add-cta:focus-visible\s*\{([^}]*)\}/,
+);
+const boardProcessingTypeDialogBlock = readCssBlock(boardProcessingStylesSource, ".board-processing-type-history-dialog");
+const boardProcessingTypeDialogLayoutBlock = readCssBlock(boardProcessingStylesSource, ".board-processing-type-dialog-layout");
+const boardProcessingTypeDialogListBlocks = readCssBlocks(boardProcessingStylesSource, ".board-processing-type-dialog-list");
+const boardProcessingTypeDialogTargetBlocks = readCssBlocks(boardProcessingStylesSource, ".board-processing-type-dialog-target");
+const boardProcessingTypeDialogListBlock = boardProcessingTypeDialogListBlocks[boardProcessingTypeDialogListBlocks.length - 1];
+const boardProcessingTypeDialogTargetBlock = boardProcessingTypeDialogTargetBlocks[boardProcessingTypeDialogTargetBlocks.length - 1];
+const boardProcessingRecordDialogBlock = readCssBlock(boardProcessingStylesSource, ".board-processing-record-dialog");
+const boardProcessingRecordDialogBodyBlock = readCssBlock(boardProcessingStylesSource, ".board-processing-record-dialog-body");
+const boardProcessingTypeMenuButtonBlock = readCssBlock(settingsStylesSource, ".board-processing-type-menu-button");
+const boardProcessingTypeMenuCountBlock = readCssBlock(settingsStylesSource, ".board-processing-type-menu-count");
+const mobileBoardProcessingDialogLayoutBlock = readCssBlock(mobileStylesSource, ".board-processing-type-dialog-layout");
+assert.match(carrotWaitActionBlock, /width:\s*100%;/, "carrot action should set the full-width sidebar pattern");
+assert.match(carrotButtonBlock, /width:\s*100%;/, "carrot button should fill the sidebar width");
+assert.match(settingsMenuScrimBlock, /position:\s*fixed;/, "floating menu outside-click scrim should cover the viewport");
+assert.match(settingsMenuScrimBlock, /inset:\s*0;/, "floating menu outside-click scrim should fill every outside-click target");
+assert.match(settingsMenuScrimBlock, /z-index:\s*39;/, "floating menu outside-click scrim should sit below the z-index 40 floating controls");
+assert.match(settingsMenuScrimBlock, /background:\s*transparent;/, "floating menu outside-click scrim should not visually dim the playfield");
+assert.match(boardProcessingInputActionBlock, /width:\s*100%;/, "board-processing add action should follow the full-width carrot action wrapper");
+assert.match(boardProcessingInputButtonBlock, /width:\s*100%;/, "board-processing add button should fill the sidebar width");
+assert.match(boardProcessingTypeMenuButtonBlock, /grid-template-columns:\s*minmax\(0, 1fr\) auto;/, "board-processing type menu buttons should use text and count columns without a leading icon");
+assert.match(boardProcessingTypeMenuButtonBlock, /min-height:\s*58px;/, "board-processing type menu buttons should have enough height to read as real floating menu actions");
+assert.match(boardProcessingTypeMenuButtonBlock, /padding:\s*10px 12px;/, "board-processing type menu buttons should avoid the cramped default settings-menu button padding");
+assert.match(boardProcessingTypeMenuCountBlock, /border-radius:\s*999px;/, "board-processing type menu counts should read as compact status pills");
+assert.match(boardProcessingAddCtaBlock, /grid-template-columns:\s*44px minmax\(0, 1fr\);/, "board-processing add CTA should use an icon badge and copy column");
+assert.match(boardProcessingAddCtaBlock, /transition:\s*border-color 160ms ease, background 160ms ease, box-shadow 160ms ease, transform 160ms ease;/, "board-processing add CTA should animate only explicit interaction properties");
+assert.match(boardProcessingAddCtaBlock, /touch-action:\s*manipulation;/, "board-processing add CTA should feel responsive on touch surfaces");
+assert.match(boardProcessingAddCtaBlock, /box-shadow:\s*0 12px 28px rgba\(0, 0, 0, 0\.22\), 0 0 0 1px rgba\(216, 178, 90, 0\.08\) inset;/, "board-processing add CTA base shadow should stay neutral with a subtle gold inset");
+assert.ok(boardProcessingAddCtaHoverMatch, "board-processing add CTA should share a hover and focus-visible interaction block");
+assert.match(boardProcessingAddCtaHoverMatch[1], /box-shadow:\s*0 14px 30px rgba\(0, 0, 0, 0\.26\), 0 0 0 1px rgba\(216, 178, 90, 0\.18\) inset;/, "board-processing add CTA hover shadow should avoid the reddish glow");
+assert.match(boardProcessingAddCtaActiveBlock, /transform:\s*translateY\(1px\);/, "board-processing add CTA should have a restrained pressed state");
+assert.match(boardProcessingTypeDialogBlock, /width:\s*min\(calc\(100vw - 24px\), 1280px\);/, "board-processing type modal should use a wider desktop surface");
+assert.match(boardProcessingTypeDialogBlock, /height:\s*min\(calc\(100dvh - 36px\), 760px\);/, "board-processing type modal should always occupy the intended maximum history surface height");
+assert.match(boardProcessingTypeDialogBlock, /grid-template-rows:\s*auto auto minmax\(0, 1fr\) auto;/, "board-processing type modal should reserve a stretch row for list and target panes");
+assert.match(boardProcessingTypeDialogBlock, /overflow-y:\s*hidden;/, "board-processing type modal should keep the shell height stable while panes scroll");
+assert.match(boardProcessingTypeDialogLayoutBlock, /grid-template-columns:\s*minmax\(300px, 0.68fr\) minmax\(0, 1.32fr\);/, "board-processing type modal should give more space to the target detail pane");
+assert.match(boardProcessingTypeDialogLayoutBlock, /align-items:\s*stretch;/, "board-processing type modal panes should fill the shared modal height");
+assert.match(boardProcessingTypeDialogListBlock, /height:\s*100%;/, "board-processing type list should fill the stable modal pane height");
+assert.match(boardProcessingTypeDialogListBlock, /max-height:\s*none;/, "board-processing type list should not shrink the modal based on item count");
+assert.match(boardProcessingTypeDialogTargetBlock, /height:\s*100%;/, "board-processing type target should fill the stable modal pane height");
+assert.match(boardProcessingTypeDialogTargetBlock, /max-height:\s*none;/, "board-processing type target should not shrink the modal based on selected item content");
+assert.match(mobileBoardProcessingDialogLayoutBlock, /grid-template-rows:\s*minmax\(128px, 0.8fr\) minmax\(0, 1.2fr\);/, "mobile board-processing type modal should split the stable height between list and target panes");
+assert.match(boardProcessingRecordDialogBlock, /width:\s*min\(calc\(100vw - 24px\), 1040px\);/, "board-processing record modal should use a wider desktop surface");
+assert.match(boardProcessingRecordDialogBodyBlock, /grid-template-columns:\s*minmax\(0, 1fr\);/, "board-processing record modal should own a body layout wrapper for advanced content");
 const sidebarTokenSectionIndex = appSource.indexOf("const tokenSection = (");
 const sidebarAgendaSectionIndex = appSource.indexOf("const agendaSection = (");
 const sidebarLedgerIndex = appSource.indexOf("const prioritySections = (");
@@ -510,7 +699,18 @@ assert.match(
 assert.match(
   readCssBlock(boardProcessingStylesSource, ".sidebar-ledger-agenda .agenda-type-legend"),
   /margin-left:\s*auto;/,
-  "sidebar agenda common/secret legend should stay pushed to the right",
+  "sidebar agenda secret legend should stay pushed to the right",
+);
+const turnTrackLegendBlock = readCssBlock(entryStylesSource, ".turn-track-legend");
+assert.match(
+  turnTrackLegendBlock,
+  /justify-content:\s*flex-end;/,
+  "turn track legend nodes should align to the right",
+);
+assert.match(
+  boardProcessingStylesSource,
+  /\.agenda-type-dot\.common/,
+  "agenda header should keep a common type node style",
 );
 assert.match(
   readCssBlock(boardProcessingStylesSource, ".sidebar-ledger-agenda .open-agenda-token-heading"),
@@ -568,6 +768,54 @@ assert.match(
   readCssBlock(boardProcessingStylesSource, ".sidebar-ledger-agenda .own-choice h3"),
   /font-size:\s*1rem;/,
   "sidebar secret agenda title should read as a card heading",
+);
+const agendaSectionBlock = readCssBlock(agendaTonesStylesSource, ".agenda-section");
+assert.match(
+  agendaSectionBlock,
+  /background:\s*rgba\(17,\s*25,\s*24,\s*0\.94\);/,
+  "agenda section wrapper should use the same dark panel background as the inventory panel",
+);
+assert.match(
+  agendaSectionBlock,
+  /padding:\s*12px;/,
+  "agenda section wrapper should use the same padding as the inventory panel",
+);
+assert.doesNotMatch(
+  agendaSectionBlock,
+  /--secret-agenda-/,
+  "agenda section wrapper should not inherit the inner secret-agenda card theme",
+);
+const agendaSectionModeIconBlock = readCssBlock(agendaTonesStylesSource, ".agenda-section-mode-icon");
+assert.match(
+  agendaSectionModeIconBlock,
+  /border:\s*1px solid rgba\(216,\s*178,\s*90,\s*0\.34\);/,
+  "agenda section mode icon should use the same gold panel icon line as other dark panel headers",
+);
+assert.match(
+  agendaSectionModeIconBlock,
+  /background:\s*rgba\(216,\s*178,\s*90,\s*0\.1\);/,
+  "agenda section mode icon should use the same gold panel icon fill",
+);
+const agendaExpandToggleBlock = readCssBlock(agendaTonesStylesSource, ".agenda-expand-toggle");
+const inventoryToolbarActionBlock = readCssBlock(agendaTonesStylesSource, ".inventory-toolbar-actions button");
+for (const [block, label] of [
+  [agendaExpandToggleBlock, "draft detail toggle"],
+  [inventoryToolbarActionBlock, "house defaults button"],
+] as const) {
+  assert.match(block, /min-height:\s*38px;/, `${label} should use the shared toolbar action height`);
+  assert.match(block, /padding:\s*0 12px;/, `${label} should use the shared toolbar action padding`);
+  assert.match(block, /font-size:\s*0\.86rem;/, `${label} should use the shared toolbar action font size`);
+  assert.match(block, /font-weight:\s*900;/, `${label} should use the shared toolbar action font weight`);
+  assert.match(
+    block,
+    /border-color:\s*rgba\(234,\s*223,\s*189,\s*0\.24\);[\s\S]*background:\s*rgba\(234,\s*223,\s*189,\s*0\.08\);/,
+    `${label} should use the dark panel ghost button tone`,
+  );
+}
+assert.match(
+  agendaExpandToggleBlock,
+  /border-color:\s*rgba\(234,\s*223,\s*189,\s*0\.24\);[\s\S]*background:\s*rgba\(234,\s*223,\s*189,\s*0\.08\);/,
+  "agenda section detail toggle should use the dark panel ghost button tone",
 );
 const secretAgendaCardFrameBlock = readCssBlock(agendaTonesStylesSource, ".secret-agenda-card-frame");
 assert.match(
@@ -627,12 +875,27 @@ assert.match(
   /\.agenda-score-segment strong\s*\{[^}]*font-variant-numeric:\s*tabular-nums;/,
   "secret agenda score values should use tabular numerals",
 );
-assert.ok(gameFlowSectionIndex > settingsMenuIndex, "settings menu should start flow actions with the game-flow section label");
-assert.ok(sessionEndPrepIndex > gameFlowSectionIndex, "round-end action should render under the game-flow section");
-assert.ok(randomDiscardControlIndex > sessionEndPrepIndex, "random discard should render with game-flow controls");
-assert.ok(adminSectionIndex > randomDiscardControlIndex, "admin section should follow game-flow actions");
+assert.equal(gameFlowSectionIndex, -1, "settings menu should not render a separate game-flow section");
+assert.ok(sessionEndAdminGateIndex > -1, "round-end action should only be enabled for admins after the round is complete");
+assert.ok(adminSectionIndex > settingsMenuIndex, "settings menu should start authenticated controls with the admin section label");
 assert.ok(adminModeControlIndex > adminSectionIndex, "admin mode should render under the admin section label");
-assert.ok(appSectionIndex > adminModeControlIndex, "app settings should follow admin controls");
+assert.ok(adminOnlyControlsIndex > adminModeControlIndex, "admin-only controls should be gated below admin mode");
+assert.ok(randomDiscardControlIndex > adminOnlyControlsIndex, "random discard should render with admin controls");
+assert.ok(randomDiscardControlIndex < sessionEndPrepIndex, "random discard should render before the round-end action");
+assert.ok(sessionEndPrepIndex > adminOnlyControlsIndex, "round-end action should render inside admin-only controls");
+assert.ok(kickHouseMenuButtonIndex > sessionEndPrepIndex, "kick house should render after the admin-only round-end action");
+assert.ok(randomDiscardControlIndex > adminSectionIndex && randomDiscardControlIndex < appSectionIndex, "random discard should stay inside the admin section");
+assert.ok(
+  randomDiscardPhaseGateIndex > -1 && randomDiscardPhaseGateIndex < randomDiscardControlIndex,
+  "random discard setting should only be enabled before the discard procedure starts",
+);
+assert.ok(
+  randomDiscardHandlerPhaseGuardIndex > -1,
+  "random discard handler should not send a mutation after the discard procedure starts",
+);
+assert.equal(perHouseKickButtonIndex, -1, "settings menu should not render one kick button per house");
+assert.ok(kickHouseDialogOpenStateIndex > -1 && kickHouseDialogRenderIndex > kickHouseDialogOpenStateIndex, "kick house action should open an app-level dialog");
+assert.ok(appSectionIndex > randomDiscardControlIndex, "app settings should follow admin controls");
 assert.ok(bgmVolumeHeadingIndex > settingsMenuIndex, "BGM controls should render inside the settings menu");
 assert.ok(bgmVolumeHeadingIndex > appSectionIndex, "BGM controls should render under the app settings label");
 assert.ok(bgmMuteButtonIndex > bgmVolumeHeadingIndex, "BGM mute should be an icon button in the volume heading");
@@ -648,16 +911,26 @@ for (const [key, label] of [
   ["adminSection", "관리자"],
   ["appSection", "앱 설정"],
   ["sessionEndPrep", "라운드 종료 준비"],
-  ["boardProcessingHistory", "유형별 정리 기록"],
-  ["bgmVolume", "BGM"],
+  ["boardProcessingHistory", "구성물 정리 기록"],
+  ["bgmVolume", "BGM 음량"],
   ["randomDiscard", "무작위 의제 폐기"],
+  ["kickHouseMenu", "가문 강퇴"],
+  ["kickHouseDialogTitle", "가문 강퇴"],
+  ["kickHouseConfirm", "강퇴 실행"],
   ["leaveCouncil", "의회 퇴장"],
   ["resetKingdom", "왕국 초기화"],
 ]) {
   assert.match(appKoSource, new RegExp(`${key}:\\s*"${label}"`), `settings label should remain exact: ${key}`);
 }
 
+assert.ok(kickHouseDialogSource.length > 0, "kick house dialog component should exist");
+assert.match(kickHouseDialogSource, /role="dialog"/, "kick house dialog should use dialog semantics");
+assert.match(kickHouseDialogSource, /aria-modal="true"/, "kick house dialog should be modal");
+assert.match(kickHouseDialogSource, /<select/, "kick house dialog should choose a house with a select dropdown");
+assert.match(kickHouseDialogSource, /onConfirm/, "kick house dialog should submit the selected house through a confirm handler");
+
 assert.match(packageJson.scripts?.test || "", /feature-slimdown\.test\.mts/);
+assert.match(packageJson.scripts?.test || "", /mention-helpers\.test\.mts/);
 assert.match(packageJson.scripts?.test || "", /secret-agenda-scoring\.test\.mts/);
 assert.match(packageJson.scripts?.test || "", /board-processing-api\.test\.mts/);
 assert.match(packageJson.scripts?.test || "", /board-processing-panel-render\.test\.tsx/);

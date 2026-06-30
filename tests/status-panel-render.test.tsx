@@ -140,6 +140,7 @@ const completePanelHtml = renderToStaticMarkup(
 assert.doesNotMatch(completePanelHtml, /<p class="section-label">의회 절차<\/p>/);
 assert.doesNotMatch(completePanelHtml, /<h2 id="stage-title">구성물 정리<\/h2>/);
 assert.doesNotMatch(completePanelHtml, /class="game-stage phase-complete"/);
+assert.doesNotMatch(completePanelHtml, /sidebar-status-section/);
 
 const entryStylesSource = readFileSync("src/styles/_05-entry-sidebar.scss", "utf8");
 assert.match(

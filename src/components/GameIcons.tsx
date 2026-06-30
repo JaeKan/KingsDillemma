@@ -47,6 +47,7 @@ import VpnKeyOutlinedIcon from "@mui/icons-material/VpnKeyOutlined";
 import WarningAmberOutlinedIcon from "@mui/icons-material/WarningAmberOutlined";
 import WorkspacePremiumOutlinedIcon from "@mui/icons-material/WorkspacePremiumOutlined";
 import { specialAbilityIconUrls } from "../resources/gameResources";
+import { resolvePublicAssetPath } from "../utils/public-assets";
 
 /** 리더 토큰 — 유니코드 주먹 (Raised Fist, U+270A) */
 const LEADER_FIST_EMOJI = "\u270A";
@@ -106,7 +107,7 @@ export function SpecialAbilityLegendIcon({ type }: { type: string }) {
 }
 
 function RulebookAbilityImage({ className, type }: { className: string; type: string }) {
-  const src = (specialAbilityIconUrls as any)[type];
+  const src = resolvePublicAssetPath((specialAbilityIconUrls as any)[type] || "");
 
   if (!src) {
     return null;

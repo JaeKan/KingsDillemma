@@ -44,7 +44,7 @@
   .inventory-panel.has-house-profile {
     align-items: stretch;
     grid-template-columns:
-      max-content minmax(276px, 0.78fr) minmax(0, 1.22fr);
+      max-content minmax(248px, 0.7fr) minmax(0, 1.3fr);
     grid-template-rows: auto minmax(0, 1fr) auto;
     grid-template-areas:
       "head head head"
@@ -65,7 +65,7 @@
   }
 
   .inventory-panel.has-house-profile .house-detail-section {
-    min-width: min(100%, 276px);
+    min-width: min(100%, 248px);
   }
 
   .inventory-panel.has-house-profile .resource-section > .inventory-counter-group {
@@ -408,7 +408,7 @@
   .inventory-panel.has-house-profile {
     align-items: stretch;
     grid-template-columns:
-      max-content minmax(276px, 0.78fr) minmax(0, 1.22fr);
+      max-content minmax(248px, 0.7fr) minmax(0, 1.3fr);
     grid-template-areas:
       "head head head"
       "resources house challenge"
@@ -416,7 +416,7 @@
   }
 
   .inventory-panel.has-house-profile .house-detail-section {
-    min-width: min(100%, 276px);
+    min-width: min(100%, 248px);
   }
 
   .inventory-grid,
@@ -440,13 +440,13 @@
   }
 
   .counter-icon {
-    width: 36px;
-    height: 36px;
+    width: 28px;
+    height: 28px;
   }
 
   .counter-icon svg {
-    width: 21px;
-    height: 21px;
+    width: 18px;
+    height: 18px;
   }
 
   .score-track-grid {
@@ -457,10 +457,10 @@
 
   .score-track-row {
     align-content: start;
-    grid-template-columns: minmax(82px, 0.34fr) minmax(0, 1fr);
-    gap: 7px;
+    grid-template-columns: minmax(70px, 0.3fr) minmax(0, 1fr);
+    gap: 5px;
     min-height: 0;
-    padding: 7px;
+    padding: 5px;
     background:
       radial-gradient(circle at 16% 24%, color-mix(in srgb, var(--tone, var(--gold-2)) 18%, transparent), transparent 34%),
       linear-gradient(180deg, rgba(234, 223, 189, 0.1), rgba(234, 223, 189, 0.045)),
@@ -468,20 +468,20 @@
   }
 
   .score-track-summary .counter-label {
-    font-size: 1.08rem;
+    font-size: 0.92rem;
   }
 
   .score-track-value {
-    font-size: 1.24rem;
+    font-size: 1.04rem;
   }
 
   .score-track-value span {
-    font-size: 0.66rem;
+    font-size: 0.58rem;
   }
 
   .score-track-controls .stepper-button {
-    width: 30px;
-    min-height: 30px;
+    width: 28px;
+    min-height: 28px;
   }
 
   .score-track-group {
@@ -497,8 +497,8 @@
   }
 
   .inventory-toolbar-actions button {
-    min-height: 40px;
-    font-size: 0.9rem;
+    min-height: 38px;
+    font-size: 0.86rem;
   }
 
   .action-card,

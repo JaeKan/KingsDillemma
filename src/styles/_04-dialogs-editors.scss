@@ -823,7 +823,7 @@
   position: fixed;
   left: var(--mention-left, 0);
   top: var(--mention-top, calc(100% + 6px));
-  z-index: 140;
+  z-index: 2147483300;
   display: grid;
   gap: 8px;
   width: min(360px, calc(100vw - var(--mention-left, 0px) - 8px));

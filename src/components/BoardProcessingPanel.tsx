@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { resourceCounters, ko } from "../resources/gameResources";
 import type {
   BoardProcessingHistory,
@@ -12,6 +13,7 @@ import type {
   RedactedHouse,
 } from "../types/game";
 import { TokenIcon } from "./GameIcons";
+import { MentionRenderedPreview, MentionTokenView, ValueMentionTextarea } from "./MentionUI";
 
 type BoardProcessingDraft = {
   type: BoardProcessingItemType;
@@ -40,13 +42,22 @@ type BoardProcessingPanelProps = {
   items: BoardProcessingItem[];
   mode?: "full" | "history" | "input";
   mutate: (body: Record<string, unknown>) => Promise<{ ok?: boolean; error?: string } | undefined>;
+  onOpenHistoryItem?: (item: BoardProcessingItem, trigger: HTMLButtonElement) => void;
 };
 
-const boardProcessingTypes: BoardProcessingItemType[] = ["chronicle", "envelope", "story", "event", "mystery", "note"];
+export const boardProcessingTypes: BoardProcessingItemType[] = ["chronicle", "envelope", "story", "event", "mystery", "note"];
 const campaignCardStatuses: CampaignCardStatus[] = ["active", "completed", "archived"];
 const recordPhotoLimit = 3;
 const recordPhotoDataUrlLimit = 1_200_000;
 const recordPhotoMimeTypes = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
+
+function renderBoardProcessingOverlay(overlay: React.ReactElement) {
+  if (typeof document === "undefined") {
+    return overlay;
+  }
+
+  return createPortal(overlay, document.body);
+}
 
 function createBoardProcessingDraft(currentHouseId?: HouseId | null): BoardProcessingDraft {
   return {
@@ -77,17 +88,21 @@ export default function BoardProcessingPanel({
   items,
   mode = "full",
   mutate,
+  onOpenHistoryItem,
 }: BoardProcessingPanelProps) {
   const [draft, setDraft] = useState<BoardProcessingDraft>(() => createBoardProcessingDraft(currentHouseId));
   const [editorOpen, setEditorOpen] = useState(false);
   const [statusText, setStatusText] = useState("");
   const [statusTone, setStatusTone] = useState<"idle" | "success" | "error">("idle");
+  const [selectedHistoryItem, setSelectedHistoryItem] = useState<BoardProcessingItem | null>(null);
   const editorButtonRef = useRef<HTMLButtonElement>(null);
+  const historyItemButtonRef = useRef<HTMLButtonElement>(null);
   const groupedItems = useMemo(() => groupBoardProcessingItems(items, history), [history, items]);
   const currentTypeLabel = ko.boardProcessing.typeLabels[draft.type];
   const canSaveItems = Boolean(currentHouseId && canManageBoardProcessing);
   const showInput = mode !== "history";
   const showHistory = mode !== "input";
+  const isInputOnly = mode === "input";
 
   const updateDraft = (patch: Partial<BoardProcessingDraft>) => {
     setDraft((current) => ({ ...current, ...patch }));
@@ -101,6 +116,10 @@ export default function BoardProcessingPanel({
 
   const closeEditor = useCallback(() => {
     setEditorOpen(false);
+  }, []);
+
+  const closeHistoryItem = useCallback(() => {
+    setSelectedHistoryItem(null);
   }, []);
 
   if (showInput && !canSaveItems) {
@@ -218,34 +237,60 @@ export default function BoardProcessingPanel({
       return;
     }
 
+    if (selectedHistoryItem?.id === item.id) {
+      setSelectedHistoryItem(null);
+    }
+
     setStatusText("");
     setStatusTone("idle");
   };
 
+  const openHistoryItem = (item: BoardProcessingItem, trigger: HTMLButtonElement) => {
+    if (onOpenHistoryItem) {
+      onOpenHistoryItem(item, trigger);
+      return;
+    }
+
+    historyItemButtonRef.current = trigger;
+    setSelectedHistoryItem(item);
+  };
+
+  const editorButton = (
+    <button
+      ref={editorButtonRef}
+      className="primary-button board-processing-add-cta"
+      type="button"
+      onClick={openEditor}
+      disabled={busy || !canSaveItems}
+    >
+      <span className="board-processing-add-cta-icon" aria-hidden="true">
+        <TokenIcon type="plus" />
+      </span>
+      <span className="board-processing-add-cta-copy">
+        <strong>{ko.boardProcessing.openEditor}</strong>
+        <small>{ko.boardProcessing.openEditorHint}</small>
+      </span>
+    </button>
+  );
+
   return (
     <section
       className={`board-processing-panel board-processing-panel--${mode}`}
-      aria-labelledby={showInput ? "board-processing-title" : "board-processing-history-title"}
+      aria-label={isInputOnly ? ko.boardProcessing.openEditor : undefined}
+      aria-labelledby={!isInputOnly ? (showInput ? "board-processing-title" : "board-processing-history-title") : undefined}
     >
       {showInput ? (
-        <header className="board-processing-header">
-          <div>
-            <p className="section-label">{ko.boardProcessing.section}</p>
-            <h2 id="board-processing-title">{ko.boardProcessing.title}</h2>
-          </div>
-          <div className="board-processing-actions">
-            <button
-              ref={editorButtonRef}
-              className="primary-button"
-              type="button"
-              onClick={openEditor}
-              disabled={busy || !canSaveItems}
-            >
-              <TokenIcon type="plus" />
-              {ko.boardProcessing.openEditor}
-            </button>
-          </div>
-        </header>
+        isInputOnly ? (
+          <div className="board-processing-actions board-processing-actions--input-only">{editorButton}</div>
+        ) : (
+          <header className="board-processing-header">
+            <div>
+              <p className="section-label">{ko.boardProcessing.section}</p>
+              <h2 id="board-processing-title">{ko.boardProcessing.title}</h2>
+            </div>
+            <div className="board-processing-actions">{editorButton}</div>
+          </header>
+        )
       ) : null}
 
       {statusText && (!editorOpen || !showInput) ? (
@@ -260,19 +305,11 @@ export default function BoardProcessingPanel({
             <div className="board-processing-section-head">
               <h3 id="board-processing-history-title">{ko.boardProcessing.historyTitle}</h3>
             </div>
-            <div className="board-processing-history-grid">
-              {boardProcessingTypes.map((type) => (
-                <HistorySection
-                  busy={busy}
-                  canDelete={canSaveItems}
-                  items={groupedItems[type]}
-                  key={type}
-                  onDelete={handleDelete}
-                  title={ko.boardProcessing.typeLabels[type]}
-                  type={type}
-                />
-              ))}
-            </div>
+            <BoardProcessingHistoryList
+              busy={busy}
+              groupedItems={groupedItems}
+              onOpenItem={openHistoryItem}
+            />
           </section>
         </div>
       ) : null}
@@ -294,6 +331,15 @@ export default function BoardProcessingPanel({
           statusTone={statusTone}
         />
       ) : null}
+      <BoardProcessingRecordDialog
+        busy={busy}
+        canDelete={canSaveItems}
+        houses={houses}
+        item={selectedHistoryItem}
+        onClose={closeHistoryItem}
+        onDelete={handleDelete}
+        restoreFocusRef={historyItemButtonRef}
+      />
     </section>
   );
 }
@@ -393,7 +439,7 @@ function BoardProcessingEditorDialog({
     return null;
   }
 
-  return (
+  const overlay = (
     <div className="session-end-overlay" role="presentation">
       <section
         ref={dialogRef}
@@ -430,28 +476,28 @@ function BoardProcessingEditorDialog({
 
             <BoardProcessingFields busy={busy} draft={draft} houses={houses} onChange={onChange} />
 
-            <label className="board-processing-field board-processing-field--full">
-              <span>{ko.boardProcessing.noteLabel}</span>
-              <textarea
-                value={draft.note}
-                onChange={(event) => onChange({ note: event.target.value })}
-                disabled={busy}
-                placeholder={ko.boardProcessing.notePlaceholder}
-                rows={3}
-              />
-            </label>
+            <MentionTextField
+              label={ko.boardProcessing.noteLabel}
+              value={draft.note}
+              houses={houses}
+              onChange={(note) => onChange({ note })}
+              placeholder={ko.boardProcessing.notePlaceholder}
+              busy={busy}
+              rows={3}
+              full
+            />
 
             {draft.type === "note" ? (
-              <label className="board-processing-field board-processing-field--full">
-                <span>{ko.boardProcessing.textLabel}</span>
-                <textarea
-                  value={draft.text}
-                  onChange={(event) => onChange({ text: event.target.value })}
-                  disabled={busy}
-                  placeholder={ko.boardProcessing.textPlaceholder}
-                  rows={4}
-                />
-              </label>
+              <MentionTextField
+                label={ko.boardProcessing.textLabel}
+                value={draft.text}
+                houses={houses}
+                onChange={(text) => onChange({ text })}
+                placeholder={ko.boardProcessing.textPlaceholder}
+                busy={busy}
+                rows={4}
+                full
+              />
             ) : null}
 
             <PhotoAttachmentField
@@ -479,6 +525,8 @@ function BoardProcessingEditorDialog({
       </section>
     </div>
   );
+
+  return renderBoardProcessingOverlay(overlay);
 }
 
 function PhotoAttachmentField({
@@ -538,6 +586,151 @@ function PhotoAttachmentField({
         </div>
       ) : null}
     </section>
+  );
+}
+
+type BoardProcessingRecordDialogProps = {
+  busy: boolean;
+  canDelete: boolean;
+  houses?: RedactedHouse[];
+  item: BoardProcessingItem | null;
+  onClose: () => void;
+  onDelete: (item: BoardProcessingItem) => void;
+  restoreFocusRef: React.RefObject<HTMLButtonElement | null>;
+};
+
+export function BoardProcessingRecordDialog({
+  busy,
+  canDelete,
+  houses = [],
+  item,
+  onClose,
+  onDelete,
+  restoreFocusRef,
+}: BoardProcessingRecordDialogProps) {
+  const dialogRef = useRef<HTMLElement>(null);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const open = Boolean(item);
+
+  useEffect(() => {
+    if (!open) {
+      return undefined;
+    }
+
+    const focusRestoreEl = restoreFocusRef.current;
+    const focusCloseButton = window.setTimeout(() => {
+      closeButtonRef.current?.focus();
+    }, 0);
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        onClose();
+        return;
+      }
+
+      if (event.key !== "Tab" || !dialogRef.current) {
+        return;
+      }
+
+      const focusable = Array.from(
+        dialogRef.current.querySelectorAll(
+          'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        ),
+      ).filter((element) => element instanceof HTMLElement && element.getClientRects().length > 0) as HTMLElement[];
+
+      if (!focusable.length) {
+        event.preventDefault();
+        return;
+      }
+
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+
+    document.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      window.clearTimeout(focusCloseButton);
+      document.removeEventListener("keydown", handleKeyDown);
+      window.setTimeout(() => {
+        focusRestoreEl?.focus();
+      }, 0);
+    };
+  }, [onClose, open, restoreFocusRef]);
+
+  if (!item) {
+    return null;
+  }
+
+  const title = getEntryTitle(item);
+
+  const overlay = (
+    <div className="session-end-overlay" role="presentation">
+      <section
+        ref={dialogRef}
+        className="board-processing-dialog board-processing-record-dialog board-processing-record-dialog--wide"
+        aria-labelledby="board-processing-record-dialog-title"
+        aria-modal="true"
+        role="dialog"
+      >
+        <div className="session-end-heading">
+          <span className="session-end-seal" aria-hidden="true">
+            <TokenIcon type="history" />
+          </span>
+          <div>
+            <p className="section-label">{ko.boardProcessing.historyTitle}</p>
+            <h2 id="board-processing-record-dialog-title">{title}</h2>
+          </div>
+        </div>
+        <div className="board-processing-record-dialog-summary">
+          <span>{ko.boardProcessing.typeLabels[item.type]}</span>
+          <span>{ko.boardProcessing.recordedBy(item.createdByName || ko.common.houseFallback, formatLocalDateTime(item.createdAt))}</span>
+        </div>
+        <div className="board-processing-record-dialog-body">
+          <BoardProcessingRecordArticle houses={houses} item={item} />
+        </div>
+        <div className="score-guide-actions">
+          <button ref={closeButtonRef} className="secondary-button" type="button" onClick={onClose}>
+            {ko.common.close}
+          </button>
+          <button className="secondary-button danger-button" type="button" onClick={() => onDelete(item)} disabled={busy || !canDelete}>
+            <TokenIcon type="trash" />
+            {ko.common.delete}
+          </button>
+        </div>
+      </section>
+    </div>
+  );
+
+  return renderBoardProcessingOverlay(overlay);
+}
+
+export function BoardProcessingRecordArticle({ houses = [], item }: { houses?: RedactedHouse[]; item: BoardProcessingItem }) {
+  return (
+    <article className="board-processing-entry board-processing-entry--dialog">
+      <div className="board-processing-entry-head">
+        <strong>{ko.boardProcessing.typeLabels[item.type]}</strong>
+      </div>
+      <p>{ko.boardProcessing.recordedBy(item.createdByName || ko.common.houseFallback, formatLocalDateTime(item.createdAt))}</p>
+      <dl>{getEntryMeta(item).map(([label, value]) => value ? (
+        <React.Fragment key={label}>
+          <dt>{label}</dt>
+          <dd><MentionTokenView houses={houses} text={value} /></dd>
+        </React.Fragment>
+      ) : null)}</dl>
+      {item.note ? <p className="board-processing-entry-note"><MentionTokenView houses={houses} text={item.note} /></p> : null}
+      {item.text ? <p className="board-processing-entry-note"><MentionTokenView houses={houses} text={item.text} /></p> : null}
+      {item.photos?.length ? <PhotoPreviewList photos={item.photos} /> : null}
+    </article>
   );
 }
 
@@ -610,12 +803,14 @@ function BoardProcessingFields({
         {draft.type === "story" ? (
           <>
             <SignerSelect value={draft.signedByHouseId} houses={houses} onChange={(signedByHouseId) => onChange({ signedByHouseId })} busy={busy} />
-            <TextField
+            <MentionTextField
               label={ko.boardProcessing.signerBonusLabel}
               value={draft.signerBonusText}
+              houses={houses}
               onChange={(signerBonusText) => onChange({ signerBonusText })}
               placeholder={ko.boardProcessing.signerBonusPlaceholder}
               busy={busy}
+              multiline={false}
             />
           </>
         ) : null}
@@ -724,18 +919,101 @@ function TextField({
   );
 }
 
+type BoardProcessingHistoryListProps = {
+  busy: boolean;
+  groupedItems?: BoardProcessingHistory;
+  history?: Partial<BoardProcessingHistory>;
+  items?: BoardProcessingItem[];
+  onOpenItem: (item: BoardProcessingItem, trigger: HTMLButtonElement) => void;
+  showEmptySections?: boolean;
+};
+
+export function BoardProcessingHistoryList({
+  busy,
+  groupedItems,
+  history,
+  items = [],
+  onOpenItem,
+  showEmptySections = true,
+}: BoardProcessingHistoryListProps) {
+  const resolvedGroupedItems = useMemo(
+    () => groupedItems || groupBoardProcessingItems(items, history),
+    [groupedItems, history, items],
+  );
+  const visibleTypes = boardProcessingTypes.filter((type) => showEmptySections || resolvedGroupedItems[type].length);
+
+  if (!visibleTypes.length) {
+    return <p className="board-processing-empty">{ko.boardProcessing.emptyHistory}</p>;
+  }
+
+  return (
+    <div className="board-processing-history-grid">
+      {visibleTypes.map((type) => (
+        <HistorySection
+          busy={busy}
+          items={resolvedGroupedItems[type]}
+          key={type}
+          onOpenItem={onOpenItem}
+          title={ko.boardProcessing.typeLabels[type]}
+          type={type}
+        />
+      ))}
+    </div>
+  );
+}
+
+function MentionTextField({
+  busy,
+  full = false,
+  houses,
+  label,
+  multiline = true,
+  onChange,
+  placeholder,
+  rows,
+  value,
+}: {
+  busy: boolean;
+  full?: boolean;
+  houses: RedactedHouse[];
+  label: string;
+  multiline?: boolean;
+  onChange: (value: string) => void;
+  placeholder: string;
+  rows?: number;
+  value: string;
+}) {
+  return (
+    <label className={`board-processing-field${full ? " board-processing-field--full" : ""}`}>
+      <span>{label}</span>
+      <ValueMentionTextarea
+        value={value}
+        houses={houses}
+        multiline={multiline}
+        onChange={(event) => onChange((event.target as HTMLTextAreaElement | HTMLInputElement).value)}
+        disabled={busy}
+        placeholder={placeholder}
+        rows={rows}
+      />
+      <MentionRenderedPreview
+        text={value}
+        houses={houses}
+        wrapperClassName="board-processing-mention-preview"
+      />
+    </label>
+  );
+}
+
 function HistorySection({
   busy,
-  canDelete,
   items,
-  onDelete,
+  onOpenItem,
   title,
   type,
 }: {
   busy: boolean;
-  canDelete: boolean;
   items: BoardProcessingItem[];
-  onDelete: (item: BoardProcessingItem) => void;
+  onOpenItem: (item: BoardProcessingItem, trigger: HTMLButtonElement) => void;
   title: string;
   type: BoardProcessingItemType;
 }) {
@@ -748,30 +1026,22 @@ function HistorySection({
       {items.length ? (
         <div className="board-processing-entry-list">
           {items.map((item) => (
-            <article className="board-processing-entry" key={item.id}>
-              <div className="board-processing-entry-head">
+            <button
+              className="board-processing-entry-menu-button"
+              type="button"
+              key={item.id}
+              onClick={(event) => onOpenItem(item, event.currentTarget)}
+              disabled={busy}
+            >
+              <span className="board-processing-entry-menu-main">
                 <strong>{getEntryTitle(item)}</strong>
-                <button
-                  className="ghost-button icon-button danger-button"
-                  type="button"
-                  onClick={() => onDelete(item)}
-                  disabled={busy || !canDelete}
-                  aria-label={`${getEntryTitle(item)} ${ko.common.delete}`}
-                >
-                  <TokenIcon type="trash" />
-                </button>
-              </div>
-              <p>{ko.boardProcessing.recordedBy(item.createdByName || ko.common.houseFallback, formatLocalDateTime(item.createdAt))}</p>
-              <dl>{getEntryMeta(item).map(([label, value]) => value ? (
-                <React.Fragment key={label}>
-                  <dt>{label}</dt>
-                  <dd>{value}</dd>
-                </React.Fragment>
-              ) : null)}</dl>
-              {item.note ? <p className="board-processing-entry-note">{item.note}</p> : null}
-              {item.text ? <p className="board-processing-entry-note">{item.text}</p> : null}
-              {item.photos?.length ? <PhotoPreviewList photos={item.photos} /> : null}
-            </article>
+                <small>{ko.boardProcessing.recordedBy(item.createdByName || ko.common.houseFallback, formatLocalDateTime(item.createdAt))}</small>
+              </span>
+              <span className="board-processing-entry-menu-meta">
+                {getEntrySummary(item) || title}
+              </span>
+              <TokenIcon type="external" />
+            </button>
           ))}
         </div>
       ) : (
@@ -781,7 +1051,7 @@ function HistorySection({
   );
 }
 
-function groupBoardProcessingItems(
+export function groupBoardProcessingItems(
   items: BoardProcessingItem[],
   history?: Partial<BoardProcessingHistory>,
 ): BoardProcessingHistory {
@@ -899,7 +1169,7 @@ function getValidationMessage(draft: BoardProcessingDraft): string {
   return "";
 }
 
-function getEntryTitle(item: BoardProcessingItem): string {
+export function getEntryTitle(item: BoardProcessingItem): string {
   if (item.type === "chronicle") {
     return item.stickerCode || ko.boardProcessing.typeLabels.chronicle;
   }
@@ -954,6 +1224,13 @@ function getEntryMeta(item: BoardProcessingItem): [string, string | undefined][]
   return [];
 }
 
+export function getEntrySummary(item: BoardProcessingItem): string {
+  return getEntryMeta(item)
+    .map(([label, value]) => (value ? `${label} ${value}` : ""))
+    .filter(Boolean)
+    .join(" · ");
+}
+
 function getResourceLabel(resourceId: string | undefined): string | undefined {
   return resourceCounters.find((resource) => resource.id === resourceId)?.label || resourceId;
 }
@@ -963,7 +1240,7 @@ function getHouseName(houses: RedactedHouse[], houseId: HouseId): string | undef
   return house?.koreanTitle || house?.name || houseId;
 }
 
-function formatLocalDateTime(value: string): string {
+export function formatLocalDateTime(value: string): string {
   if (!value) {
     return ko.common.notSpecified;
   }

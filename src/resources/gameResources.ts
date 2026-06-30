@@ -7,7 +7,7 @@ export const phaseLabels = {
 
 export const phaseCopy = {
   "house-select": "이번 회의에 참여할 5개 가문을 정합니다.",
-  discard: "첫 차례 가문이 보인 의제 1장을 폐기하고 드래프트를 시작합니다.",
+  discard: "첫 차례 가문이 공개된 비밀 의제 1장을 폐기하고 드래프트를 시작합니다.",
   choose: "차례가 된 가문만 자신의 비밀 의제를 확인합니다.",
   complete: "리더와 중재자가 지정한 값으로 이번 라운드의 딜레마를 작성합니다.",
 };
@@ -99,13 +99,6 @@ export const dilemmaPhotoMaxDimension = 1280;
 export const dilemmaPhotoQuality = 0.78;
 export const dilemmaPhotoAllowedTypes = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
 
-export const dilemmaOutcomeLabels = {
-  "": "미정",
-  aye: "찬성",
-  nay: "반대",
-};
-export const dilemmaResourceDeltaLimit = 9;
-
 export const tokenCounters = [
   { id: "coins", label: "코인", max: 99, icon: "coin", tone: "coin" },
   { id: "powerTokens", label: "권력", max: 99, icon: "power", tone: "power" },
@@ -147,16 +140,34 @@ export const resourceCounters = [
   { id: "knowledge", label: "지식", max: 17, icon: "knowledge", tone: "knowledge" },
 ];
 
-export const dilemmaResultMarkers = [
-  ...resourceCounters,
-  { id: "story", label: "스토리", max: 1, icon: "story", tone: "story" },
-] as const;
-
 export const valueMentionAmountMax = 99;
+const kingdomStateMentionItems = [
+  {
+    id: "stability",
+    label: "안정도 트랙",
+    aliases: ["안정도 마커", "안정도"],
+    max: 17,
+    icon: "balance",
+    tone: "stability",
+    category: "왕국 상태",
+    requiresAmount: false,
+    searchText: "안정도 트랙 안정도 마커 안정도",
+  },
+  {
+    id: "momentum",
+    label: "모멘텀",
+    max: 9,
+    icon: "turn",
+    tone: "momentum",
+    category: "왕국 상태",
+    requiresAmount: false,
+  },
+];
 export const valueMentionItems = [
   ...tokenCounters.map((counter) => ({ ...counter, category: "가문 값" })),
   ...scoreTrackCounters.map((counter) => ({ ...counter, category: "가문 값" })),
   ...resourceCounters.map((counter) => ({ ...counter, category: "왕국 자원", requiresAmount: false })),
+  ...kingdomStateMentionItems,
 ];
 
 export const houseMentionItems = HOUSE_CATALOG.map((house: any) => ({
@@ -381,7 +392,7 @@ export const mainScoreGuideContent = {
   sealToken: "balance" as const,
   title: "점수 산정 방식",
   copy:
-    "왕이 사망하거나 안정도 트랙 끝에 도달해 게임이 종료되면 점수를 계산합니다. 중간 저장으로 세션만 멈춘 경우에는 점수를 산정하지 않습니다.",
+    "왕이 사망하거나 안정도 트랙 끝에 도달해 게임이 종료되면 점수를 계산합니다. 중간 저장으로 라운드만 멈춘 경우에는 점수를 산정하지 않습니다.",
   formulaAriaLabel: "최종 득점 공식",
   formula: [
     { kind: "item" as const, text: "비밀 의제: 자원 목표 + 코인 순위" },

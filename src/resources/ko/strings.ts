@@ -29,7 +29,7 @@ export const ko = {
     inputTitle: "정리 내용",
     historyTitle: "유형별 정리 기록",
     adminOnly: "구성물 정리 기록은 관리자만 저장하거나 삭제할 수 있습니다.",
-    openEditor: "정리 기록 추가",
+    openEditor: "구성물 정리 기록 추가",
     editorDialogTitle: "구성물 정리 기록 추가",
     closeEditor: "입력 닫기",
     guideTitle: "구성물 정리 안내",
@@ -120,6 +120,9 @@ export const ko = {
     photoTooLarge: "사진 파일이 너무 큽니다.",
     photoUnsupported: "PNG, JPG, WebP, GIF 사진만 첨부할 수 있습니다.",
     save: "기록 저장",
+    openEditorHint: "처리한 구성물과 사진을 새 기록으로 남깁니다.",
+    typeHistoryCount: (count: number) => `총 ${count}건`,
+    selectedRecord: "선택 기록",
     saving: "저장 중",
     saveOk: "구성물 정리 기록을 저장했습니다.",
     saveFail: "구성물 정리 기록을 저장하지 못했습니다.",
@@ -295,9 +298,9 @@ export const ko = {
       `${n}개 가문이 더 선택하면 명망이 낮은 가문부터 비밀 의제 드래프트를 시작합니다. 명망 동률에서는 가문 번호가 높은 쪽이 더 높은 명망이므로 낮은 번호가 먼저입니다.`,
     seatsFull: "좌석이 모두 찼습니다. 첫 가문이 의제 폐기를 시작합니다.",
     discardRandom: (name: string) =>
-      `${name} 차례입니다. 보이는 6장 중 1장을 무작위로 폐기하고 남은 의제를 받습니다.`,
+      `${name} 차례입니다. 공개된 비밀 의제 6장 중 1장을 무작위로 폐기하고 남은 의제를 받습니다.`,
     discardPick: (name: string) =>
-      `${name} 차례입니다. 보이는 6장 중 폐기할 의제 1장을 직접 고르세요.`,
+      `${name} 차례입니다. 공개된 비밀 의제 6장 중 폐기할 의제 1장을 직접 고르세요.`,
     chooseSecret: (name: string) => `${name} 차례입니다. 남은 비밀 의제 중 하나를 고르세요.`,
     choiceDone: "선택 완료. 다른 가문의 차례에는 남은 의제가 보이지 않습니다.",
     waitingTurn: (self: string, turn: string) =>

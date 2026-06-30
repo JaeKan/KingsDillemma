@@ -15,7 +15,7 @@
     "docker:down": "docker compose down",
     "build": "vite build",
     "start": "tsx server/index.mts",
-    "test": "tsx tests/app-base-path.test.mts && tsx tests/bgm-volume.test.mts && tsx tests/feature-slimdown.test.mts && tsx tests/secret-agenda-scoring.test.mts && tsx tests/board-processing-api.test.mts && tsx tests/board-processing-panel-render.test.tsx && tsx tests/status-panel-render.test.tsx && tsx tests/council-layout-render.test.tsx",
+    "test": "tsx tests/app-base-path.test.mts && tsx tests/bgm-volume.test.mts && tsx tests/agenda-focus.test.mts && tsx tests/mention-helpers.test.mts && tsx tests/feature-slimdown.test.mts && tsx tests/secret-agenda-scoring.test.mts && tsx tests/board-processing-api.test.mts && tsx tests/board-processing-panel-render.test.tsx && tsx tests/status-panel-render.test.tsx && tsx tests/council-layout-render.test.tsx",
     "mysql:import": "tsx scripts/import-state-to-mysql.mts",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",

@@ -20,11 +20,14 @@ const AchievementEditDialog = React.lazy(() => import("./components/AchievementE
 const SpecialAbilityLegendDialog = React.lazy(() => import("./components/SpecialAbilityLegendDialog"));
 const SecretAgendaScoreDialog = React.lazy(() => import("./components/ScoreGuides").then(m => ({ default: m.SecretAgendaScoreDialog })));
 const BoardProcessingGuideDialog = React.lazy(() => import("./components/BoardProcessingGuideDialog"));
-const BoardProcessingHistoryDialog = React.lazy(() => import("./components/BoardProcessingHistoryDialog"));
+const BoardProcessingHistoryMenu = React.lazy(() => import("./components/BoardProcessingHistoryMenu"));
+const BoardProcessingTypeHistoryDialog = React.lazy(() => import("./components/BoardProcessingTypeHistoryDialog"));
 const BoardProcessingPanel = React.lazy(() => import("./components/BoardProcessingPanel"));
+const KickHouseDialog = React.lazy(() => import("./components/KickHouseDialog"));
 
 import { MentionTokenView } from "./components/MentionUI";
 import { AchievementEffectMemo } from "./components/AchievementUI";
+import { isAgendaWindowFocused, useAgendaWindowFocus } from "./app/agendaFocus";
 
 // Feature components
 const CouncilStatusStack = React.lazy(() => import("./components/CouncilStatusUI").then(m => ({ default: m.CouncilStatusStack })));
@@ -80,6 +83,8 @@ import {
   getCouncilProcedureTitle,
 } from "./utils/house-helpers";
 import { clampBgmVolumeValue, getBgmDisplayVolumePercent, getBgmUnmutedVolume } from "./utils/bgm-volume";
+import { resolvePublicAssetPath } from "./utils/public-assets";
+import type { BoardProcessingItem, BoardProcessingItemType } from "./types/game";
 function CarrotWaitAction() {
   const shakeRef = useRef<(() => void) | null>(null);
   const loadRef = useRef<Promise<void> | null>(null);
@@ -196,6 +201,8 @@ function App() {
   const [specialAbilityLegendOpen, setSpecialAbilityLegendOpen] = useState(false);
   const [boardProcessingGuideOpen, setBoardProcessingGuideOpen] = useState(false);
   const [boardProcessingHistoryOpen, setBoardProcessingHistoryOpen] = useState(false);
+  const [selectedBoardProcessingHistoryType, setSelectedBoardProcessingHistoryType] = useState<BoardProcessingItemType | null>(null);
+  const [kickHouseDialogOpen, setKickHouseDialogOpen] = useState(false);
   const [bgmMuted, setBgmMuted] = useState(readStoredBgmMuted);
   const [bgmVolume, setBgmVolume] = useState(readStoredBgmVolume);
   const finalScoringRequest = useRef(0);
@@ -207,13 +214,16 @@ function App() {
   const specialAbilityLegendButtonRef = useRef(null);
   const boardProcessingGuideToggleRef = useRef(null);
   const boardProcessingHistoryToggleRef = useRef(null);
+  const boardProcessingHistoryTypeRef = useRef<HTMLButtonElement | null>(null);
+  const kickHouseToggleRef = useRef(null);
   const latestAgendaVersionRef = useRef(0);
   const finalBoardComplete = useMemo(() => isFinalBoardDraftComplete(finalBoardDraft), [finalBoardDraft]);
   const sessionEndChecklistComplete = useMemo(
     () => sessionEndChecklistItems.every((item) => sessionEndChecklist[item.id]),
     [sessionEndChecklist],
   );
-  const agendaQuery = useAgendaStateQuery(setError);
+  const agendaWindowFocused = useAgendaWindowFocus();
+  const agendaQuery = useAgendaStateQuery(setError, agendaWindowFocused);
   const { busy, mutate, mutationInFlight } = useAgendaMutations(setError);
   const refresh = useAgendaRefresh(setError, mutationInFlight);
   const apiRequest = useCallback((options = {}) => agendaRequest(options), []);
@@ -222,6 +232,8 @@ function App() {
   const admin = Boolean(agendaQuery.data?.admin || state?.isAdmin);
   const spectator = Boolean(agendaQuery.data?.spectator);
   const realtimeEnabled = Boolean(agendaQuery.data?.realtimeEnabled);
+  const canManageBoardProcessingHistory = Boolean(state?.phase === "complete" && state.isAdmin);
+  const canDeleteBoardProcessingHistoryItem = Boolean(canManageBoardProcessingHistory && state?.currentHouseId);
   const sessionStatus = agendaQuery.isPending ? "checking" : "ready";
   const parallelAgendaSessionParam =
     typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("session") ?? "" : "";
@@ -233,6 +245,7 @@ function App() {
   useEffect(() => {
     if (
       !realtimeEnabled ||
+      !agendaWindowFocused ||
       (!authenticated && !admin && state?.phase === "house-select") ||
       sessionStatus === "checking" ||
       sessionEndDialogOpen
@@ -262,7 +275,7 @@ function App() {
     const runRefresh = () => {
       clearRefreshTimer();
 
-      if (document.visibilityState !== "visible") {
+      if (!isAgendaWindowFocused()) {
         return;
       }
 
@@ -292,7 +305,7 @@ function App() {
 
       pendingVersion = Math.max(pendingVersion, version);
 
-      if (document.visibilityState !== "visible") {
+      if (!isAgendaWindowFocused()) {
         return;
       }
 
@@ -326,6 +339,7 @@ function App() {
   }, [
     authenticated,
     admin,
+    agendaWindowFocused,
     mutationInFlight,
     parallelAgendaSessionParam,
     realtimeEnabled,
@@ -513,9 +527,30 @@ function App() {
     setSessionEndDialogOpen(true);
   };
 
-  const handleKickSession = async (houseId: any) => {
-    await mutate({ action: "kickSession", houseId });
-  };
+  const handleKickSession = useCallback(
+    async (houseId: string) => mutate({ action: "kickSession", houseId }),
+    [mutate],
+  );
+
+  const handleOpenKickHouseDialog = useCallback(() => {
+    setKickHouseDialogOpen(true);
+    setSettingsOpen(false);
+  }, []);
+
+  const handleCloseKickHouseDialog = useCallback(() => {
+    setKickHouseDialogOpen(false);
+  }, []);
+
+  const handleConfirmKickHouse = useCallback(
+    async (houseId: string) => {
+      const result = await handleKickSession(houseId);
+
+      if (result) {
+        setKickHouseDialogOpen(false);
+      }
+    },
+    [handleKickSession],
+  );
 
   const handleFinalBoardChange = (resourceId: any, value: any) => {
     setFinalBoardDraft((current) => ({
@@ -606,17 +641,20 @@ function App() {
 
   const handleToggleSettings = useCallback(() => {
     setTipsOpen(false);
+    setBoardProcessingHistoryOpen(false);
     setSettingsOpen((current) => !current);
   }, []);
 
   const handleToggleTips = useCallback(() => {
     setSettingsOpen(false);
+    setBoardProcessingHistoryOpen(false);
     setTipsOpen((current) => !current);
   }, []);
 
   const closeFloatingMenus = useCallback(() => {
     setSettingsOpen(false);
     setTipsOpen(false);
+    setBoardProcessingHistoryOpen(false);
   }, []);
 
   const handleOpenScoreGuide = useCallback((event?: any) => {
@@ -670,15 +708,45 @@ function App() {
     setBoardProcessingGuideOpen(false);
   }, []);
 
-  const handleOpenBoardProcessingHistory = useCallback(() => {
-    boardProcessingHistoryToggleRef.current = settingsToggleRef.current;
+  const handleOpenBoardProcessingHistory = useCallback((event?: any) => {
+    boardProcessingHistoryToggleRef.current = event?.currentTarget || settingsToggleRef.current;
+    setSettingsOpen(false);
+    setTipsOpen(false);
+    setBoardProcessingHistoryOpen((current) => !current);
+  }, []);
+
+  const handleOpenBoardProcessingHistoryType = useCallback((type: BoardProcessingItemType, trigger: HTMLButtonElement) => {
+    boardProcessingHistoryTypeRef.current = boardProcessingHistoryToggleRef.current || trigger;
     closeFloatingMenus();
-    setBoardProcessingHistoryOpen(true);
+    setSelectedBoardProcessingHistoryType(type);
   }, [closeFloatingMenus]);
 
-  const handleCloseBoardProcessingHistory = useCallback(() => {
-    setBoardProcessingHistoryOpen(false);
+  const handleCloseBoardProcessingHistoryType = useCallback(() => {
+    setSelectedBoardProcessingHistoryType(null);
   }, []);
+
+  const handleDeleteBoardProcessingHistoryItem = useCallback(async (item: BoardProcessingItem) => {
+    if (!canDeleteBoardProcessingHistoryItem) {
+      setError(ko.boardProcessing.adminOnly);
+      return false;
+    }
+
+    if (!window.confirm(ko.boardProcessing.confirmDelete)) {
+      return false;
+    }
+
+    const result = (await mutate({ action: "deleteBoardProcessingItem", itemId: item.id })) as {
+      error?: string;
+      ok?: boolean;
+    } | null;
+
+    if (result?.ok === false) {
+      setError(result.error || ko.boardProcessing.deleteFail);
+      return false;
+    }
+
+    return true;
+  }, [canDeleteBoardProcessingHistoryItem, mutate]);
 
   const handleToggleBgmMuted = useCallback(() => {
     const nextMuted = !bgmMuted;
@@ -727,7 +795,7 @@ function App() {
   }, []);
 
   const handleToggleRandomDiscard = useCallback(() => {
-    if (!state) {
+    if (!state || state.phase !== "house-select") {
       return;
     }
 
@@ -760,7 +828,7 @@ function App() {
   return (
     <main className={`app-shell ${routeClass}`}>
       <DecorativeBackdrop />
-      <audio ref={bgmAudioRef} src={bgmSource} loop preload="auto" aria-hidden="true" />
+      <audio ref={bgmAudioRef} src={resolvePublicAssetPath(bgmSource)} loop preload="auto" aria-hidden="true" />
       <header className="app-header" aria-label={ko.app.header.game}>
         <BrandLockup />
       </header>
@@ -772,27 +840,26 @@ function App() {
           bgmMuted={bgmMuted}
           bgmVolume={bgmVolume}
           busy={busy}
-          canEndSession={Boolean((authenticated || admin) && state?.phase === "complete")}
-          canToggleRandomDiscard={Boolean(
-            (authenticated || admin) &&
-              state &&
-              (admin ||
-                state.phase === "house-select" ||
-                (state.phase === "discard" && !state.discardedHiddenCount && !state.selectedCount)),
-          )}
+          canEndSession={Boolean(admin && state?.phase === "complete")}
+          canOpenBoardProcessingHistory={canManageBoardProcessingHistory}
+          canToggleRandomDiscard={Boolean(admin && state?.phase === "house-select")}
+          boardProcessingHistoryOpen={boardProcessingHistoryOpen}
+          boardProcessingHistoryToggleRef={boardProcessingHistoryToggleRef}
+          kickHouseToggleRef={kickHouseToggleRef}
           open={settingsOpen}
           randomDiscardEnabled={state?.randomDiscardEnabled ?? true}
           state={state}
           tipsOpen={tipsOpen}
           onEndSession={handleSettingsEndSession}
           onLogout={handleSettingsLogout}
-          onKickSession={handleKickSession}
+          onOpenKickHouseDialog={handleOpenKickHouseDialog}
           onOpenScoreGuide={handleOpenScoreGuide}
           onOpenSecretAgendaGuide={handleOpenSecretAgendaGuide}
           onOpenOpenAgendaGuide={handleOpenOpenAgendaGuide}
           onOpenSpecialAbilityLegend={handleOpenSpecialAbilityLegend}
           onOpenBoardProcessingGuide={handleOpenBoardProcessingGuide}
           onOpenBoardProcessingHistory={handleOpenBoardProcessingHistory}
+          onOpenBoardProcessingHistoryType={handleOpenBoardProcessingHistoryType}
           onReset={handleSettingsReset}
           onBgmVolumeChange={handleBgmVolumeChange}
           onToggleRandomDiscard={handleToggleRandomDiscard}
@@ -867,20 +934,26 @@ function App() {
           onClose={handleCloseBoardProcessingGuide}
           restoreFocusRef={boardProcessingGuideToggleRef as any}
         />
-        {state?.phase === "complete" && state.isAdmin ? (
-          <BoardProcessingHistoryDialog
-            busy={busy}
-            canManageBoardProcessing={state.isAdmin}
-            currentHouseId={state.currentHouseId}
-            history={state.boardProcessingHistory}
-            houses={state.houses || []}
-            items={state.boardProcessingItems || []}
-            mutate={mutate}
-            onClose={handleCloseBoardProcessingHistory}
-            open={boardProcessingHistoryOpen}
-            restoreFocusRef={boardProcessingHistoryToggleRef as any}
-          />
-        ) : null}
+        <BoardProcessingTypeHistoryDialog
+          busy={busy}
+          canDelete={canManageBoardProcessingHistory}
+          houses={state?.houses || []}
+          history={state?.boardProcessingHistory}
+          items={state?.boardProcessingItems || []}
+          onClose={handleCloseBoardProcessingHistoryType}
+          onDelete={handleDeleteBoardProcessingHistoryItem}
+          restoreFocusRef={boardProcessingHistoryTypeRef}
+          selectedType={canManageBoardProcessingHistory ? selectedBoardProcessingHistoryType : null}
+        />
+        <KickHouseDialog
+          key={kickHouseDialogOpen ? "kick-house-open" : "kick-house-closed"}
+          busy={busy}
+          houses={state?.houses || []}
+          open={Boolean(kickHouseDialogOpen && admin)}
+          restoreFocusRef={kickHouseToggleRef as any}
+          onClose={handleCloseKickHouseDialog}
+          onConfirm={handleConfirmKickHouse}
+        />
         <OpenAgendaScoreDialog
           open={openAgendaGuideOpen}
           onClose={handleCloseOpenAgendaGuide}
@@ -917,22 +990,27 @@ function FloatingSettings({
   spectator,
   bgmMuted,
   bgmVolume,
+  boardProcessingHistoryOpen,
+  boardProcessingHistoryToggleRef,
   busy,
   canEndSession,
+  canOpenBoardProcessingHistory,
   canToggleRandomDiscard,
+  kickHouseToggleRef,
   open,
   randomDiscardEnabled,
   state,
   tipsOpen,
   onEndSession,
   onLogout,
-  onKickSession,
+  onOpenKickHouseDialog,
   onOpenScoreGuide,
   onOpenSecretAgendaGuide,
   onOpenOpenAgendaGuide,
   onOpenSpecialAbilityLegend,
   onOpenBoardProcessingGuide,
   onOpenBoardProcessingHistory,
+  onOpenBoardProcessingHistoryType,
   onReset,
   onBgmVolumeChange,
   onToggle,
@@ -949,13 +1027,20 @@ function FloatingSettings({
   const currentHouseId = state?.currentHouseId || "";
   const activeAdminHouseId = state?.adminHouseId || "";
   const activeAdminHouse = (state?.houses || []).find((house: any) => house.id === activeAdminHouseId);
+  const activeSessionHouses = (state?.houses || []).filter((house: any) => house.hasSession);
   const adminModeBlocked = Boolean(authenticated && activeAdminHouseId && activeAdminHouseId !== currentHouseId);
   const adminModeTooltip = adminModeBlocked
     ? ko.app.settings.adminModeTaken(getHouseKoreanName(activeAdminHouse))
     : ko.app.settings.adminModeHint;
+  const floatingMenuOpen = Boolean(open || tipsOpen || boardProcessingHistoryOpen);
+
+  const handleFloatingMenuScrimPointerDown = React.useCallback((event: React.PointerEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    onClose?.();
+  }, [onClose]);
 
   React.useEffect(() => {
-    if (!open && !tipsOpen) {
+    if (!floatingMenuOpen) {
       return undefined;
     }
 
@@ -973,11 +1058,20 @@ function FloatingSettings({
     document.addEventListener("pointerdown", handlePointerDown, true);
 
     return () => document.removeEventListener("pointerdown", handlePointerDown, true);
-  }, [open, onClose, tipsOpen]);
+  }, [floatingMenuOpen, onClose]);
 
   return (
-    <div ref={floatRef} className="settings-float">
-      <div className="settings-float-actions">
+    <>
+      {floatingMenuOpen ? (
+        <button
+          aria-label={ko.common.close}
+          className="settings-menu-scrim"
+          onPointerDown={handleFloatingMenuScrimPointerDown}
+          type="button"
+        />
+      ) : null}
+      <div ref={floatRef} className="settings-float">
+        <div className="settings-float-actions">
         <button
           ref={toggleRef}
           className="settings-toggle"
@@ -1000,6 +1094,19 @@ function FloatingSettings({
         >
           <TokenIcon type="tip" />
         </button>
+        {canOpenBoardProcessingHistory ? (
+          <button
+            ref={boardProcessingHistoryToggleRef}
+            className="settings-toggle"
+            type="button"
+            aria-controls="board-processing-history-menu"
+            aria-expanded={boardProcessingHistoryOpen}
+            aria-label={ko.app.settings.boardProcessingHistory}
+            onClick={onOpenBoardProcessingHistory}
+          >
+            <TokenIcon type="history" />
+          </button>
+        ) : null}
       </div>
       {tipsOpen ? (
         <div className="settings-menu tips-menu" id="tips-menu">
@@ -1020,58 +1127,27 @@ function FloatingSettings({
             <TokenIcon type="help" />
             {ko.app.settings.boardProcessingGuide}
           </button>
-          <a className="settings-link" href={rulebookPdfUrl} target="_blank" rel="noreferrer">
+          <a className="settings-link" href={resolvePublicAssetPath(rulebookPdfUrl)} target="_blank" rel="noreferrer">
             <TokenIcon type="scroll" />
             {ko.app.settings.rulebookPdf}
             <TokenIcon type="external" />
           </a>
         </div>
       ) : null}
-      {open ? (
-        <div className="settings-menu" id="settings-menu">
-          {authenticated || admin ? (
-            <>
-              <p className="section-label">{ko.app.settings.gameFlowSection}</p>
-              {authenticated ? (
-                <Tooltip
-                  className="settings-tooltip-anchor"
-                  label={canEndSession ? ko.app.settings.sessionEndReady : sessionEndUnavailableMessage}
-                >
-                  <button
-                    className="ghost-button wide session-end-button"
-                    type="button"
-                    onClick={onEndSession}
-                    disabled={busy || !canEndSession}
-                  >
-                    <TokenIcon type="seal" />
-                    {ko.app.settings.sessionEndPrep}
-                  </button>
-                </Tooltip>
-              ) : null}
-              {state?.phase === "complete" && state?.isAdmin ? (
-                <button className="ghost-button wide" type="button" onClick={onOpenBoardProcessingHistory}>
-                  <TokenIcon type="history" />
-                  {ko.app.settings.boardProcessingHistory}
-                </button>
-              ) : null}
-              <button
-                className={`settings-switch-control${!canToggleRandomDiscard ? " disabled" : ""}`}
-                type="button"
-                aria-pressed={randomDiscardEnabled}
-                aria-label={ko.app.settings.randomDiscardAria(randomDiscardEnabled)}
-                onClick={onToggleRandomDiscard}
-                disabled={busy || !canToggleRandomDiscard}
-              >
-                <span>
-                  <strong>{ko.app.settings.randomDiscard}</strong>
-                </span>
-                <span className="settings-state-segment" aria-hidden="true">
-                  <span className={randomDiscardEnabled ? "active" : ""}>ON</span>
-                  <span className={!randomDiscardEnabled ? "active" : ""}>OFF</span>
-                </span>
-              </button>
-            </>
-          ) : null}
+      {boardProcessingHistoryOpen ? (
+        <Suspense fallback={null}>
+          <BoardProcessingHistoryMenu
+            busy={busy}
+            canManageBoardProcessing={canOpenBoardProcessingHistory}
+            history={state?.boardProcessingHistory}
+            items={state?.boardProcessingItems || []}
+            onOpenType={onOpenBoardProcessingHistoryType}
+            open={boardProcessingHistoryOpen}
+          />
+        </Suspense>
+      ) : null}
+        {open ? (
+          <div className="settings-menu" id="settings-menu">
           {authenticated || admin ? (
             <>
               <p className="section-label">{ko.app.settings.adminSection}</p>
@@ -1096,24 +1172,49 @@ function FloatingSettings({
                 </Tooltip>
               ) : null}
               {admin ? (
-                (state?.houses || []).filter((house: any) => house.hasSession).length ? (
-                  (state?.houses || [])
-                    .filter((house: any) => house.hasSession)
-                    .map((house: any) => (
-                      <button
-                        className="ghost-button wide"
-                        type="button"
-                        key={house.id}
-                        onClick={() => onKickSession(house.id)}
-                        disabled={busy}
-                      >
-                        <TokenIcon type="exit" />
-                        {ko.app.settings.kickHouse(getHouseKoreanName(house))}
-                      </button>
-                    ))
-                ) : (
-                  <p className="settings-empty">{ko.app.settings.noActiveSessions}</p>
-                )
+                <>
+                  <button
+                    className={`settings-switch-control${!canToggleRandomDiscard ? " disabled" : ""}`}
+                    type="button"
+                    aria-pressed={randomDiscardEnabled}
+                    aria-label={ko.app.settings.randomDiscardAria(randomDiscardEnabled)}
+                    onClick={onToggleRandomDiscard}
+                    disabled={busy || !canToggleRandomDiscard}
+                  >
+                    <span>
+                      <strong>{ko.app.settings.randomDiscard}</strong>
+                    </span>
+                    <span className="settings-state-segment" aria-hidden="true">
+                      <span className={randomDiscardEnabled ? "active" : ""}>ON</span>
+                      <span className={!randomDiscardEnabled ? "active" : ""}>OFF</span>
+                    </span>
+                  </button>
+                  <Tooltip
+                    className="settings-tooltip-anchor"
+                    label={canEndSession ? ko.app.settings.sessionEndReady : sessionEndUnavailableMessage}
+                  >
+                    <button
+                      className="ghost-button wide session-end-button"
+                      type="button"
+                      onClick={onEndSession}
+                      disabled={busy || !canEndSession}
+                    >
+                      <TokenIcon type="seal" />
+                      {ko.app.settings.sessionEndPrep}
+                    </button>
+                  </Tooltip>
+                  <button
+                    ref={kickHouseToggleRef}
+                    className="ghost-button wide"
+                    type="button"
+                    onClick={onOpenKickHouseDialog}
+                    disabled={busy || !activeSessionHouses.length}
+                  >
+                    <TokenIcon type="exit" />
+                    {ko.app.settings.kickHouseMenu}
+                  </button>
+                  {!activeSessionHouses.length ? <p className="settings-empty">{ko.app.settings.noActiveSessions}</p> : null}
+                </>
               ) : null}
             </>
           ) : null}
@@ -1155,9 +1256,10 @@ function FloatingSettings({
             <TokenIcon type="reset" />
             {ko.app.settings.resetKingdom}
           </button>
-        </div>
-      ) : null}
-    </div>
+          </div>
+        ) : null}
+      </div>
+    </>
   );
 }
 
@@ -1429,8 +1531,9 @@ export function GamePanel({
   const hasCouncilContext = Boolean(state.canDiscard);
   const councilStageLabel = getCouncilStageLabel(state);
   const councilProcedureTitle = getCouncilProcedureTitle(state);
-  const showDraftStatusDetails = state.phase !== "complete";
-  const showCouncilProcedure = state.phase !== "complete";
+  const showStatusCard = state.phase !== "complete";
+  const showDraftStatusDetails = showStatusCard;
+  const showCouncilProcedure = showStatusCard;
   const showBoardProcessingInputPanel = Boolean(state.phase === "complete" && state.isAdmin);
   const handleSaveAlignmentReward = useCallback(
     (agendaId: any, reward: any) => mutate({ action: "saveAlignmentReward", agendaId, reward }),
@@ -1453,61 +1556,63 @@ export function GamePanel({
         renderLayout={({ prioritySections, mainPanel }: any) => (
           <>
       <div className="council-sidebar-column">
-        <aside className="council-sidebar" aria-live="polite">
-          <section className="sidebar-status-section" aria-labelledby="sidebar-status-title">
-            <div className="sidebar-title-row compact">
-              <span className="sidebar-title-icon" aria-hidden="true">
-                <TokenIcon type="status" />
-              </span>
-              <h2 id="sidebar-status-title">{ko.app.gamePanel.statusTitle}</h2>
-            </div>
-            {showCouncilProcedure ? (
-              <section className={`game-stage phase-${state.phase}`} aria-labelledby="stage-title">
-                <div className="stage-copy">
-                  <p className="section-label">{ko.app.gamePanel.councilProcedure}</p>
-                  <h2 id="stage-title">{councilProcedureTitle}</h2>
-                  <Suspense fallback={null}>
-                    <GameMessage state={state} />
-                  </Suspense>
-                </div>
-                <div className="stage-tableau" aria-hidden="true">
-                  <div className="balance-rail">
-                    <span />
-                    <span />
-                    <span />
+        {showStatusCard ? (
+          <aside className="council-sidebar" aria-live="polite">
+            <section className="sidebar-status-section" aria-labelledby="sidebar-status-title">
+              <div className="sidebar-title-row compact">
+                <span className="sidebar-title-icon" aria-hidden="true">
+                  <TokenIcon type="status" />
+                </span>
+                <h2 id="sidebar-status-title">{ko.app.gamePanel.statusTitle}</h2>
+              </div>
+              {showCouncilProcedure ? (
+                <section className={`game-stage phase-${state.phase}`} aria-labelledby="stage-title">
+                  <div className="stage-copy">
+                    <p className="section-label">{ko.app.gamePanel.councilProcedure}</p>
+                    <h2 id="stage-title">{councilProcedureTitle}</h2>
+                    <Suspense fallback={null}>
+                      <GameMessage state={state} />
+                    </Suspense>
                   </div>
-                  <div className="tableau-token coin-token">
-                    <TokenIcon type="coin" />
+                  <div className="stage-tableau" aria-hidden="true">
+                    <div className="balance-rail">
+                      <span />
+                      <span />
+                      <span />
+                    </div>
+                    <div className="tableau-token coin-token">
+                      <TokenIcon type="coin" />
+                    </div>
+                    <div className="tableau-token power-token">
+                      <TokenIcon type="power" />
+                    </div>
+                    <div className="tableau-token seal-token">
+                      <TokenIcon type="seal" />
+                    </div>
                   </div>
-                  <div className="tableau-token power-token">
-                    <TokenIcon type="power" />
-                  </div>
-                  <div className="tableau-token seal-token">
-                    <TokenIcon type="seal" />
-                  </div>
-                </div>
-              </section>
-            ) : null}
-            <Suspense fallback={null}>
-              <CouncilStatusStack
-                claimedHouseCount={state.claimedHouseCount}
-                councilStageLabel={councilStageLabel}
-                currentHouseName={currentHouseChosenName || ko.app.gamePanel.spectator}
-                draftOrderCount={state.draftOrder.length}
-                draftTurnName={draftTurnName}
-                phase={state.phase}
-                requiredHouseCount={state.requiredHouseCount}
-                selectedCount={state.selectedCount}
-              />
-            </Suspense>
-            {showDraftStatusDetails ? (
+                </section>
+              ) : null}
               <Suspense fallback={null}>
-                <TurnTrackAny houses={state.houses} draftOrder={state.draftOrder} turn={state.turn} phase={state.phase} />
+                <CouncilStatusStack
+                  claimedHouseCount={state.claimedHouseCount}
+                  councilStageLabel={councilStageLabel}
+                  currentHouseName={currentHouseChosenName || ko.app.gamePanel.spectator}
+                  draftOrderCount={state.draftOrder.length}
+                  draftTurnName={draftTurnName}
+                  phase={state.phase}
+                  requiredHouseCount={state.requiredHouseCount}
+                  selectedCount={state.selectedCount}
+                />
               </Suspense>
-            ) : null}
-            {showDraftStatusDetails ? <p className="privacy-note">{ko.app.gamePanel.privacyNote}</p> : null}
-          </section>
-        </aside>
+              {showDraftStatusDetails ? (
+                <Suspense fallback={null}>
+                  <TurnTrackAny houses={state.houses} draftOrder={state.draftOrder} turn={state.turn} phase={state.phase} />
+                </Suspense>
+              ) : null}
+              {showDraftStatusDetails ? <p className="privacy-note">{ko.app.gamePanel.privacyNote}</p> : null}
+            </section>
+          </aside>
+        ) : null}
         {prioritySections}
         {showBoardProcessingInputPanel ? (
           <Suspense fallback={null}>
@@ -1562,6 +1667,8 @@ function HouseProfileCard({
     return null;
   }
 
+  const houseProfileTitle = getHouseProfileTitle(house);
+
   return (
     <div className={`house-profile-card${showCrest ? "" : " no-crest"}`} aria-labelledby="house-profile-title">
       {showCrest ? (
@@ -1579,7 +1686,7 @@ function HouseProfileCard({
             ) : null}
             <div>
               {showSectionLabel ? <p className="section-label">{ko.app.gamePanel.houseDetail}</p> : null}
-              <h2 id="house-profile-title">{getHouseKoreanName(house)}</h2>
+              <h2 id="house-profile-title">{houseProfileTitle}</h2>
             </div>
           </div>
           <span className="house-profile-number">#{String(house.number).padStart(2, "0")}</span>
@@ -1594,8 +1701,16 @@ function HouseProfileCard({
   );
 }
 
+function getHouseProfileTitle(house: any) {
+  const officialName = getHouseKoreanName(house);
+  const customName = house?.hasCustomName && typeof house.name === "string" ? house.name.trim() : "";
+
+  return customName ? `${officialName}(${customName})` : officialName;
+}
+
 function AlignmentRewardInlineEditor({ alignment, busy, reward, onSaveAlignmentReward }: any) {
   const normalizedReward = normalizeAlignmentReward(reward);
+  const agendaWindowFocused = useAgendaWindowFocus();
   const [draft, setDraft] = useState(() => ({
     crownType: normalizedReward.crownType || "prestige",
     count: normalizedReward.count || 0,
@@ -1611,7 +1726,7 @@ function AlignmentRewardInlineEditor({ alignment, busy, reward, onSaveAlignmentR
   }, [normalizedReward.count, normalizedReward.crownType]);
 
   useEffect(() => {
-    if (busy || !onSaveAlignmentReward) {
+    if (busy || !onSaveAlignmentReward || !agendaWindowFocused) {
       return undefined;
     }
 
@@ -1634,6 +1749,7 @@ function AlignmentRewardInlineEditor({ alignment, busy, reward, onSaveAlignmentR
     return () => window.clearTimeout(autosaveId);
   }, [
     alignment.agendaId,
+    agendaWindowFocused,
     busy,
     draft.count,
     draft.crownType,
@@ -1765,6 +1881,7 @@ function PersonalInventoryPanel({
   const [draft, setDraft] = useState(serverInventory);
   const [progressDraft, setProgressDraft] = useState(serverProgress);
   const [ledgerSaveStatus, setLedgerSaveStatus] = useState("saved");
+  const agendaWindowFocused = useAgendaWindowFocus();
   const [achievementEditor, setAchievementEditor] = useState<any>(null);
   const [achievementLegendOpen, setAchievementLegendOpen] = useState(false);
   const achievementEditButtonRef = useRef<any>(null);
@@ -1816,6 +1933,11 @@ function PersonalInventoryPanel({
   const runLedgerAutosave = useCallback(async () => {
     if (!houseId) {
       setLedgerSaveStatus("saved");
+      return;
+    }
+
+    if (!agendaWindowFocused || !isAgendaWindowFocused()) {
+      setLedgerSaveStatus("pending");
       return;
     }
 
@@ -1874,7 +1996,7 @@ function PersonalInventoryPanel({
         void runLedgerAutosaveImplRef.current?.();
       }, 0) as any;
     }
-  }, [houseId, mutate]);
+  }, [agendaWindowFocused, houseId, mutate]);
 
   useEffect(() => {
     runLedgerAutosaveImplRef.current = runLedgerAutosave;
@@ -1891,10 +2013,15 @@ function PersonalInventoryPanel({
     queueMicrotask(() =>
       setLedgerSaveStatus((current) => (current === "error" ? current : "pending")),
     );
+
+    if (!agendaWindowFocused) {
+      return undefined;
+    }
+
     ledgerAutosaveTimerRef.current = window.setTimeout(runLedgerAutosave, ledgerAutosaveDelayMs) as any;
 
     return () => window.clearTimeout(ledgerAutosaveTimerRef.current as any);
-  }, [draft, isDirty, progressDraft, runLedgerAutosave]);
+  }, [agendaWindowFocused, draft, isDirty, progressDraft, runLedgerAutosave]);
 
   useEffect(() => {
     return () => window.clearTimeout(ledgerAutosaveTimerRef.current as any);
@@ -2109,7 +2236,7 @@ function PersonalInventoryPanel({
     </div>
   );
 
-  const agendaSection = (
+  const agendaSection = ownChoice ? (
     <div className={`inventory-section inventory-agenda-section sidebar-ledger-section sidebar-ledger-agenda${ownChoice ? " has-secret-agenda" : ""}`}>
       <div className="agenda-section-header">
         <h3 className="agenda-section-title">
@@ -2117,18 +2244,18 @@ function PersonalInventoryPanel({
             <span className="agenda-section-title-main">
               <span>{ko.app.inventory.agendaTitle}</span>
             </span>
-            <span className="agenda-type-legend" aria-hidden="true">
-              <span>
-                <i className="agenda-type-dot common" />
-                {ko.app.inventory.agendaCommon}
-              </span>
-              {ownChoice ? (
+            {ownChoice ? (
+              <span className="agenda-type-legend" aria-hidden="true">
+                <span>
+                  <i className="agenda-type-dot common" />
+                  {ko.app.inventory.agendaCommon}
+                </span>
                 <span>
                   <i className="agenda-type-dot secret" />
                   {ko.app.inventory.agendaSecret}
                 </span>
-              ) : null}
-            </span>
+              </span>
+            ) : null}
           </span>
         </h3>
       </div>
@@ -2153,7 +2280,7 @@ function PersonalInventoryPanel({
         ) : null}
       </div>
     </div>
-  );
+  ) : null;
 
   const prioritySections = (
     <div className="sidebar-ledger-stack" aria-label={ko.app.inventory.title}>
@@ -3399,65 +3526,54 @@ function ActionPanel({ state, busy, mutate }: { state: any; busy: boolean; mutat
 }
 
 function AgendaList({ agendas, busy, mode = "choose", mutate }: { agendas: any[]; busy: boolean; mode?: string; mutate: any }) {
-  const [expandedAgendaIds, setExpandedAgendaIds] = useState<Set<string>>(() => new Set());
+  const [allExpanded, setAllExpanded] = useState(false);
   const discardMode = mode === "discard";
-  const allExpanded = agendas.length > 0 && agendas.every((agenda: any) => expandedAgendaIds.has(agenda.id));
 
   if (!agendas.length) {
     return null;
   }
 
-  const toggleAgenda = (agendaId: string) => {
-    setExpandedAgendaIds((current) => {
-      const next = new Set(current);
-
-      if (next.has(agendaId)) {
-        next.delete(agendaId);
-      } else {
-        next.add(agendaId);
-      }
-
-      return next;
-    });
-  };
-
   const toggleAllAgendas = () => {
-    setExpandedAgendaIds(allExpanded ? new Set() : new Set(agendas.map((agenda: any) => agenda.id)));
+    setAllExpanded(!allExpanded);
   };
 
   return (
-    <section className="agenda-section" aria-labelledby="agenda-title">
+    <section className="agenda-section" aria-label={discardMode ? ko.app.agendaUi.titleDiscard : ko.app.agendaUi.titleDraft}>
       <div className="agenda-section-heading">
-        <div>
-          <p className="section-label">{ko.app.agendaUi.discardOrDraft(discardMode)}</p>
-          <h2 id="agenda-title">{discardMode ? ko.app.agendaUi.titleDiscard : ko.app.agendaUi.titleDraft}</h2>
+        <div className="agenda-section-heading-main">
+          <p className="section-label agenda-section-mode-label">
+            <span className="agenda-section-mode-icon" aria-hidden="true">
+              <TokenIcon type={discardMode ? "flame" : "key"} />
+            </span>
+            <span>{ko.app.agendaUi.discardOrDraft(discardMode)}</span>
+          </p>
+          <span className="agenda-remaining-chip">{ko.app.agendaUi.agendasRemaining(agendas.length)}</span>
         </div>
-        <span>{ko.app.agendaUi.agendasRemaining(agendas.length)}</span>
+        <div className="agenda-section-heading-actions">
+          <button
+            className="ghost-button agenda-expand-toggle"
+            type="button"
+            aria-controls="agenda-list"
+            aria-expanded={allExpanded}
+            onClick={toggleAllAgendas}
+          >
+            <TokenIcon type={allExpanded ? "minus" : "plus"} />
+            {ko.app.agendaUi.expand(allExpanded)}
+          </button>
+        </div>
       </div>
       <div className="agenda-list" id="agenda-list">
-        {agendas.map((agenda: any) => (
+        {agendas.map((agenda: any, index: number) => (
           <AgendaCard
             key={agenda.id}
             agenda={agenda}
             busy={busy}
-            expanded={expandedAgendaIds.has(agenda.id)}
+            expanded={allExpanded}
             mode={mode}
             mutate={mutate}
-            onToggle={() => toggleAgenda(agenda.id)}
+            index={index + 1}
           />
         ))}
-      </div>
-      <div className="agenda-section-controls">
-        <button
-          className="ghost-button agenda-expand-toggle"
-          type="button"
-          aria-controls="agenda-list"
-          aria-expanded={allExpanded}
-          onClick={toggleAllAgendas}
-        >
-          <TokenIcon type={allExpanded ? "minus" : "plus"} />
-          {ko.app.agendaUi.expand(allExpanded)}
-        </button>
       </div>
     </section>
   );
@@ -3469,14 +3585,14 @@ function AgendaCard({
   expanded,
   mode = "choose",
   mutate,
-  onToggle,
+  index,
 }: {
   agenda: any;
   busy: boolean;
   expanded: boolean;
   mode?: string;
   mutate: any;
-  onToggle: () => void;
+  index: number;
 }) {
   const detailId = `agenda-detail-${agenda.id}`;
   const discardMode = mode === "discard";
@@ -3493,7 +3609,10 @@ function AgendaCard({
   };
 
   return (
-    <article className={`agenda-card secret-agenda-card-frame${expanded ? " expanded" : ""}`}>
+    <article
+      className={`agenda-card secret-agenda-card-frame${expanded ? " expanded" : ""}`}
+      aria-label={`${ko.app.agendaUi.secretAgendaSection} ${index}`}
+    >
       <div className="secret-agenda-card-inner">
         <div className="agenda-card-top">
           <span className="agenda-sigil" aria-hidden="true">
@@ -3503,16 +3622,7 @@ function AgendaCard({
             <div className="agenda-card-label-row">
               <div className="agenda-card-label-actions">
                 <p className="section-label">{ko.app.agendaUi.secretAgendaSection}</p>
-                <button
-                  className="ghost-button agenda-card-expand-button"
-                  type="button"
-                  aria-controls={detailId}
-                  aria-expanded={expanded}
-                  onClick={onToggle}
-                >
-                  <TokenIcon type={expanded ? "minus" : "plus"} />
-                  {ko.app.agendaUi.toggleContent(expanded)}
-                </button>
+                <span className="agenda-card-number-tag">{index}</span>
               </div>
               <button className="primary-button" type="button" onClick={choose} disabled={busy}>
                 <TokenIcon type={discardMode ? "flame" : "key"} />
@@ -3524,7 +3634,11 @@ function AgendaCard({
             </h3>
           </div>
         </div>
-        <div className="agenda-card-detail" hidden={!expanded} id={detailId}>
+        <div
+          className={`agenda-card-detail${expanded ? "" : " agenda-card-detail-collapsed"}`}
+          id={detailId}
+          aria-hidden={!expanded}
+        >
           <div className="secret-agenda-card-body">
             <AgendaSecretContent agenda={agenda} />
             <AgendaScoringBoard agenda={agenda} />
@@ -3536,13 +3650,15 @@ function AgendaCard({
 }
 
 function AgendaSecretContent({ agenda }: { agenda: any }) {
+  const hasNote = Boolean(agenda.note);
+
   return (
     <div className="agenda-secret-content">
       <div className="agenda-secret-content-block">
         <span>{ko.app.agendaUi.goalTitle}</span>
         <p>{agenda.resourceGoal}</p>
       </div>
-      {agenda.note ? (
+      {hasNote ? (
         <div className="agenda-secret-content-block">
           <span>{ko.app.agendaUi.noteTitle}</span>
           <p>{agenda.note}</p>
@@ -3579,19 +3695,50 @@ function AgendaScoringBoard({ agenda }: { agenda: any }) {
 function AgendaResourceZoneStrip({ agenda }: { agenda: any }) {
   const zones = (agendaScoringZones as any)[agenda.id] ?? [];
   const hasDistanceMode = zones.some((zone: any) => zone.mode === "distance");
+  const isExtremistAgenda = agenda.id === "extremist";
+  const centerRow = Math.ceil(boardRows.length / 2);
+  const outermostDistance = Math.max(...boardRows.map((row) => Math.abs(row - centerRow)), 1);
   const isActiveRow = (row: any) => zones.some((zone: any) => row >= zone.from && row <= zone.to);
+  const getExtremistZoneCellStyle = (row: number): React.CSSProperties => {
+    const ratio = Math.abs(row - centerRow) / outermostDistance;
+    const emphasis = Math.pow(ratio, 1.25);
+    const mix = (start: number, end: number) => Math.round(start + (end - start) * ratio);
+    const background = {
+      red: mix(120, 216),
+      green: mix(115, 178),
+      blue: mix(99, 90),
+      alpha: 0.18 + emphasis * 0.54,
+    };
+    const border = {
+      red: mix(120, 216),
+      green: mix(115, 178),
+      blue: mix(99, 90),
+      alpha: 0.34 + emphasis * 0.48,
+    };
+
+    return {
+      "--agenda-zone-active-bg": `rgba(${background.red}, ${background.green}, ${background.blue}, ${background.alpha.toFixed(2)})`,
+      "--agenda-zone-active-border": `rgba(${border.red}, ${border.green}, ${border.blue}, ${border.alpha.toFixed(2)})`,
+    } as React.CSSProperties;
+  };
 
   return (
-    <div className={`agenda-zone-strip secret-agenda-progress-spine${hasDistanceMode ? " distance" : ""}`}>
+    <div
+      className={`agenda-zone-strip secret-agenda-progress-spine${hasDistanceMode ? " distance" : ""}${
+        isExtremistAgenda ? " extremist" : ""
+      }`}
+    >
       <div className="agenda-score-title">{hasDistanceMode ? ko.app.agendaUi.scoreTitleDistance : ko.app.agendaUi.scoreTitleBoard}</div>
       <div className="agenda-zone-cells" aria-label={ko.app.agendaUi.zoneAria}>
         {boardRows.map((row) => {
           const active = isActiveRow(row);
           const showLabel = active || row === 1 || row === 5 || row === 9 || row === 13 || row === 17;
+          const style = isExtremistAgenda && active ? getExtremistZoneCellStyle(row) : undefined;
 
           return (
             <span
               className={`agenda-zone-cell${row === 9 ? " center" : ""}${active ? " active" : ""}`}
+              style={style}
               key={row}
               aria-label={ko.app.agendaUi.rowZoneAria(row, active)}
             >

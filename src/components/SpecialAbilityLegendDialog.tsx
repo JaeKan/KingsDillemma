@@ -5,6 +5,7 @@ import {
   specialAbilityLegendRows,
   ko,
 } from "../resources/gameResources";
+import { resolvePublicAssetPath } from "../utils/public-assets";
 
 interface SpecialAbilityLegendDialogProps {
   open: boolean;
@@ -68,7 +69,7 @@ function SpecialAbilityLegendDialog({ open, restoreFocusRef, onClose }: SpecialA
           </div>
         </div>
         <figure className="rulebook-legend-figure">
-          <img src={specialAbilityLegendImageUrl} alt={ko.specialLegend.imageAlt} />
+          <img src={resolvePublicAssetPath(specialAbilityLegendImageUrl)} alt={ko.specialLegend.imageAlt} />
           <figcaption>{ko.specialLegend.caption}</figcaption>
         </figure>
         <div className="score-guide-table-wrap">

@@ -3,6 +3,7 @@ import { useIsMutating, useMutation, useQuery, useQueryClient } from "@tanstack/
 import { AGENDA_PARALLEL_SESSION_MAX } from "../../shared/agenda-api.mts";
 import { joinAppBasePath, normalizeAppBasePath } from "../../shared/app-base-path.mts";
 import { ko } from "../resources/gameResources";
+import { isAgendaWindowFocused } from "./agendaFocus";
 
 type ViteImportMeta = ImportMeta & {
   env?: {
@@ -147,13 +148,14 @@ function useAgendaQueryKeys() {
   }, [sessionSegment]);
 }
 
-export function useAgendaStateQuery(setError: (msg: string) => void) {
+export function useAgendaStateQuery(setError: (msg: string) => void, agendaWindowFocused: boolean) {
   const { queryKey } = useAgendaQueryKeys();
 
   const query = useQuery({
     queryKey,
     queryFn: () => agendaRequest(),
-    refetchOnWindowFocus: false,
+    enabled: agendaWindowFocused,
+    refetchOnWindowFocus: true,
     retry: false,
   });
 
@@ -233,6 +235,10 @@ export function useAgendaRefresh(setError: (msg: string) => void, mutationInFlig
 
   return useCallback(async (options: { force?: boolean } = {}) => {
     const force = Boolean(options.force);
+
+    if (!isAgendaWindowFocused()) {
+      return null;
+    }
 
     if (!force && (mutationInFlight.current || queryClient.isFetching({ queryKey }) > 0)) {
       return null;

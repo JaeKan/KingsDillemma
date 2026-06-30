@@ -7,7 +7,7 @@ type ViteImportMeta = ImportMeta & {
 };
 
 function getClientAppBasePath(): string {
-  return normalizeAppBasePath((import.meta as ViteImportMeta).env?.BASE_URL, "");
+  return normalizeAppBasePath((import.meta as ViteImportMeta).env?.BASE_URL);
 }
 
 export function resolvePublicAssetPath(publicPath: string): string {

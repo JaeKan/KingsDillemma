@@ -18,10 +18,17 @@ let sortedValueMentionLabelsCache: MentionLabel[] | null = null;
 let sortedEffectMentionLabelsCache: MentionLabel[] | null = null;
 let sortedHouseMentionLabelsCache: MentionLabel[] | null = null;
 
+function createMentionLabels(kind: MentionLabel["kind"], item: any): MentionLabel[] {
+  const labels = [item.label, ...(Array.isArray(item.aliases) ? item.aliases : [])]
+    .filter((label): label is string => typeof label === "string" && label.trim().length > 0);
+
+  return Array.from(new Set(labels)).map((label) => ({ kind, item, label }));
+}
+
 function getSortedValueMentionLabels(): MentionLabel[] {
   if (!sortedValueMentionLabelsCache) {
     sortedValueMentionLabelsCache = valueMentionItems
-      .map((item) => ({ kind: "value" as const, item, label: item.label }))
+      .flatMap((item) => createMentionLabels("value", item))
       .sort((left, right) => right.label.length - left.label.length);
   }
 

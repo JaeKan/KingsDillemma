@@ -138,36 +138,54 @@ export function TurnTrack({
         .filter((house): house is RedactedHouse => Boolean(house))
     : claimedHouses;
   const nodes = orderedHouses.length ? orderedHouses : [];
+  const showTurnLegend = nodes.length > 0 && (phase === "discard" || phase === "choose");
+  const turnLegendItems = [
+    { key: "current", label: ko.gameUi.currentTurn },
+    { key: "done", label: ko.gameUi.agendaChosen },
+    { key: "waiting", label: ko.app.gamePanel.wait },
+  ] as const;
 
   return (
-    <div
-      className="turn-track"
-      aria-label={ko.gameUi.turnTrackAria}
-      style={{ gridTemplateColumns: `repeat(${Math.max(nodes.length, 1)}, 34px)` }}
-    >
-      {nodes.map((house: RedactedHouse) => {
-        const selected = turn === house.id;
-        const done = Boolean(house.hasChosen);
-        const statusLabel = [
-          getHouseHoverLabel(house),
-          selected ? ko.gameUi.currentTurn : "",
-          done ? ko.gameUi.agendaChosen : "",
-        ]
-          .filter(Boolean)
-          .join(", ");
+    <div className="turn-track-stack">
+      {showTurnLegend ? (
+        <div className="turn-track-legend">
+          {turnLegendItems.map((item) => (
+            <span className={`turn-track-legend-node ${item.key}`} key={item.key}>
+              <span className="turn-track-legend-swatch" aria-hidden="true" />
+              {item.label}
+            </span>
+          ))}
+        </div>
+      ) : null}
+      <div
+        className="turn-track"
+        aria-label={ko.gameUi.turnTrackAria}
+        style={{ gridTemplateColumns: `repeat(${Math.max(nodes.length, 1)}, 34px)` }}
+      >
+        {nodes.map((house: RedactedHouse) => {
+          const selected = turn === house.id;
+          const done = Boolean(house.hasChosen);
+          const statusLabel = [
+            getHouseHoverLabel(house),
+            selected ? ko.gameUi.currentTurn : "",
+            done ? ko.gameUi.agendaChosen : "",
+          ]
+            .filter(Boolean)
+            .join(", ");
 
-        return (
-          <HouseCrestBadge
-            house={house}
-            className={`turn-node${selected ? " current" : ""}${done ? " done" : ""}${
-              phase === "house-select" ? " claimed" : ""
-            }`}
-            key={house.id}
-            tooltipLabel={getHouseHoverLabel(house)}
-            ariaLabel={statusLabel}
-          />
-        );
-      })}
+          return (
+            <HouseCrestBadge
+              house={house}
+              className={`turn-node${selected ? " current" : ""}${done ? " done" : ""}${
+                phase === "house-select" ? " claimed" : ""
+              }`}
+              key={house.id}
+              tooltipLabel={getHouseHoverLabel(house)}
+              ariaLabel={statusLabel}
+            />
+          );
+        })}
+      </div>
     </div>
   );
 }

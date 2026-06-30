@@ -474,6 +474,30 @@ label {
   height: 24px;
 }
 
+.sidebar-status-section > .sidebar-title-row.compact {
+  grid-template-columns: 30px minmax(0, 1fr);
+  gap: 8px;
+  min-height: 30px;
+}
+
+.sidebar-status-section > .sidebar-title-row.compact h2 {
+  color: var(--gold-2);
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+  font-size: 0.95rem;
+  font-weight: 920;
+  line-height: 1.05;
+}
+
+.sidebar-status-section > .sidebar-title-row.compact .sidebar-title-icon {
+  width: 30px;
+  height: 30px;
+}
+
+.sidebar-status-section > .sidebar-title-row.compact .sidebar-title-icon svg {
+  width: 18px;
+  height: 18px;
+}
+
 .sidebar-status-section {
   display: grid;
   gap: 7px;
@@ -586,6 +610,54 @@ label {
 .council-sidebar .status-stack .leader-token-emoji {
   font-size: 16px;
   line-height: 1;
+}
+
+.turn-track-stack {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.turn-track-legend {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 5px 8px;
+  min-width: 0;
+}
+
+.turn-track-legend-node {
+  --turn-legend-tone: var(--muted);
+  --turn-legend-ring: rgba(234, 223, 189, 0.24);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--muted);
+  font-size: 0.62rem;
+  font-weight: 900;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.turn-track-legend-node.current {
+  --turn-legend-tone: var(--gold-2);
+  --turn-legend-ring: rgba(216, 178, 90, 0.42);
+  color: var(--gold-2);
+}
+
+.turn-track-legend-node.done {
+  --turn-legend-tone: #bfe3cf;
+  --turn-legend-ring: rgba(63, 123, 101, 0.5);
+  color: #bfe3cf;
+}
+
+.turn-track-legend-swatch {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--turn-legend-tone);
+  box-shadow: 0 0 0 1px var(--turn-legend-ring);
 }
 
 .turn-track {

@@ -237,6 +237,10 @@ export async function handleAgendaRequest(
     }
 
     if (action === "setRandomDiscardEnabled") {
+      if (!admin) {
+        return json({ ok: false, error: "Admin required." }, 401, NO_STORE_HEADERS);
+      }
+
       const nextState = setRandomDiscardEnabled(state, body.enabled);
       await saveState(store, nextState);
       return json({ ok: true, state: redactState(nextState, houseId) }, 200, NO_STORE_HEADERS);

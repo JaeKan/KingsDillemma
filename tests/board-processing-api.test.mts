@@ -135,6 +135,10 @@ const otherHouseSave = await post(
 assert.equal(otherHouseSave.response.status, 403);
 assert.equal(otherHouseSave.payload.error, "구성물 정리 기록은 관리자만 저장하거나 삭제할 수 있습니다.");
 
+const otherRandomDiscard = await post({ action: "setRandomDiscardEnabled", enabled: false }, otherCookie);
+assert.equal(otherRandomDiscard.response.status, 401);
+assert.equal(otherRandomDiscard.payload.error, "Admin required.");
+
 const save = await post(
   {
     action: "saveBoardProcessingItem",
@@ -223,5 +227,42 @@ const deleteItem = await post(
 assert.equal(deleteItem.response.status, 200);
 assert.deepEqual(deleteItem.payload.state.boardProcessingItems, []);
 assert.deepEqual(deleteItem.payload.state.boardProcessingHistory.envelope, []);
+
+const mentionStory = await post(
+  {
+    action: "saveBoardProcessingItem",
+    item: {
+      type: "story",
+      cardCode: " S12 ",
+      status: "active",
+      signedByHouseId: "solad",
+      signedByName: " 솔라드 ",
+      signerBonusText: " @코인 +2 #솔라드 공작가 ",
+      note: " @복지 #솔라드 공작가 ",
+    },
+  },
+  cookie,
+);
+assert.equal(mentionStory.response.status, 200);
+assert.equal(mentionStory.payload.state.boardProcessingItems[0].type, "story");
+assert.equal(mentionStory.payload.state.boardProcessingItems[0].cardCode, "S12");
+assert.equal(mentionStory.payload.state.boardProcessingItems[0].signerBonusText, "@코인 +2 #솔라드 공작가");
+assert.equal(mentionStory.payload.state.boardProcessingItems[0].note, "@복지 #솔라드 공작가");
+assert.equal(mentionStory.payload.state.boardProcessingHistory.story[0].signerBonusText, "@코인 +2 #솔라드 공작가");
+
+const mentionNote = await post(
+  {
+    action: "saveBoardProcessingItem",
+    item: {
+      type: "note",
+      text: " @명망 +1 #가맘 공작가 ",
+    },
+  },
+  cookie,
+);
+assert.equal(mentionNote.response.status, 200);
+const savedNote = mentionNote.payload.state.boardProcessingItems.find((item: any) => item.type === "note");
+assert.equal(savedNote.text, "@명망 +1 #가맘 공작가");
+assert.equal(mentionNote.payload.state.boardProcessingHistory.note[0].text, "@명망 +1 #가맘 공작가");
 
 console.log("board-processing-api tests passed");

@@ -220,13 +220,14 @@ interface ValueMentionTextareaProps {
   disabled?: boolean;
   maxLength?: number;
   multiline?: boolean;
+  rows?: number;
   enableEffectMentions?: boolean;
   onEffectMention?: (effect: { icon: string; amount: number }) => void;
   houses?: any[];
 }
 
 export const ValueMentionTextarea = React.forwardRef<HTMLTextAreaElement | HTMLInputElement, ValueMentionTextareaProps>(function ValueMentionTextarea(
-  { value, onChange, placeholder, disabled = false, maxLength, multiline = true, enableEffectMentions = false, onEffectMention, houses = [] },
+  { value, onChange, placeholder, disabled = false, maxLength, multiline = true, rows, enableEffectMentions = false, onEffectMention, houses = [] },
   forwardedRef,
 ) {
   const fieldRef = useRef<HTMLDivElement>(null);
@@ -647,6 +648,7 @@ export const ValueMentionTextarea = React.forwardRef<HTMLTextAreaElement | HTMLI
           placeholder={placeholder}
           disabled={disabled}
           maxLength={maxLength}
+          rows={rows}
         />
       ) : (
         <input
